@@ -20,6 +20,6 @@ Run `node scripts/smoke.mjs <KillerShell CLI> <search directory> <KillerBench CL
 
 Once connected, people can ask the agent in ordinary language, such as `killer domain search example.com`, `killer merge these PDFs`, or `killerscan 192.168.8.0/24`. The server supplies tool descriptions and instructions to help the client select a tool. Client behavior varies, so these phrases are guidance rather than guaranteed commands.
 
-Run `node scripts/discovery-test.mjs` to check standard install-folder detection and development overrides. KillerShell and KillerBench still need to include their CLI executables in installed app packages before automatic detection can offer their tools to end users.
+Run `node scripts/discovery-test.mjs` to check standard install-folder detection and development overrides. KillerNotes 1.3.1 serves its search command from `KillerNotes.exe --cli` after that app version is installed. KillerShell and KillerBench still need to include their CLI executables in installed app packages before automatic detection can offer their tools to end users.
 
 No release or installation instructions are available until the packaged runtime and installer are verified.

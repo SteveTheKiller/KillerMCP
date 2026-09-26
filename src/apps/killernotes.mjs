@@ -20,6 +20,10 @@ function result(message, isError = false) {
   return { content: [{ type: 'text', text: message }], ...(isError ? { isError: true } : {}) };
 }
 
+function cliArgs(path, args) {
+  return path.toLowerCase().endsWith('killernotes.exe') ? ['--cli', ...args] : args;
+}
+
 function call(path, input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)
     || Object.keys(input).some(key => !['query', 'limit'].includes(key))
@@ -28,7 +32,7 @@ function call(path, input) {
     return Promise.resolve(result('Provide a search query up to 200 characters and optional limit from 1 to 20', true));
   }
   return new Promise(resolve => {
-    execFile(path, ['search', input.query, '--limit', String(input.limit ?? 10)],
+    execFile(path, cliArgs(path, ['search', input.query, '--limit', String(input.limit ?? 10)]),
       { encoding: 'utf8', windowsHide: true, timeout: 20000, maxBuffer: 65536 },
       (error, stdout, stderr) => {
         if (error) {
@@ -51,7 +55,7 @@ export async function createKillerNotesAdapter(path) {
   }
   catch { return null; }
   const help = await new Promise(resolve => {
-    execFile(path, ['--help'], { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 8192 },
+    execFile(path, cliArgs(path, ['--help']), { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 8192 },
       (error, stdout) => resolve(error ? '' : stdout));
   });
   return help.includes('search <query>') ? { tool, call: input => call(path, input) } : null;

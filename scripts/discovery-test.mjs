@@ -12,7 +12,7 @@ try {
   const scan = join(machine, 'KillerScan', 'KillerScan.exe');
   const shell = join(local, 'Programs', 'KillerShell', 'KillerShell.Cli.exe');
   const bench = join(machine, 'KillerBench', 'killerbench-cli.exe');
-  const notes = join(machine, 'KillerNotes', 'KillerNotes.Cli.exe');
+  const notes = join(machine, 'KillerNotes', 'KillerNotes.exe');
   const killendar = join(local, 'Programs', 'Killendar', 'Killendar.Cli.exe');
   for (const path of [pdf, scan, shell, bench, notes, killendar]) {
     await mkdir(join(path, '..'), { recursive: true });
