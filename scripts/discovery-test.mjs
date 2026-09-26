@@ -13,7 +13,8 @@ try {
   const shell = join(local, 'Programs', 'KillerShell', 'KillerShell.Cli.exe');
   const bench = join(machine, 'KillerBench', 'killerbench-cli.exe');
   const notes = join(machine, 'KillerNotes', 'KillerNotes.Cli.exe');
-  for (const path of [pdf, scan, shell, bench, notes]) {
+  const killendar = join(local, 'Programs', 'Killendar', 'Killendar.Cli.exe');
+  for (const path of [pdf, scan, shell, bench, notes, killendar]) {
     await mkdir(join(path, '..'), { recursive: true });
     await writeFile(path, 'fixture');
   }
@@ -23,6 +24,7 @@ try {
   assert.equal(discoverAppCli('killershell', environment), shell);
   assert.equal(discoverAppCli('killerbench', environment), bench);
   assert.equal(discoverAppCli('killernotes', environment), notes);
+  assert.equal(discoverAppCli('killendar', environment), killendar);
   assert.equal(discoverAppCli('killerpdf', { ...environment, KILLERPDF_CLI: pdf }), pdf);
   assert.equal(discoverAppCli('killerscan', { ...environment, KILLERSCAN_CLI: scan }), scan);
   assert.equal(discoverAppCli('killerpdf', { ...environment, KILLERPDF_CLI: join(root, 'missing.exe') }), null);
