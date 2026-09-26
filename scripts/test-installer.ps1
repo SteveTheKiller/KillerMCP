@@ -31,6 +31,25 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Installed MCP check failed on pass $pass." }
     }
 
+    $sentinel = Join-Path $installed 'user-file.txt'
+    Set-Content -LiteralPath $sentinel -Value 'Keep this file'
+    $process = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+    if ($process.ExitCode -eq 0 -or -not (Test-Path -LiteralPath $sentinel)) {
+        throw 'Reinstall did not preserve an installation folder with an extra file.'
+    }
+    Remove-Item -LiteralPath $sentinel
+
+    $runtimeFile = Join-Path $installed 'killermcp.mjs'
+    $originalRuntime = [IO.File]::ReadAllBytes($runtimeFile)
+    try {
+        [IO.File]::AppendAllText($runtimeFile, '// modified')
+        $process = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        if ($process.ExitCode -eq 0) { throw 'Reinstall replaced a modified runtime file.' }
+        $process = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+        if ($process.ExitCode -eq 0) { throw 'Uninstall removed a modified runtime file.' }
+    }
+    finally { [IO.File]::WriteAllBytes($runtimeFile, $originalRuntime) }
+
     $ErrorActionPreference = 'Continue'
     $registration = codex mcp get killermcp --json 2>$null | ConvertFrom-Json
     $codexExit = $LASTEXITCODE
@@ -62,7 +81,6 @@ try {
     }
     Set-Content -LiteralPath $claudeSettings -Value $originalClaudeSettings
 
-    $sentinel = Join-Path $installed 'user-file.txt'
     Set-Content -LiteralPath $sentinel -Value 'Keep this file'
     $process = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
     if ($process.ExitCode -eq 0 -or -not (Test-Path -LiteralPath $sentinel)) {

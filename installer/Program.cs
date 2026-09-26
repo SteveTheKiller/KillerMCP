@@ -92,6 +92,7 @@ namespace KillerMCP.Setup
             bool movedPrevious = false;
             try
             {
+                if (Directory.Exists(destination)) ValidateInstalledEntries(destination, out _, out _);
                 ExtractAndVerify(staging);
                 if (Directory.Exists(destination))
                 {
@@ -104,7 +105,7 @@ namespace KillerMCP.Setup
                     if (movedPrevious) Directory.Move(backup, destination);
                     throw;
                 }
-                if (movedPrevious) DeleteInstallDirectory(backup, parent);
+                if (movedPrevious) Uninstall(backup, false, false);
                 return destination;
             }
             finally
@@ -177,6 +178,16 @@ namespace KillerMCP.Setup
         internal static void Uninstall(string destination, bool disconnectCodex, bool disconnectClaude)
         {
             if (!Directory.Exists(destination)) return;
+            ValidateInstalledEntries(destination, out List<string> files, out List<string> directories);
+            if (disconnectCodex) RemoveCodexRegistration(destination);
+            if (disconnectClaude) RemoveClaudeRegistration(destination);
+            foreach (string file in files) File.Delete(file);
+            foreach (string directory in directories.OrderByDescending(path => path.Length)) Directory.Delete(directory);
+            Directory.Delete(destination);
+        }
+
+        private static void ValidateInstalledEntries(string destination, out List<string> files, out List<string> directories)
+        {
             string manifestPath = Path.Combine(destination, "manifest.json");
             if (!File.Exists(manifestPath))
                 throw new InvalidOperationException("The folder does not contain a KillerMCP installation manifest.");
@@ -186,8 +197,8 @@ namespace KillerMCP.Setup
             if (manifest.files == null || !manifest.files.ContainsKey("node.exe") ||
                 !manifest.files.ContainsKey("killermcp.mjs"))
                 throw new InvalidDataException("The installation manifest does not identify KillerMCP.");
-            var files = new List<string>();
-            var directories = new List<string>();
+            files = new List<string>();
+            directories = new List<string>();
             CollectInstalledEntries(destination, files, directories);
             string[] actual = files
                 .Select(path => path.Substring(destination.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/'))
@@ -208,11 +219,13 @@ namespace KillerMCP.Setup
             if (directories.Any(path => !expectedDirectories.Contains(
                 path.Substring(destination.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/'))))
                 throw new InvalidOperationException("The installation folder contains directories outside the KillerMCP manifest.");
-            if (disconnectCodex) RemoveCodexRegistration(destination);
-            if (disconnectClaude) RemoveClaudeRegistration(destination);
-            foreach (string file in files) File.Delete(file);
-            foreach (string directory in directories.OrderByDescending(path => path.Length)) Directory.Delete(directory);
-            Directory.Delete(destination);
+            foreach (KeyValuePair<string, ManifestFile> item in manifest.files)
+            {
+                string path = Path.Combine(destination, item.Key.Replace('/', Path.DirectorySeparatorChar));
+                if (item.Value == null || !File.Exists(path) || new FileInfo(path).Length != item.Value.bytes ||
+                    !string.Equals(Sha256(path), item.Value.sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("The installation contains a modified runtime file: " + item.Key);
+            }
         }
 
         private static void CollectInstalledEntries(string directory, List<string> files, List<string> directories)
