@@ -9,6 +9,8 @@ const cli = process.argv[2];
 const searchRoot = process.argv[3];
 const benchCli = process.argv[4];
 const scanCli = process.argv[5];
+const pdfCli = process.argv[6];
+const testPdf = process.argv[7];
 if (!cli || !isAbsolute(cli) || !existsSync(cli) || !searchRoot || !isAbsolute(searchRoot)) {
   throw new Error('Pass the absolute KillerShell CLI path and an absolute search test directory');
 }
@@ -17,6 +19,9 @@ if (benchCli && (!isAbsolute(benchCli) || !existsSync(benchCli))) {
 }
 if (scanCli && (!isAbsolute(scanCli) || !existsSync(scanCli))) {
   throw new Error('KillerScan CLI path must name an absolute executable file');
+}
+if (pdfCli && (!isAbsolute(pdfCli) || !existsSync(pdfCli) || !testPdf || !isAbsolute(testPdf) || !existsSync(testPdf))) {
+  throw new Error('Pass absolute KillerPDF executable and test PDF paths');
 }
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -33,6 +38,8 @@ async function withServer(includeShell, verify) {
   else delete env.KILLERBENCH_CLI;
   if (includeShell && scanCli) env.KILLERSCAN_CLI = scanCli;
   else delete env.KILLERSCAN_CLI;
+  if (includeShell && pdfCli) env.KILLERPDF_CLI = pdfCli;
+  else delete env.KILLERPDF_CLI;
   const child = spawn(node, [server], { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] });
   const pending = new Map();
   let buffer = '';
@@ -88,8 +95,20 @@ await withServer(true, async request => {
   const listed = await request('tools/list');
   assert.ok(listed.result?.tools, JSON.stringify(listed));
   const names = new Set(listed.result.tools.map(tool => tool.name));
-  assert.equal(names.size, 95 + (benchCli ? 2 : 0) + (scanCli ? 1 : 0));
+  assert.equal(names.size, 95 + (benchCli ? 2 : 0) + (scanCli ? 1 : 0) + (pdfCli ? 2 : 0));
   assert.ok(names.has('killershell_search_files'));
+  if (pdfCli) {
+    assert.ok(names.has('killerpdf_preflight'));
+    assert.ok(names.has('killerpdf_accessibility'));
+    const preflight = await request('tools/call', { name: 'killerpdf_preflight', arguments: { path: testPdf } });
+    assert.ok(preflight.result && !preflight.result.isError, JSON.stringify(preflight));
+    assert.ok(Array.isArray(JSON.parse(preflight.result.content[0].text).findings));
+    const accessibility = await request('tools/call', { name: 'killerpdf_accessibility', arguments: { path: testPdf } });
+    assert.ok(accessibility.result && !accessibility.result.isError, JSON.stringify(accessibility));
+    assert.ok(Array.isArray(JSON.parse(accessibility.result.content[0].text).findings));
+    const invalidPdf = await request('tools/call', { name: 'killerpdf_preflight', arguments: { path: searchRoot } });
+    assert.equal(invalidPdf.result?.isError, true);
+  }
   if (scanCli) {
     assert.ok(names.has('killerscan_local_network'));
     const network = await request('tools/call', { name: 'killerscan_local_network', arguments: {} });
@@ -126,4 +145,4 @@ await withServer(false, async request => {
   assert.equal(listed.result.tools.length, 94);
   assert.ok(!listed.result.tools.some(tool => tool.name === 'killershell_search_files'));
 });
-process.stdout.write(`KillerMCP smoke passed: 94 KillerTools operations, one KillerShell tool${benchCli ? ', two KillerBench tools' : ''}${scanCli ? ', and one KillerScan tool' : ''}\n`);
+process.stdout.write(`KillerMCP smoke passed: 94 KillerTools operations, one KillerShell tool${benchCli ? ', two KillerBench tools' : ''}${scanCli ? ', one KillerScan tool' : ''}${pdfCli ? ', and two KillerPDF tools' : ''}\n`);

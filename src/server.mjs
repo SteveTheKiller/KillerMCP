@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { createKillerBenchAdapters } from './apps/killerbench.mjs';
+import { createKillerPdfAdapters } from './apps/killerpdf.mjs';
 import { createKillerScanAdapter } from './apps/killerscan.mjs';
 import { createKillerShellAdapter } from './apps/killershell.mjs';
 
@@ -13,9 +14,11 @@ const configuredShellCli = process.env.KILLERSHELL_CLI;
 const shellAdapter = createKillerShellAdapter(configuredShellCli);
 const configuredBenchCli = process.env.KILLERBENCH_CLI;
 const benchAdapters = createKillerBenchAdapters(configuredBenchCli);
+const configuredPdfCli = process.env.KILLERPDF_CLI;
+const pdfAdapters = createKillerPdfAdapters(configuredPdfCli);
 const configuredScanCli = process.env.KILLERSCAN_CLI;
 const scanAdapter = createKillerScanAdapter(configuredScanCli);
-const adapters = [shellAdapter, scanAdapter, ...benchAdapters].filter(Boolean);
+const adapters = [shellAdapter, scanAdapter, ...benchAdapters, ...pdfAdapters].filter(Boolean);
 const adaptersByName = new Map(adapters.map(adapter => [adapter.tool.name, adapter]));
 
 function respond(id, result) {
@@ -49,6 +52,9 @@ if (configuredShellCli && !shellAdapter) {
 }
 if (configuredBenchCli && benchAdapters.length === 0) {
   process.stderr.write('KILLERBENCH_CLI does not point to an absolute executable file. KillerBench tools are unavailable.\n');
+}
+if (configuredPdfCli && pdfAdapters.length === 0) {
+  process.stderr.write('KILLERPDF_CLI does not point to an absolute executable file. KillerPDF tools are unavailable.\n');
 }
 if (configuredScanCli && !scanAdapter) {
   process.stderr.write('KILLERSCAN_CLI does not point to an absolute executable file. KillerScan tools are unavailable.\n');
