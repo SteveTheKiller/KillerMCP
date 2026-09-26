@@ -40,8 +40,13 @@ namespace KillerMCP.Setup
             {
                 try
                 {
-                    Install(destination);
-                    if (connectCodex) RegisterCodex(destination);
+                    if (args.Any(arg => string.Equals(arg, "/uninstall", StringComparison.OrdinalIgnoreCase)))
+                        Uninstall(destination, connectCodex);
+                    else
+                    {
+                        Install(destination);
+                        if (connectCodex) RegisterCodex(destination);
+                    }
                     return 0;
                 }
                 catch (Exception error)
@@ -157,6 +162,47 @@ namespace KillerMCP.Setup
                 (File.GetAttributes(target) & FileAttributes.ReparsePoint) != 0)
                 throw new InvalidOperationException("Refusing to remove a directory outside the installation parent.");
             Directory.Delete(target, recursive: true);
+        }
+
+        internal static void Uninstall(string destination, bool disconnectCodex)
+        {
+            if (!Directory.Exists(destination)) return;
+            string manifestPath = Path.Combine(destination, "manifest.json");
+            if (!File.Exists(manifestPath))
+                throw new InvalidOperationException("The folder does not contain a KillerMCP installation manifest.");
+            var serializer = new JavaScriptSerializer { MaxJsonLength = 4 * 1024 * 1024 };
+            Manifest manifest = serializer.Deserialize<Manifest>(File.ReadAllText(manifestPath))
+                ?? throw new InvalidDataException("The installation manifest is invalid.");
+            if (manifest.files == null || !manifest.files.ContainsKey("node.exe") ||
+                !manifest.files.ContainsKey("killermcp.mjs"))
+                throw new InvalidDataException("The installation manifest does not identify KillerMCP.");
+            string[] actual = Directory.GetFiles(destination, "*", SearchOption.AllDirectories)
+                .Select(path => path.Substring(destination.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/'))
+                .Where(name => name != "manifest.json")
+                .ToArray();
+            if (actual.Length != manifest.files.Count || actual.Any(name => !manifest.files.ContainsKey(name)))
+                throw new InvalidOperationException("The installation folder contains files outside the KillerMCP manifest.");
+            if (disconnectCodex) RemoveCodexRegistration(destination);
+            DeleteInstallDirectory(destination, Path.GetDirectoryName(destination)
+                ?? throw new InvalidOperationException("The installation parent is unavailable."));
+        }
+
+        private static void RemoveCodexRegistration(string destination)
+        {
+            string? codex = Environment.GetEnvironmentVariable("CODEX_CLI_PATH");
+            if (codex == null || !File.Exists(codex)) codex = FindOnPath("codex.exe");
+            if (codex == null) return;
+            int existing = Run(codex, "mcp get killermcp --json", out string configuration, out string error);
+            if (existing != 0)
+            {
+                if (error.IndexOf("No MCP server named", StringComparison.OrdinalIgnoreCase) >= 0) return;
+                throw new InvalidOperationException("Codex could not read its MCP configuration: " + error.Trim());
+            }
+            if (!MatchesCodexRegistration(configuration, Path.Combine(destination, "node.exe"),
+                Path.Combine(destination, "killermcp.mjs")))
+                throw new InvalidOperationException("Codex has a different killermcp connection. It was left unchanged.");
+            if (Run(codex, "mcp remove killermcp", out _, out error) != 0)
+                throw new InvalidOperationException("Codex could not remove its KillerMCP connection: " + error.Trim());
         }
 
         internal static string RegisterCodex(string destination)

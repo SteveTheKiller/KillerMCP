@@ -36,8 +36,25 @@ try {
         $registration.transport.args[0] -ne (Join-Path $installed 'killermcp.mjs')) {
         throw 'Codex did not retain the expected one-connection configuration.'
     }
+
+    $sentinel = Join-Path $installed 'user-file.txt'
+    Set-Content -LiteralPath $sentinel -Value 'Keep this file'
+    $process = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+    if ($process.ExitCode -eq 0 -or -not (Test-Path -LiteralPath $sentinel)) {
+        throw 'Uninstall did not preserve an installation folder with an extra file.'
+    }
+    Remove-Item -LiteralPath $sentinel
+    $process = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+    if ($process.ExitCode -ne 0 -or (Test-Path -LiteralPath $installed)) {
+        throw 'KillerMCP uninstall did not remove its isolated runtime.'
+    }
+    $ErrorActionPreference = 'Continue'
+    $removed = codex mcp get killermcp --json 2>$null
+    $codexExit = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    if ($codexExit -eq 0) { throw 'Uninstall left the KillerMCP Codex connection in place.' }
     $success = $true
-    Write-Output 'KillerMCP isolated install, reinstall, Codex registration, and MCP calls passed.'
+    Write-Output 'KillerMCP isolated install, reinstall, Codex registration, MCP calls, and uninstall passed.'
 }
 finally {
     $env:KILLERMCP_TEST_INSTALL_ROOT = $previousInstallRoot
