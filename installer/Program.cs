@@ -28,6 +28,8 @@ namespace KillerMCP.Setup
                 : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "KillerMCP");
             bool connectCodex = !isolatedTest ||
                 string.Equals(Environment.GetEnvironmentVariable("KILLERMCP_TEST_REGISTER_CODEX"), "1", StringComparison.Ordinal);
+            bool connectClaude = !isolatedTest ||
+                string.Equals(Environment.GetEnvironmentVariable("KILLERMCP_TEST_REGISTER_CLAUDE"), "1", StringComparison.Ordinal);
             if (isolatedTest && connectCodex)
             {
                 string? codexHome = Environment.GetEnvironmentVariable("CODEX_HOME");
@@ -35,17 +37,25 @@ namespace KillerMCP.Setup
                     throw new InvalidOperationException("An isolated Codex home is required for the registration test.");
                 ValidateTestRoot(codexHome);
             }
+            if (isolatedTest && connectClaude)
+            {
+                string? claudeHome = Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR");
+                if (string.IsNullOrWhiteSpace(claudeHome))
+                    throw new InvalidOperationException("An isolated Claude configuration is required for the registration test.");
+                ValidateTestRoot(claudeHome);
+            }
 
             if (args.Any(arg => string.Equals(arg, "/silent", StringComparison.OrdinalIgnoreCase)))
             {
                 try
                 {
                     if (args.Any(arg => string.Equals(arg, "/uninstall", StringComparison.OrdinalIgnoreCase)))
-                        Uninstall(destination, connectCodex);
+                        Uninstall(destination, connectCodex, connectClaude);
                     else
                     {
                         Install(destination);
                         if (connectCodex) RegisterCodex(destination);
+                        if (connectClaude) RegisterClaudeCode(destination);
                     }
                     return 0;
                 }
@@ -58,7 +68,7 @@ namespace KillerMCP.Setup
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new InstallerWindow(destination, connectCodex));
+            Application.Run(new InstallerWindow(destination, connectCodex, connectClaude));
             return 0;
         }
 
@@ -164,7 +174,7 @@ namespace KillerMCP.Setup
             Directory.Delete(target, recursive: true);
         }
 
-        internal static void Uninstall(string destination, bool disconnectCodex)
+        internal static void Uninstall(string destination, bool disconnectCodex, bool disconnectClaude)
         {
             if (!Directory.Exists(destination)) return;
             string manifestPath = Path.Combine(destination, "manifest.json");
@@ -199,6 +209,7 @@ namespace KillerMCP.Setup
                 path.Substring(destination.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/'))))
                 throw new InvalidOperationException("The installation folder contains directories outside the KillerMCP manifest.");
             if (disconnectCodex) RemoveCodexRegistration(destination);
+            if (disconnectClaude) RemoveClaudeRegistration(destination);
             foreach (string file in files) File.Delete(file);
             foreach (string directory in directories.OrderByDescending(path => path.Length)) Directory.Delete(directory);
             Directory.Delete(destination);
@@ -238,6 +249,77 @@ namespace KillerMCP.Setup
                 throw new InvalidOperationException("Codex has a different killermcp connection. It was left unchanged.");
             if (Run(codex, "mcp remove killermcp", out _, out error) != 0)
                 throw new InvalidOperationException("Codex could not remove its KillerMCP connection: " + error.Trim());
+        }
+
+        private static string ClaudeConfigurationPath()
+        {
+            string? custom = Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR");
+            string directory = string.IsNullOrWhiteSpace(custom)
+                ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+                : custom;
+            return Path.Combine(directory, ".claude.json");
+        }
+
+        private static Dictionary<string, object>? ClaudeServerConfiguration()
+        {
+            string path = ClaudeConfigurationPath();
+            if (!File.Exists(path)) return null;
+            var root = new JavaScriptSerializer { MaxJsonLength = 4 * 1024 * 1024 }
+                .DeserializeObject(File.ReadAllText(path)) as Dictionary<string, object>
+                ?? throw new InvalidDataException("Claude Code configuration is invalid.");
+            if (!root.TryGetValue("mcpServers", out object? serversValue)) return null;
+            var servers = serversValue as Dictionary<string, object>
+                ?? throw new InvalidDataException("Claude Code MCP configuration is invalid.");
+            if (!servers.TryGetValue("killermcp", out object? value)) return null;
+            return value as Dictionary<string, object>
+                ?? throw new InvalidDataException("The Claude Code killermcp entry is invalid.");
+        }
+
+        private static bool MatchesClaudeRegistration(Dictionary<string, object> configuration, string destination)
+        {
+            if (!configuration.TryGetValue("type", out object? type) ||
+                !configuration.TryGetValue("command", out object? command)) return false;
+            var args = configuration.TryGetValue("args", out object? value) ? value as object[] : null;
+            return string.Equals(type as string, "stdio", StringComparison.Ordinal) &&
+                string.Equals(command as string, Path.Combine(destination, "node.exe"), StringComparison.OrdinalIgnoreCase) &&
+                args?.Length == 1 && string.Equals(args[0] as string,
+                    Path.Combine(destination, "killermcp.mjs"), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void RemoveClaudeRegistration(string destination)
+        {
+            Dictionary<string, object>? existing = ClaudeServerConfiguration();
+            if (existing == null) return;
+            if (!MatchesClaudeRegistration(existing, destination))
+                throw new InvalidOperationException("Claude Code has a different killermcp connection. It was left unchanged.");
+            string? claude = Environment.GetEnvironmentVariable("CLAUDE_CLI_PATH");
+            if (claude == null || !File.Exists(claude)) claude = FindOnPath("claude.exe");
+            if (claude == null)
+                throw new InvalidOperationException("Claude Code is needed to remove its KillerMCP connection.");
+            if (Run(claude, "mcp remove --scope user killermcp", out _, out string error) != 0 ||
+                ClaudeServerConfiguration() != null)
+                throw new InvalidOperationException("Claude Code could not remove its KillerMCP connection: " + error.Trim());
+        }
+
+        internal static string RegisterClaudeCode(string destination)
+        {
+            string? claude = Environment.GetEnvironmentVariable("CLAUDE_CLI_PATH");
+            if (claude == null || !File.Exists(claude)) claude = FindOnPath("claude.exe");
+            if (claude == null) return "Claude Code was not found on this computer.";
+            Dictionary<string, object>? existing = ClaudeServerConfiguration();
+            if (existing != null)
+            {
+                if (!MatchesClaudeRegistration(existing, destination))
+                    throw new InvalidOperationException("Claude Code already has a different killermcp connection. Its settings were left unchanged.");
+                return "Claude Code already has the correct KillerMCP connection.";
+            }
+            string command = "mcp add --scope user --transport stdio killermcp -- " +
+                Quote(Path.Combine(destination, "node.exe")) + " " + Quote(Path.Combine(destination, "killermcp.mjs"));
+            if (Run(claude, command, out _, out string error) != 0 ||
+                !MatchesClaudeRegistration(ClaudeServerConfiguration()
+                    ?? throw new InvalidOperationException("Claude Code did not save the KillerMCP connection."), destination))
+                throw new InvalidOperationException("Claude Code could not add the KillerMCP connection: " + error.Trim());
+            return "KillerMCP was added to Claude Code.";
         }
 
         internal static string RegisterCodex(string destination)
@@ -327,13 +409,15 @@ namespace KillerMCP.Setup
         {
             private readonly string _destination;
             private readonly bool _connectCodex;
+            private readonly bool _connectClaude;
             private readonly Label _status;
             private readonly Button _install;
 
-            internal InstallerWindow(string destination, bool connectCodex)
+            internal InstallerWindow(string destination, bool connectCodex, bool connectClaude)
             {
                 _destination = destination;
                 _connectCodex = connectCodex;
+                _connectClaude = connectClaude;
                 Text = "KillerMCP Setup";
                 ClientSize = new Size(560, 300);
                 FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -353,7 +437,7 @@ namespace KillerMCP.Setup
                 };
                 var description = new Label
                 {
-                    Text = "One connection for KillerTools, KillerPDF, KillerNotes, KillerScan, KillerShell, Killendar, and KillerBench. Available tools appear when their apps are installed.",
+                    Text = "One connection for KillerTools and your installed Killer apps. Available tools appear when their apps are installed.",
                     Location = new Point(30, 86),
                     Size = new Size(495, 65),
                 };
@@ -394,7 +478,9 @@ namespace KillerMCP.Setup
                     string result = await Task.Run(() =>
                     {
                         Install(_destination);
-                        return _connectCodex ? RegisterCodex(_destination) : "Isolated test installation complete.";
+                        if (_connectCodex) RegisterCodex(_destination);
+                        if (_connectClaude) RegisterClaudeCode(_destination);
+                        return "Installed. Available agent clients are connected.";
                     });
                     _status.Text = result;
                     _install.Text = "Done";
