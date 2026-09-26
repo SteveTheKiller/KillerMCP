@@ -14,12 +14,14 @@ if (!cli || !isAbsolute(cli) || !existsSync(cli) || !searchRoot || !isAbsolute(s
 const root = fileURLToPath(new URL('../', import.meta.url));
 const server = process.env.KILLERMCP_SERVER ?? join(root, 'dist', 'killermcp.mjs');
 if (!isAbsolute(server) || !existsSync(server)) throw new Error('KillerMCP server is missing');
+const node = process.env.KILLERMCP_NODE ?? process.execPath;
+if (!isAbsolute(node) || !existsSync(node)) throw new Error('KillerMCP Node executable is missing');
 
 async function withServer(includeShell, verify) {
   const env = { ...process.env };
   if (includeShell) env.KILLERSHELL_CLI = cli;
   else delete env.KILLERSHELL_CLI;
-  const child = spawn(process.execPath, [server], { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(node, [server], { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] });
   const pending = new Map();
   let buffer = '';
   let stderr = '';
