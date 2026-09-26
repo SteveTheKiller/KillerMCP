@@ -2,7 +2,7 @@ import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
 const apps = {
-  killendar: { variable: 'KILLENDAR_CLI', directory: 'Killendar', executable: 'Killendar.Cli.exe' },
+  killendar: { variable: 'KILLENDAR_CLI', directory: 'Killendar', executable: 'Killendar.exe' },
   killerbench: { variable: 'KILLERBENCH_CLI', directory: 'KillerBench', executable: 'killerbench-cli.exe' },
   killernotes: { variable: 'KILLERNOTES_CLI', directory: 'KillerNotes', executable: 'KillerNotes.exe' },
   killerpdf: { variable: 'KILLERPDF_CLI', directory: 'KillerPDF', executable: 'KillerPDF.App.exe' },

@@ -13,7 +13,7 @@ try {
   const shell = join(local, 'Programs', 'KillerShell', 'KillerShell.Cli.exe');
   const bench = join(machine, 'KillerBench', 'killerbench-cli.exe');
   const notes = join(machine, 'KillerNotes', 'KillerNotes.exe');
-  const killendar = join(local, 'Programs', 'Killendar', 'Killendar.Cli.exe');
+  const killendar = join(local, 'Programs', 'Killendar', 'Killendar.exe');
   for (const path of [pdf, scan, shell, bench, notes, killendar]) {
     await mkdir(join(path, '..'), { recursive: true });
     await writeFile(path, 'fixture');

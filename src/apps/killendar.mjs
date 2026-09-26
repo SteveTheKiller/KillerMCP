@@ -21,6 +21,10 @@ function result(message, isError = false) {
   return { content: [{ type: 'text', text: message }], ...(isError ? { isError: true } : {}) };
 }
 
+function cliArgs(path, args) {
+  return path.toLowerCase().endsWith('killendar.exe') ? ['--cli', ...args] : args;
+}
+
 function validDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
@@ -36,7 +40,7 @@ function call(path, input) {
     return Promise.resolve(result('Provide a valid date, up to 31 days, and a limit up to 100 events', true));
   }
   return new Promise(resolve => {
-    execFile(path, ['agenda', input.date, String(input.days ?? 7), '--limit', String(input.limit ?? 50)],
+    execFile(path, cliArgs(path, ['agenda', input.date, String(input.days ?? 7), '--limit', String(input.limit ?? 50)]),
       { encoding: 'utf8', windowsHide: true, timeout: 20000, maxBuffer: 262144 },
       (error, stdout, stderr) => {
         if (error) {
@@ -59,7 +63,7 @@ export async function createKillendarAdapter(path) {
   }
   catch { return null; }
   const help = await new Promise(resolve => {
-    execFile(path, ['--help'], { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 8192 },
+    execFile(path, cliArgs(path, ['--help']), { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 8192 },
       (error, stdout) => resolve(error ? '' : stdout));
   });
   return help.includes('agenda <yyyy-MM-dd>') ? { tool, call: input => call(path, input) } : null;
