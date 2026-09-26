@@ -50,6 +50,18 @@ try {
         throw 'Claude Code did not retain the expected one-connection configuration.'
     }
 
+    $claudeSettings = Join-Path $claudeHome '.claude.json'
+    $originalClaudeSettings = Get-Content -LiteralPath $claudeSettings -Raw
+    $differentClaudeSettings = $originalClaudeSettings | ConvertFrom-Json
+    $differentClaudeSettings.mcpServers.killermcp.command = 'C:\DifferentApp\node.exe'
+    Set-Content -LiteralPath $claudeSettings -Value ($differentClaudeSettings | ConvertTo-Json -Depth 30)
+    $process = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+    $preserved = (Get-Content -LiteralPath $claudeSettings -Raw | ConvertFrom-Json).mcpServers.killermcp.command
+    if ($process.ExitCode -eq 0 -or $preserved -ne 'C:\DifferentApp\node.exe') {
+        throw 'Install replaced a different Claude Code connection.'
+    }
+    Set-Content -LiteralPath $claudeSettings -Value $originalClaudeSettings
+
     $sentinel = Join-Path $installed 'user-file.txt'
     Set-Content -LiteralPath $sentinel -Value 'Keep this file'
     $process = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
