@@ -42,13 +42,22 @@ function validate(input) {
   return null;
 }
 
-export function createKillerShellAdapter(path) {
+function cliArgs(path, args) {
+  return path.toLowerCase().endsWith('killershell.exe') ? ['--cli', ...args] : args;
+}
+
+export async function createKillerShellAdapter(path) {
   let available = false;
   try {
     available = Boolean(path && isAbsolute(path) && existsSync(path) && statSync(path).isFile());
   }
   catch { /* An inaccessible CLI cannot be offered as a tool. */ }
   if (!available) return null;
+  const help = await new Promise(resolve => {
+    execFile(path, cliArgs(path, ['--help']), { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 8192 },
+      (error, stdout) => resolve(error ? '' : stdout));
+  });
+  if (!help.includes('search <folder>')) return null;
   return {
     tool,
     call(input) {
@@ -59,7 +68,7 @@ export function createKillerShellAdapter(path) {
       if (input.content) args.push('--content', input.content);
       args.push('--limit', String(input.limit ?? 100));
       return new Promise(resolve => {
-        execFile(path, args, { encoding: 'utf8', windowsHide: true, timeout: 30000, maxBuffer: 262144 },
+        execFile(path, cliArgs(path, args), { encoding: 'utf8', windowsHide: true, timeout: 30000, maxBuffer: 262144 },
           (error, stdout, stderr) => {
             if (error) {
               resolve(result((stderr || error.message).trim().slice(0, 1024), true));

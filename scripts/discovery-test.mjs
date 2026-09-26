@@ -10,7 +10,7 @@ try {
   const machine = join(root, 'Machine');
   const pdf = join(local, 'Programs', 'KillerPDF', 'KillerPDF.App.exe');
   const scan = join(machine, 'KillerScan', 'KillerScan.exe');
-  const shell = join(local, 'Programs', 'KillerShell', 'KillerShell.Cli.exe');
+  const shell = join(local, 'Programs', 'KillerShell', 'KillerShell.exe');
   const bench = join(machine, 'KillerBench', 'killerbench-cli.exe');
   const notes = join(machine, 'KillerNotes', 'KillerNotes.exe');
   const killendar = join(local, 'Programs', 'Killendar', 'Killendar.exe');

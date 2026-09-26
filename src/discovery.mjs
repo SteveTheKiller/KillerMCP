@@ -7,7 +7,7 @@ const apps = {
   killernotes: { variable: 'KILLERNOTES_CLI', directory: 'KillerNotes', executable: 'KillerNotes.exe' },
   killerpdf: { variable: 'KILLERPDF_CLI', directory: 'KillerPDF', executable: 'KillerPDF.App.exe' },
   killerscan: { variable: 'KILLERSCAN_CLI', directory: 'KillerScan', executable: 'KillerScan.exe' },
-  killershell: { variable: 'KILLERSHELL_CLI', directory: 'KillerShell', executable: 'KillerShell.Cli.exe' },
+  killershell: { variable: 'KILLERSHELL_CLI', directory: 'KillerShell', executable: 'KillerShell.exe' },
 };
 
 function isFile(path) {

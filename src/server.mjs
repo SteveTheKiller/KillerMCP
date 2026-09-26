@@ -14,7 +14,7 @@ import { discoverAppCli } from './discovery.mjs';
 const directory = fileURLToPath(new URL('./', import.meta.url));
 const killerToolsBundle = join(directory, 'killertools.mjs');
 const configuredShellCli = discoverAppCli('killershell');
-const shellAdapter = createKillerShellAdapter(configuredShellCli);
+const shellAdapter = await createKillerShellAdapter(configuredShellCli);
 const configuredBenchCli = discoverAppCli('killerbench');
 const benchAdapters = createKillerBenchAdapters(configuredBenchCli);
 const configuredKillendarCli = discoverAppCli('killendar');
