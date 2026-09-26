@@ -176,15 +176,50 @@ namespace KillerMCP.Setup
             if (manifest.files == null || !manifest.files.ContainsKey("node.exe") ||
                 !manifest.files.ContainsKey("killermcp.mjs"))
                 throw new InvalidDataException("The installation manifest does not identify KillerMCP.");
-            string[] actual = Directory.GetFiles(destination, "*", SearchOption.AllDirectories)
+            var files = new List<string>();
+            var directories = new List<string>();
+            CollectInstalledEntries(destination, files, directories);
+            string[] actual = files
                 .Select(path => path.Substring(destination.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/'))
                 .Where(name => name != "manifest.json")
                 .ToArray();
             if (actual.Length != manifest.files.Count || actual.Any(name => !manifest.files.ContainsKey(name)))
                 throw new InvalidOperationException("The installation folder contains files outside the KillerMCP manifest.");
+            var expectedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string name in manifest.files.Keys)
+            {
+                string? parent = Path.GetDirectoryName(name.Replace('/', Path.DirectorySeparatorChar));
+                while (!string.IsNullOrEmpty(parent))
+                {
+                    expectedDirectories.Add(parent.Replace('\\', '/'));
+                    parent = Path.GetDirectoryName(parent);
+                }
+            }
+            if (directories.Any(path => !expectedDirectories.Contains(
+                path.Substring(destination.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/'))))
+                throw new InvalidOperationException("The installation folder contains directories outside the KillerMCP manifest.");
             if (disconnectCodex) RemoveCodexRegistration(destination);
-            DeleteInstallDirectory(destination, Path.GetDirectoryName(destination)
-                ?? throw new InvalidOperationException("The installation parent is unavailable."));
+            foreach (string file in files) File.Delete(file);
+            foreach (string directory in directories.OrderByDescending(path => path.Length)) Directory.Delete(directory);
+            Directory.Delete(destination);
+        }
+
+        private static void CollectInstalledEntries(string directory, List<string> files, List<string> directories)
+        {
+            if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException("The installation folder contains a linked directory.");
+            foreach (string entry in Directory.GetFileSystemEntries(directory))
+            {
+                FileAttributes attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidOperationException("The installation folder contains a linked file or directory.");
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    CollectInstalledEntries(entry, files, directories);
+                    directories.Add(entry);
+                }
+                else files.Add(entry);
+            }
         }
 
         private static void RemoveCodexRegistration(string destination)

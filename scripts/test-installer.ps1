@@ -44,6 +44,13 @@ try {
         throw 'Uninstall did not preserve an installation folder with an extra file.'
     }
     Remove-Item -LiteralPath $sentinel
+    $extraDirectory = Join-Path $installed 'user-folder'
+    New-Item -ItemType Directory -Path $extraDirectory | Out-Null
+    $process = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+    if ($process.ExitCode -eq 0 -or -not (Test-Path -LiteralPath $extraDirectory)) {
+        throw 'Uninstall did not preserve an extra installation directory.'
+    }
+    Remove-Item -LiteralPath $extraDirectory
     $process = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
     if ($process.ExitCode -ne 0 -or (Test-Path -LiteralPath $installed)) {
         throw 'KillerMCP uninstall did not remove its isolated runtime.'
