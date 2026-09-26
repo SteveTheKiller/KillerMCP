@@ -7,16 +7,17 @@ import { createKillerBenchAdapters } from './apps/killerbench.mjs';
 import { createKillerPdfAdapters } from './apps/killerpdf.mjs';
 import { createKillerScanAdapter } from './apps/killerscan.mjs';
 import { createKillerShellAdapter } from './apps/killershell.mjs';
+import { discoverAppCli } from './discovery.mjs';
 
 const directory = fileURLToPath(new URL('./', import.meta.url));
 const killerToolsBundle = join(directory, 'killertools.mjs');
-const configuredShellCli = process.env.KILLERSHELL_CLI;
+const configuredShellCli = discoverAppCli('killershell');
 const shellAdapter = createKillerShellAdapter(configuredShellCli);
-const configuredBenchCli = process.env.KILLERBENCH_CLI;
+const configuredBenchCli = discoverAppCli('killerbench');
 const benchAdapters = createKillerBenchAdapters(configuredBenchCli);
-const configuredPdfCli = process.env.KILLERPDF_CLI;
+const configuredPdfCli = discoverAppCli('killerpdf');
 const pdfAdapters = createKillerPdfAdapters(configuredPdfCli);
-const configuredScanCli = process.env.KILLERSCAN_CLI;
+const configuredScanCli = discoverAppCli('killerscan');
 const scanAdapter = createKillerScanAdapter(configuredScanCli);
 const adapters = [shellAdapter, scanAdapter, ...benchAdapters, ...pdfAdapters].filter(Boolean);
 const adaptersByName = new Map(adapters.map(adapter => [adapter.tool.name, adapter]));
@@ -47,16 +48,16 @@ if (!existsSync(killerToolsBundle)) {
   process.stderr.write('The KillerTools MCP bundle is missing. Build KillerMCP first.\n');
   process.exit(1);
 }
-if (configuredShellCli && !shellAdapter) {
+if (process.env.KILLERSHELL_CLI !== undefined && !shellAdapter) {
   process.stderr.write('KILLERSHELL_CLI does not point to an absolute executable file. KillerShell tools are unavailable.\n');
 }
-if (configuredBenchCli && benchAdapters.length === 0) {
+if (process.env.KILLERBENCH_CLI !== undefined && benchAdapters.length === 0) {
   process.stderr.write('KILLERBENCH_CLI does not point to an absolute executable file. KillerBench tools are unavailable.\n');
 }
-if (configuredPdfCli && pdfAdapters.length === 0) {
+if (process.env.KILLERPDF_CLI !== undefined && pdfAdapters.length === 0) {
   process.stderr.write('KILLERPDF_CLI does not point to an absolute executable file. KillerPDF tools are unavailable.\n');
 }
-if (configuredScanCli && !scanAdapter) {
+if (process.env.KILLERSCAN_CLI !== undefined && !scanAdapter) {
   process.stderr.write('KILLERSCAN_CLI does not point to an absolute executable file. KillerScan tools are unavailable.\n');
 }
 

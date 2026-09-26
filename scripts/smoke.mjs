@@ -40,6 +40,11 @@ async function withServer(includeShell, verify) {
   else delete env.KILLERSCAN_CLI;
   if (includeShell && pdfCli) env.KILLERPDF_CLI = pdfCli;
   else delete env.KILLERPDF_CLI;
+  if (!includeShell) {
+    for (const name of ['KILLERSHELL_CLI', 'KILLERBENCH_CLI', 'KILLERSCAN_CLI', 'KILLERPDF_CLI']) {
+      env[name] = join(root, 'missing-app-cli.exe');
+    }
+  }
   const child = spawn(node, [server], { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] });
   const pending = new Map();
   let buffer = '';

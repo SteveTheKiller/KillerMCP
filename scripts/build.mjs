@@ -14,6 +14,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const output = join(root, 'dist');
 const files = [
   { source: join(root, 'src', 'server.mjs'), name: 'killermcp.mjs' },
+  { source: join(root, 'src', 'discovery.mjs'), name: 'discovery.mjs' },
   { source: join(root, 'src', 'apps', 'killerbench.mjs'), name: 'apps/killerbench.mjs' },
   { source: join(root, 'src', 'apps', 'killerpdf.mjs'), name: 'apps/killerpdf.mjs' },
   { source: join(root, 'src', 'apps', 'killerscan.mjs'), name: 'apps/killerscan.mjs' },
