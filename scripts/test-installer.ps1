@@ -31,6 +31,17 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Installed MCP check failed on pass $pass." }
     }
 
+    $setupCopy = "$installed-Setup.exe"
+    $uninstallKey = 'HKCU:\Software\KillerMCP\InstallerTests\' + (Split-Path $scratch -Leaf)
+    $installedEntry = Get-ItemProperty -LiteralPath $uninstallKey
+    if (-not (Test-Path -LiteralPath $setupCopy -PathType Leaf) -or
+        $installedEntry.DisplayName -ne 'KillerMCP' -or
+        $installedEntry.InstallLocation -ne $installed -or
+        $installedEntry.UninstallString -ne ('"' + $setupCopy + '" /uninstall') -or
+        $installedEntry.QuietUninstallString -ne ('"' + $setupCopy + '" /silent /uninstall')) {
+        throw 'The installed setup copy or Windows uninstall entry is incorrect.'
+    }
+
     $sentinel = Join-Path $installed 'user-file.txt'
     Set-Content -LiteralPath $sentinel -Value 'Keep this file'
     $process = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
@@ -49,6 +60,14 @@ try {
         if ($process.ExitCode -eq 0) { throw 'Uninstall removed a modified runtime file.' }
     }
     finally { [IO.File]::WriteAllBytes($runtimeFile, $originalRuntime) }
+
+    $originalSetup = [IO.File]::ReadAllBytes($setupCopy)
+    try {
+        [IO.File]::AppendAllText($setupCopy, 'modified')
+        $process = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        if ($process.ExitCode -eq 0) { throw 'Reinstall replaced a modified setup file.' }
+    }
+    finally { [IO.File]::WriteAllBytes($setupCopy, $originalSetup) }
 
     $ErrorActionPreference = 'Continue'
     $registration = codex mcp get killermcp --json 2>$null | ConvertFrom-Json
@@ -94,9 +113,13 @@ try {
         throw 'Uninstall did not preserve an extra installation directory.'
     }
     Remove-Item -LiteralPath $extraDirectory
-    $process = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
-    if ($process.ExitCode -ne 0 -or (Test-Path -LiteralPath $installed)) {
-        throw 'KillerMCP uninstall did not remove its isolated runtime.'
+    $process = Start-Process -FilePath $setupCopy -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+    for ($attempt = 0; $attempt -lt 50 -and (Test-Path -LiteralPath $setupCopy); $attempt++) {
+        Start-Sleep -Milliseconds 100
+    }
+    if ($process.ExitCode -ne 0 -or (Test-Path -LiteralPath $installed) -or
+        (Test-Path -LiteralPath $setupCopy) -or (Test-Path -LiteralPath $uninstallKey)) {
+        throw 'The installed KillerMCP setup did not remove its runtime and uninstall entry.'
     }
     $ErrorActionPreference = 'Continue'
     $removed = codex mcp get killermcp --json 2>$null
@@ -106,7 +129,7 @@ try {
     $claudeRegistration = (Get-Content -LiteralPath (Join-Path $claudeHome '.claude.json') -Raw | ConvertFrom-Json).mcpServers.killermcp
     if ($null -ne $claudeRegistration) { throw 'Uninstall left the KillerMCP Claude Code connection in place.' }
     $success = $true
-    Write-Output 'KillerMCP isolated install, reinstall, Codex and Claude Code registration, MCP calls, and uninstall passed.'
+    Write-Output 'KillerMCP isolated install, reinstall, Installed Apps entry, Codex and Claude Code registration, MCP calls, and uninstall passed.'
 }
 finally {
     $env:KILLERMCP_TEST_INSTALL_ROOT = $previousInstallRoot

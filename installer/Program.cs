@@ -7,9 +7,11 @@ using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace KillerMCP.Setup
 {
@@ -17,6 +19,7 @@ namespace KillerMCP.Setup
     {
         private const string PayloadName = "KillerMCP.payload.zip";
         private const string TestRootVariable = "KILLERMCP_TEST_INSTALL_ROOT";
+        private const string UninstallRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\KillerMCP";
 
         [STAThread]
         private static int Main(string[] args)
@@ -45,15 +48,26 @@ namespace KillerMCP.Setup
                 ValidateTestRoot(claudeHome);
             }
 
-            if (args.Any(arg => string.Equals(arg, "/silent", StringComparison.OrdinalIgnoreCase)))
+            bool silent = args.Any(arg => string.Equals(arg, "/silent", StringComparison.OrdinalIgnoreCase));
+            bool uninstall = args.Any(arg => string.Equals(arg, "/uninstall", StringComparison.OrdinalIgnoreCase));
+            if (uninstall && !silent && MessageBox.Show(
+                "Remove KillerMCP and its agent connections?", "KillerMCP Setup",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return 0;
+            if (silent || uninstall)
             {
                 try
                 {
-                    if (args.Any(arg => string.Equals(arg, "/uninstall", StringComparison.OrdinalIgnoreCase)))
+                    if (uninstall)
+                    {
+                        ValidateSetupRegistration(destination);
                         Uninstall(destination, connectCodex, connectClaude);
+                        RemoveInstalledApp(destination);
+                    }
                     else
                     {
                         Install(destination);
+                        RegisterInstalledApp(destination);
                         if (connectCodex) RegisterCodex(destination);
                         if (connectClaude) RegisterClaudeCode(destination);
                     }
@@ -61,7 +75,8 @@ namespace KillerMCP.Setup
                 }
                 catch (Exception error)
                 {
-                    Console.Error.WriteLine("KillerMCP installation failed: " + error.Message);
+                    if (silent) Console.Error.WriteLine("KillerMCP setup failed: " + error.Message);
+                    else MessageBox.Show(error.Message, "KillerMCP Setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return 1;
                 }
             }
@@ -84,6 +99,7 @@ namespace KillerMCP.Setup
 
         internal static string Install(string destination)
         {
+            ValidateSetupRegistration(destination);
             string parent = Path.GetDirectoryName(destination)
                 ?? throw new InvalidOperationException("The installation directory is unavailable.");
             Directory.CreateDirectory(parent);
@@ -163,6 +179,79 @@ namespace KillerMCP.Setup
             using (var stream = File.OpenRead(path))
             using (var algorithm = SHA256.Create())
                 return BitConverter.ToString(algorithm.ComputeHash(stream)).Replace("-", string.Empty);
+        }
+
+        private static string SetupCopyPath(string destination) => destination + "-Setup.exe";
+
+        private static string InstalledAppRegistryPath(string destination)
+        {
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(TestRootVariable)))
+                return UninstallRegistryPath;
+            return @"Software\KillerMCP\InstallerTests\" + Path.GetFileName(Path.GetDirectoryName(destination));
+        }
+
+        private static void ValidateSetupRegistration(string destination)
+        {
+            string setup = SetupCopyPath(destination);
+            using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(InstalledAppRegistryPath(destination)))
+            {
+                if (key == null)
+                {
+                    if (File.Exists(setup))
+                        throw new InvalidOperationException("An unregistered KillerMCP setup file already exists.");
+                    return;
+                }
+                if (!File.Exists(setup) ||
+                    !string.Equals(key.GetValue("UninstallString") as string, Quote(setup) + " /uninstall", StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(key.GetValue("SetupSha256") as string, Sha256(setup), StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("The installed KillerMCP setup file or uninstall entry has changed.");
+            }
+        }
+
+        private static void RegisterInstalledApp(string destination)
+        {
+            string setup = SetupCopyPath(destination);
+            string source = Assembly.GetExecutingAssembly().Location;
+            if (!string.Equals(Path.GetFullPath(source), Path.GetFullPath(setup), StringComparison.OrdinalIgnoreCase))
+                File.Copy(source, setup, true);
+            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(InstalledAppRegistryPath(destination))
+                ?? throw new InvalidOperationException("Could not create the KillerMCP uninstall entry."))
+            {
+                key.SetValue("DisplayName", "KillerMCP");
+                key.SetValue("DisplayVersion", Assembly.GetExecutingAssembly().GetName().Version.ToString());
+                key.SetValue("Publisher", "Steve the Killer");
+                key.SetValue("InstallLocation", destination);
+                key.SetValue("DisplayIcon", setup + ",0");
+                key.SetValue("UninstallString", Quote(setup) + " /uninstall");
+                key.SetValue("QuietUninstallString", Quote(setup) + " /silent /uninstall");
+                key.SetValue("SetupSha256", Sha256(setup));
+                key.SetValue("NoModify", 1);
+                key.SetValue("NoRepair", 1);
+            }
+        }
+
+        private static void RemoveInstalledApp(string destination)
+        {
+            string setup = SetupCopyPath(destination);
+            if (File.Exists(setup))
+            {
+                if (string.Equals(Path.GetFullPath(Assembly.GetExecutingAssembly().Location),
+                    Path.GetFullPath(setup), StringComparison.OrdinalIgnoreCase))
+                {
+                    string script = "Wait-Process -Id " + Process.GetCurrentProcess().Id +
+                        " -ErrorAction SilentlyContinue; Remove-Item -LiteralPath '" +
+                        setup.Replace("'", "''") + "' -Force -ErrorAction SilentlyContinue";
+                    string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+                    using (Process? helper = Process.Start(new ProcessStartInfo("powershell.exe",
+                        "-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " + encoded)
+                    { UseShellExecute = false, CreateNoWindow = true }))
+                    {
+                        if (helper == null) throw new InvalidOperationException("Could not remove the setup file after uninstall.");
+                    }
+                }
+                else File.Delete(setup);
+            }
+            Registry.CurrentUser.DeleteSubKeyTree(InstalledAppRegistryPath(destination), false);
         }
 
         private static void DeleteInstallDirectory(string path, string parent)
@@ -491,6 +580,7 @@ namespace KillerMCP.Setup
                     string result = await Task.Run(() =>
                     {
                         Install(_destination);
+                        RegisterInstalledApp(_destination);
                         if (_connectCodex) RegisterCodex(_destination);
                         if (_connectClaude) RegisterClaudeCode(_destination);
                         return "Installed. Available agent clients are connected.";
