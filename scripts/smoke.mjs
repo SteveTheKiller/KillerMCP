@@ -15,6 +15,7 @@ const pdfCli = process.argv[6];
 const testPdf = process.argv[7];
 const releasedPdfCli = process.argv[8];
 const secondPdf = process.argv[9];
+const notesCli = process.argv[10];
 if (!cli || !isAbsolute(cli) || !existsSync(cli) || !searchRoot || !isAbsolute(searchRoot)) {
   throw new Error('Pass the absolute KillerShell CLI path and an absolute search test directory');
 }
@@ -33,6 +34,9 @@ if (releasedPdfCli && (!isAbsolute(releasedPdfCli) || !existsSync(releasedPdfCli
 if (pdfCli && (!secondPdf || !isAbsolute(secondPdf) || !existsSync(secondPdf))) {
   throw new Error('Pass a second absolute test PDF path for the merge check');
 }
+if (notesCli && (!isAbsolute(notesCli) || !existsSync(notesCli))) {
+  throw new Error('KillerNotes CLI path must name an absolute executable file');
+}
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const server = process.env.KILLERMCP_SERVER ?? join(root, 'dist', 'killermcp.mjs');
@@ -50,8 +54,10 @@ async function withServer(includeShell, verify, pdfOnly = null) {
   else delete env.KILLERSCAN_CLI;
   if (includeShell && pdfCli) env.KILLERPDF_CLI = pdfCli;
   else delete env.KILLERPDF_CLI;
+  if (includeShell && notesCli) env.KILLERNOTES_CLI = notesCli;
+  else delete env.KILLERNOTES_CLI;
   if (!includeShell) {
-    for (const name of ['KILLERSHELL_CLI', 'KILLERBENCH_CLI', 'KILLERSCAN_CLI', 'KILLERPDF_CLI']) {
+    for (const name of ['KILLERSHELL_CLI', 'KILLERBENCH_CLI', 'KILLERSCAN_CLI', 'KILLERPDF_CLI', 'KILLERNOTES_CLI']) {
       env[name] = join(root, 'missing-app-cli.exe');
     }
     if (pdfOnly) env.KILLERPDF_CLI = pdfOnly;
@@ -130,8 +136,13 @@ await withServer(true, async request => {
   const listed = await request('tools/list');
   assert.ok(listed.result?.tools, JSON.stringify(listed));
   const names = new Set(listed.result.tools.map(tool => tool.name));
-  assert.equal(names.size, 95 + (benchCli ? 2 : 0) + (scanCli ? 2 : 0) + (pdfCli ? 3 : 0));
+  assert.equal(names.size, 95 + (benchCli ? 2 : 0) + (scanCli ? 2 : 0) + (pdfCli ? 3 : 0) + (notesCli ? 1 : 0));
   assert.ok(names.has('killershell_search_files'));
+  if (notesCli) {
+    assert.ok(names.has('killernotes_search'));
+    const invalidNotes = await request('tools/call', { name: 'killernotes_search', arguments: { query: '' } });
+    assert.equal(invalidNotes.result?.isError, true);
+  }
   if (pdfCli) {
     assert.ok(names.has('killerpdf_merge'));
     await verifyMerge(request);
@@ -199,4 +210,4 @@ await withServer(false, async request => {
   assert.equal(listed.result.tools.length, 94);
   assert.ok(!listed.result.tools.some(tool => tool.name === 'killershell_search_files'));
 });
-process.stdout.write(`KillerMCP smoke passed: 94 KillerTools operations, one KillerShell tool${benchCli ? ', two KillerBench tools' : ''}${scanCli ? ', two KillerScan tools' : ''}${pdfCli ? ', and three development KillerPDF tools' : ''}${releasedPdfCli ? ', plus released KillerPDF merge compatibility' : ''}\n`);
+process.stdout.write(`KillerMCP smoke passed: 94 KillerTools operations, one KillerShell tool${notesCli ? ', one KillerNotes tool' : ''}${benchCli ? ', two KillerBench tools' : ''}${scanCli ? ', two KillerScan tools' : ''}${pdfCli ? ', and three development KillerPDF tools' : ''}${releasedPdfCli ? ', plus released KillerPDF merge compatibility' : ''}\n`);

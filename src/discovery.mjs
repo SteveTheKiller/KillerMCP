@@ -3,6 +3,7 @@ import { isAbsolute, join } from 'node:path';
 
 const apps = {
   killerbench: { variable: 'KILLERBENCH_CLI', directory: 'KillerBench', executable: 'killerbench-cli.exe' },
+  killernotes: { variable: 'KILLERNOTES_CLI', directory: 'KillerNotes', executable: 'KillerNotes.Cli.exe' },
   killerpdf: { variable: 'KILLERPDF_CLI', directory: 'KillerPDF', executable: 'KillerPDF.App.exe' },
   killerscan: { variable: 'KILLERSCAN_CLI', directory: 'KillerScan', executable: 'KillerScan.exe' },
   killershell: { variable: 'KILLERSHELL_CLI', directory: 'KillerShell', executable: 'KillerShell.Cli.exe' },
