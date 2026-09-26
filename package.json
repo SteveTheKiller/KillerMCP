@@ -8,6 +8,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:portable": "node scripts/build-portable.mjs",
+    "smoke:installer": "node scripts/installer-smoke.mjs",
     "test:discovery": "node scripts/discovery-test.mjs",
     "smoke": "node scripts/smoke.mjs"
   }
