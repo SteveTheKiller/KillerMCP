@@ -17,8 +17,8 @@ try {
     await writeFile(path, 'fixture');
   }
   const environment = { LOCALAPPDATA: local, ProgramFiles: machine };
-  assert.equal(discoverAppCli('killerpdf', environment), null);
-  assert.equal(discoverAppCli('killerscan', environment), null);
+  assert.equal(discoverAppCli('killerpdf', environment), pdf);
+  assert.equal(discoverAppCli('killerscan', environment), scan);
   assert.equal(discoverAppCli('killershell', environment), shell);
   assert.equal(discoverAppCli('killerbench', environment), bench);
   assert.equal(discoverAppCli('killerpdf', { ...environment, KILLERPDF_CLI: pdf }), pdf);
