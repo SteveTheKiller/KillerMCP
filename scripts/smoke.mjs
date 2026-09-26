@@ -7,8 +7,16 @@ import { fileURLToPath } from 'node:url';
 
 const cli = process.argv[2];
 const searchRoot = process.argv[3];
+const benchCli = process.argv[4];
+const scanCli = process.argv[5];
 if (!cli || !isAbsolute(cli) || !existsSync(cli) || !searchRoot || !isAbsolute(searchRoot)) {
   throw new Error('Pass the absolute KillerShell CLI path and an absolute search test directory');
+}
+if (benchCli && (!isAbsolute(benchCli) || !existsSync(benchCli))) {
+  throw new Error('KillerBench CLI path must name an absolute executable file');
+}
+if (scanCli && (!isAbsolute(scanCli) || !existsSync(scanCli))) {
+  throw new Error('KillerScan CLI path must name an absolute executable file');
 }
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -21,6 +29,10 @@ async function withServer(includeShell, verify) {
   const env = { ...process.env };
   if (includeShell) env.KILLERSHELL_CLI = cli;
   else delete env.KILLERSHELL_CLI;
+  if (includeShell && benchCli) env.KILLERBENCH_CLI = benchCli;
+  else delete env.KILLERBENCH_CLI;
+  if (includeShell && scanCli) env.KILLERSCAN_CLI = scanCli;
+  else delete env.KILLERSCAN_CLI;
   const child = spawn(node, [server], { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] });
   const pending = new Map();
   let buffer = '';
@@ -76,8 +88,26 @@ await withServer(true, async request => {
   const listed = await request('tools/list');
   assert.ok(listed.result?.tools, JSON.stringify(listed));
   const names = new Set(listed.result.tools.map(tool => tool.name));
-  assert.equal(names.size, 95);
+  assert.equal(names.size, 95 + (benchCli ? 2 : 0) + (scanCli ? 1 : 0));
   assert.ok(names.has('killershell_search_files'));
+  if (scanCli) {
+    assert.ok(names.has('killerscan_local_network'));
+    const network = await request('tools/call', { name: 'killerscan_local_network', arguments: {} });
+    assert.ok(network.result && !network.result.isError, JSON.stringify(network));
+    assert.match(JSON.parse(network.result.content[0].text).localIp, /^\d{1,3}(?:\.\d{1,3}){3}$/);
+    const invalidNetwork = await request('tools/call', { name: 'killerscan_local_network', arguments: { scan: true } });
+    assert.equal(invalidNetwork.result?.isError, true);
+  }
+  if (benchCli) {
+    assert.ok(names.has('killerbench_device_code'));
+    assert.ok(names.has('killerbench_win32_code'));
+    const device = await request('tools/call', { name: 'killerbench_device_code', arguments: { code: '10' } });
+    assert.equal(JSON.parse(device.result.content[0].text).symbol, 'CM_PROB_FAILED_START');
+    const win32 = await request('tools/call', { name: 'killerbench_win32_code', arguments: { code: '5' } });
+    assert.equal(JSON.parse(win32.result.content[0].text).message, 'Access is denied.');
+    const invalidCode = await request('tools/call', { name: 'killerbench_device_code', arguments: { code: '-1' } });
+    assert.equal(invalidCode.result?.isError, true);
+  }
   assert.ok(names.has('convert_case'));
   const converted = await request('tools/call', { name: 'convert_case', arguments: { text: 'Hello World' } });
   assert.ok(converted.result && !converted.result.isError, JSON.stringify(converted));
@@ -96,4 +126,4 @@ await withServer(false, async request => {
   assert.equal(listed.result.tools.length, 94);
   assert.ok(!listed.result.tools.some(tool => tool.name === 'killershell_search_files'));
 });
-process.stdout.write('KillerMCP smoke passed: 94 KillerTools operations and one conditional KillerShell tool\n');
+process.stdout.write(`KillerMCP smoke passed: 94 KillerTools operations, one KillerShell tool${benchCli ? ', two KillerBench tools' : ''}${scanCli ? ', and one KillerScan tool' : ''}\n`);
