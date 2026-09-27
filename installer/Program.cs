@@ -733,6 +733,7 @@ namespace KillerMCP.Setup
                 _windsurfConfiguration = windsurfConfiguration;
                 _claudeDesktopConfiguration = claudeDesktopConfiguration;
                 Text = "KillerMCP Setup";
+                Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
                 ClientSize = new Size(560, 300);
                 FormBorderStyle = FormBorderStyle.FixedDialog;
                 MaximizeBox = false;
