@@ -42,6 +42,7 @@ namespace KillerMCP.Setup
                 string.Equals(Environment.GetEnvironmentVariable("KILLERMCP_TEST_REGISTER_CODEX"), "1", StringComparison.Ordinal);
             bool connectClaude = !isolatedTest ||
                 string.Equals(Environment.GetEnvironmentVariable("KILLERMCP_TEST_REGISTER_CLAUDE"), "1", StringComparison.Ordinal);
+            string? cursorConfiguration = CursorConfigurationPath(isolatedTest);
             if (isolatedTest && connectCodex)
             {
                 string? codexHome = Environment.GetEnvironmentVariable("CODEX_HOME");
@@ -70,7 +71,7 @@ namespace KillerMCP.Setup
                     if (uninstall)
                     {
                         ValidateSetupRegistration(destination);
-                        Uninstall(destination, connectCodex, connectClaude);
+                        Uninstall(destination, connectCodex, connectClaude, cursorConfiguration);
                         RemoveInstalledApp(destination);
                     }
                     else
@@ -79,6 +80,7 @@ namespace KillerMCP.Setup
                         RegisterInstalledApp(destination);
                         if (connectCodex) RegisterCodex(destination);
                         if (connectClaude) RegisterClaudeCode(destination);
+                        if (cursorConfiguration != null) RegisterCursor(destination, cursorConfiguration);
                     }
                     return 0;
                 }
@@ -92,7 +94,7 @@ namespace KillerMCP.Setup
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new InstallerWindow(destination, connectCodex, connectClaude));
+            Application.Run(new InstallerWindow(destination, connectCodex, connectClaude, cursorConfiguration));
             return 0;
         }
 
@@ -130,7 +132,7 @@ namespace KillerMCP.Setup
                     if (movedPrevious) Directory.Move(backup, destination);
                     throw;
                 }
-                if (movedPrevious) Uninstall(backup, false, false);
+                if (movedPrevious) Uninstall(backup, false, false, null);
                 return destination;
             }
             finally
@@ -273,12 +275,14 @@ namespace KillerMCP.Setup
             Directory.Delete(target, recursive: true);
         }
 
-        internal static void Uninstall(string destination, bool disconnectCodex, bool disconnectClaude)
+        internal static void Uninstall(string destination, bool disconnectCodex, bool disconnectClaude,
+            string? cursorConfiguration)
         {
             if (!Directory.Exists(destination)) return;
             ValidateInstalledEntries(destination, out List<string> files, out List<string> directories);
             if (disconnectCodex) RemoveCodexRegistration(destination);
             if (disconnectClaude) RemoveClaudeRegistration(destination);
+            if (cursorConfiguration != null) RemoveCursorRegistration(destination, cursorConfiguration);
             foreach (string file in files) File.Delete(file);
             foreach (string directory in directories.OrderByDescending(path => path.Length)) Directory.Delete(directory);
             Directory.Delete(destination);
@@ -433,6 +437,111 @@ namespace KillerMCP.Setup
             return "KillerMCP was added to Claude Code.";
         }
 
+        private static string? CursorConfigurationPath(bool isolatedTest)
+        {
+            string? testPath = Environment.GetEnvironmentVariable("KILLERMCP_TEST_CURSOR_CONFIG");
+            if (!string.IsNullOrWhiteSpace(testPath))
+            {
+                string path = Path.GetFullPath(testPath);
+                ValidateTestRoot(Path.GetDirectoryName(path)
+                    ?? throw new InvalidOperationException("The isolated Cursor configuration path is invalid."));
+                return path;
+            }
+            if (isolatedTest) return null;
+
+            string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string configurationDirectory = Path.Combine(profile, ".cursor");
+            string localPrograms = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            bool installed = FindOnPath("cursor.exe") != null || Directory.Exists(configurationDirectory) ||
+                File.Exists(Path.Combine(localPrograms, "Programs", "Cursor", "Cursor.exe")) ||
+                File.Exists(Path.Combine(programFiles, "Cursor", "Cursor.exe"));
+            return installed ? Path.Combine(configurationDirectory, "mcp.json") : null;
+        }
+
+        private static Dictionary<string, object> ReadCursorConfiguration(string path,
+            out Dictionary<string, object> servers)
+        {
+            Dictionary<string, object> root;
+            if (File.Exists(path))
+            {
+                root = new JavaScriptSerializer { MaxJsonLength = 4 * 1024 * 1024 }
+                    .DeserializeObject(File.ReadAllText(path)) as Dictionary<string, object>
+                    ?? throw new InvalidDataException("Cursor MCP configuration is invalid.");
+            }
+            else root = new Dictionary<string, object>();
+
+            if (root.TryGetValue("mcpServers", out object? value))
+            {
+                servers = value as Dictionary<string, object>
+                    ?? throw new InvalidDataException("Cursor MCP server configuration is invalid.");
+            }
+            else
+            {
+                servers = new Dictionary<string, object>();
+                root["mcpServers"] = servers;
+            }
+            return root;
+        }
+
+        private static bool MatchesCursorRegistration(object value, string destination)
+        {
+            var configuration = value as Dictionary<string, object>;
+            if (configuration == null || !configuration.TryGetValue("command", out object? command)) return false;
+            var args = configuration.TryGetValue("args", out object? argsValue) ? argsValue as object[] : null;
+            return string.Equals(command as string, Path.Combine(destination, "node.exe"), StringComparison.OrdinalIgnoreCase) &&
+                args?.Length == 1 && string.Equals(args[0] as string,
+                    Path.Combine(destination, "killermcp.mjs"), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void WriteJsonConfiguration(string path, Dictionary<string, object> root)
+        {
+            string directory = Path.GetDirectoryName(path)
+                ?? throw new InvalidOperationException("The MCP configuration directory is unavailable.");
+            Directory.CreateDirectory(directory);
+            string temporary = path + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                string json = new JavaScriptSerializer { MaxJsonLength = 4 * 1024 * 1024 }.Serialize(root);
+                File.WriteAllText(temporary, json + Environment.NewLine, new UTF8Encoding(false));
+                if (File.Exists(path)) File.Replace(temporary, path, null);
+                else File.Move(temporary, path);
+            }
+            finally
+            {
+                if (File.Exists(temporary)) File.Delete(temporary);
+            }
+        }
+
+        private static void RemoveCursorRegistration(string destination, string path)
+        {
+            if (!File.Exists(path)) return;
+            Dictionary<string, object> root = ReadCursorConfiguration(path, out Dictionary<string, object> servers);
+            if (!servers.TryGetValue("killermcp", out object? existing)) return;
+            if (!MatchesCursorRegistration(existing, destination))
+                throw new InvalidOperationException("Cursor has a different killermcp connection. It was left unchanged.");
+            servers.Remove("killermcp");
+            WriteJsonConfiguration(path, root);
+        }
+
+        internal static string RegisterCursor(string destination, string path)
+        {
+            Dictionary<string, object> root = ReadCursorConfiguration(path, out Dictionary<string, object> servers);
+            if (servers.TryGetValue("killermcp", out object? existing))
+            {
+                if (!MatchesCursorRegistration(existing, destination))
+                    throw new InvalidOperationException("Cursor already has a different killermcp connection. Its settings were left unchanged.");
+                return "Cursor already has the correct KillerMCP connection.";
+            }
+            servers["killermcp"] = new Dictionary<string, object>
+            {
+                ["command"] = Path.Combine(destination, "node.exe"),
+                ["args"] = new object[] { Path.Combine(destination, "killermcp.mjs") },
+            };
+            WriteJsonConfiguration(path, root);
+            return "KillerMCP was added to Cursor.";
+        }
+
         internal static string RegisterCodex(string destination)
         {
             string? codex = Environment.GetEnvironmentVariable("CODEX_CLI_PATH");
@@ -521,14 +630,17 @@ namespace KillerMCP.Setup
             private readonly string _destination;
             private readonly bool _connectCodex;
             private readonly bool _connectClaude;
+            private readonly string? _cursorConfiguration;
             private readonly Label _status;
             private readonly Button _install;
 
-            internal InstallerWindow(string destination, bool connectCodex, bool connectClaude)
+            internal InstallerWindow(string destination, bool connectCodex, bool connectClaude,
+                string? cursorConfiguration)
             {
                 _destination = destination;
                 _connectCodex = connectCodex;
                 _connectClaude = connectClaude;
+                _cursorConfiguration = cursorConfiguration;
                 Text = "KillerMCP Setup";
                 ClientSize = new Size(560, 300);
                 FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -600,6 +712,7 @@ namespace KillerMCP.Setup
                         RegisterInstalledApp(_destination);
                         if (_connectCodex) RegisterCodex(_destination);
                         if (_connectClaude) RegisterClaudeCode(_destination);
+                        if (_cursorConfiguration != null) RegisterCursor(_destination, _cursorConfiguration);
                         return "Installed. Available agent clients are connected.";
                     });
                     _status.Text = result;
