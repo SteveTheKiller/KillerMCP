@@ -6,7 +6,7 @@ The goal is one Windows installer. It detects installed apps, registers one MCP 
 
 ## Current status
 
-Development is in progress. This repository has a shared stdio host. It runs the bundled server from the [KillerTools site repository](https://github.com/SteveTheKiller/killer-tools-site) and adds app tools to the same connection. Current app adapters offer KillerPDF merging on the released 1.8 line, with preflight and accessibility reports when a build advertises those commands. KillerScan offers local network information and bounded scans. KillerShell file search, KillerNotes search, and Killendar agenda lookup appear when their CLI executables are available. Notes and calendar queries read the active database without changing it and currently cannot unlock encrypted files. A development Windows installer packages the runtime, registers one MCP connection in Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when those clients are available, and adds a Windows Installed Apps uninstall entry. Reinstall and uninstall preserve unexpected or modified runtime files and client configuration. Other client registration, installed app CLI packaging, and final installer validation remain.
+Development version 0.1.0 has a shared stdio host. It runs the bundled server from the [KillerTools site repository](https://github.com/SteveTheKiller/killer-tools-site) and adds app tools to the same connection. Current app adapters offer KillerPDF merging on the released 1.8 line, with preflight and accessibility reports when a build advertises those commands. KillerScan offers local network information and bounded scans. KillerShell file search, KillerNotes search, and Killendar agenda lookup appear when their CLI executables are available. Notes and calendar queries read the active database without changing it and currently cannot unlock encrypted files. The development Windows installer packages the runtime, registers one MCP connection in Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when those clients are available, and adds a Windows Installed Apps uninstall entry. Isolated install, reinstall, client registration, MCP discovery, representative calls, modified-file protection, and uninstall checks pass. The exact installer also passes two install and MCP call cycles plus uninstall in a clean Windows Sandbox with networking disabled. Final signing and hands-on visual review remain.
 
 The public app websites will each have an `/mcp` page describing their tools and linking to the one KillerMCP setup. The single local connection does not require a separate MCP subdomain for each app.
 
@@ -24,7 +24,7 @@ Once connected, people can ask the agent in ordinary language, such as `killer d
 
 Run `node scripts/discovery-test.mjs` to check standard install-folder detection and development overrides. KillerNotes 1.3.1, Killendar 1.1.4, and KillerShell 1.2.6 serve their commands from their installed executables with `--cli` after those app versions are installed.
 
-No release or installation instructions are available until the packaged runtime and installer are verified.
+No public download is listed until the signed installer completes hands-on validation.
 
 ## License
 
