@@ -1,6 +1,6 @@
 {
   "name": "killermcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "license": "GPL-3.0-only",
   "type": "module",
@@ -12,6 +12,8 @@
     "build:portable": "node scripts/build-portable.mjs",
     "smoke:installer": "node scripts/installer-smoke.mjs",
     "test:discovery": "node scripts/discovery-test.mjs",
+    "test:killerscan": "node scripts/killerscan-adapter-test.mjs",
+    "test:update": "node scripts/update-status-test.mjs",
     "smoke": "node scripts/smoke.mjs"
   }
 }

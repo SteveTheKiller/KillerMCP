@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { copyFile, mkdir, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,7 @@ const output = join(root, 'dist');
 const files = [
   { source: join(root, 'src', 'server.mjs'), name: 'killermcp.mjs' },
   { source: join(root, 'src', 'discovery.mjs'), name: 'discovery.mjs' },
+  { source: join(root, 'src', 'update-status.mjs'), name: 'update-status.mjs' },
   { source: join(root, 'src', 'apps', 'app-version.mjs'), name: 'apps/app-version.mjs' },
   { source: join(root, 'src', 'apps', 'killerbench.mjs'), name: 'apps/killerbench.mjs' },
   { source: join(root, 'src', 'apps', 'killendar.mjs'), name: 'apps/killendar.mjs' },
@@ -32,6 +33,8 @@ async function sha256(path) {
 }
 
 await mkdir(output, { recursive: true });
+const packageDetails = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+await writeFile(join(output, 'version.mjs'), `export const version = ${JSON.stringify(packageDetails.version)};\n`);
 const manifest = { files: {} };
 for (const file of files) {
   const destination = join(output, file.name);
@@ -45,5 +48,7 @@ for (const file of files) {
   }
   manifest.files[file.name] = { bytes: copiedDetails.size, sha256: copiedHash };
 }
+const versionPath = join(output, 'version.mjs');
+manifest.files['version.mjs'] = { bytes: (await stat(versionPath)).size, sha256: await sha256(versionPath) };
 await writeFile(join(output, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 process.stdout.write(`KillerMCP runtime staged at ${output}\n`);

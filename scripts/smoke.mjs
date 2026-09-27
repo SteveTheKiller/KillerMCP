@@ -50,6 +50,8 @@ if (!isAbsolute(node) || !existsSync(node)) throw new Error('KillerMCP Node exec
 
 async function withServer(includeShell, verify, pdfOnly = null) {
   const env = { ...process.env };
+  env.KILLERMCP_UPDATE_API = 'http://127.0.0.1:1/unavailable';
+  env.KILLERMCP_UPDATE_CACHE = join(await mkdtemp(join(tmpdir(), 'killermcp-update-cache-')), 'status.json');
   if (includeShell) env.KILLERSHELL_CLI = cli;
   else delete env.KILLERSHELL_CLI;
   if (includeShell && benchCli) env.KILLERBENCH_CLI = benchCli;
@@ -107,7 +109,7 @@ async function withServer(includeShell, verify, pdfOnly = null) {
     const initialized = await request('initialize', {
       protocolVersion: '2025-06-18',
       capabilities: {},
-      clientInfo: { name: 'killermcp-smoke', version: '0.1.1' },
+      clientInfo: { name: 'killermcp-smoke', version: '0.1.2' },
     });
     assert.ok(initialized.result, JSON.stringify(initialized));
     assert.match(initialized.result.instructions, /killer merge these PDFs/);
@@ -174,7 +176,10 @@ await withServer(true, async request => {
   const listed = await request('tools/list');
   assert.ok(listed.result?.tools, JSON.stringify(listed));
   const names = new Set(listed.result.tools.map(tool => tool.name));
-  assert.ok(names.size >= 95 + (pdfCli ? 19 : 0));
+  assert.ok(names.size >= 96 + (pdfCli ? 19 : 0));
+  assert.ok(names.has('killermcp_update_status'));
+  const update = await request('tools/call', { name: 'killermcp_update_status', arguments: {} });
+  assert.equal(JSON.parse(update.result.content[0].text).installedVersion, '0.1.2');
   assert.ok(names.has('killershell_search_files'));
   if (notesCli) {
     assert.ok(names.has('killernotes_search'));
@@ -211,6 +216,8 @@ await withServer(true, async request => {
   if (scanCli) {
     assert.ok(names.has('killerscan_local_network'));
     assert.ok(names.has('killerscan_scan_network'));
+    assert.ok(names.has('killerscan_probe_host'));
+    assert.ok(names.has('killerscan_mac_vendor'));
     const network = await request('tools/call', { name: 'killerscan_local_network', arguments: {} });
     assert.ok(network.result && !network.result.isError, JSON.stringify(network));
     assert.match(JSON.parse(network.result.content[0].text).localIp, /^\d{1,3}(?:\.\d{1,3}){3}$/);
@@ -218,6 +225,10 @@ await withServer(true, async request => {
     assert.equal(invalidNetwork.result?.isError, true);
     const invalidScan = await request('tools/call', { name: 'killerscan_scan_network', arguments: { target: '192.168.8.0/16' } });
     assert.equal(invalidScan.result?.isError, true);
+    const invalidProbe = await request('tools/call', { name: 'killerscan_probe_host', arguments: { target: 'example.com' } });
+    assert.equal(invalidProbe.result?.isError, true);
+    const invalidVendor = await request('tools/call', { name: 'killerscan_mac_vendor', arguments: { mac: 'not-a-mac' } });
+    assert.equal(invalidVendor.result?.isError, true);
     const loopback = await request('tools/call', { name: 'killerscan_scan_network', arguments: { target: '127.0.0.1/32' } });
     assert.ok(loopback.result && !loopback.result.isError, JSON.stringify(loopback));
     assert.ok(Array.isArray(JSON.parse(loopback.result.content[0].text)));
@@ -249,7 +260,7 @@ if (releasedPdfCli) {
   await withServer(false, async request => {
     const listed = await request('tools/list');
     const names = new Set(listed.result.tools.map(tool => tool.name));
-    assert.equal(names.size, 111);
+    assert.equal(names.size, 112);
     assert.ok(names.has('killerpdf_merge'));
     for (const name of ['killerpdf_extract_pages', 'killerpdf_split', 'killerpdf_decrypt',
       'killerpdf_render_pages', 'killerpdf_flatten', 'killerpdf_print', 'killerpdf_ocr',
@@ -266,7 +277,7 @@ if (releasedPdfCli) {
 }
 await withServer(false, async request => {
   const listed = await request('tools/list');
-  assert.equal(listed.result.tools.length, 94);
+  assert.equal(listed.result.tools.length, 95);
   assert.ok(!listed.result.tools.some(tool => tool.name === 'killershell_search_files'));
 });
-process.stdout.write(`KillerMCP smoke passed: 94 KillerTools operations, one KillerShell tool${notesCli ? ', one KillerNotes tool' : ''}${killendarCli ? ', one Killendar tool' : ''}${benchCli ? ', two KillerBench tools' : ''}${scanCli ? ', two KillerScan tools' : ''}${pdfCli ? ', and nineteen development KillerPDF tools' : ''}${releasedPdfCli ? ', plus seventeen released KillerPDF tools' : ''}\n`);
+process.stdout.write(`KillerMCP smoke passed: 94 KillerTools operations, one update tool, one KillerShell tool${notesCli ? ', one KillerNotes tool' : ''}${killendarCli ? ', one Killendar tool' : ''}${benchCli ? ', two KillerBench tools' : ''}${scanCli ? ', four KillerScan tools' : ''}${pdfCli ? ', and nineteen development KillerPDF tools' : ''}${releasedPdfCli ? ', plus seventeen released KillerPDF tools' : ''}\n`);

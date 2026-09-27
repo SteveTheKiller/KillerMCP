@@ -22,6 +22,29 @@ const scanTool = {
     additionalProperties: false,
   },
 };
+const probeTool = {
+  name: 'killerscan_probe_host',
+  description: 'Deep probe one IPv4 host with KillerScan, including ports 1 through 1024, and return its device details as JSON. Probing sends network traffic to the selected host.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      target: { type: 'string', description: 'One IPv4 address' },
+      timeout: { type: 'integer', minimum: 5, maximum: 300, default: 60 },
+    },
+    required: ['target'],
+    additionalProperties: false,
+  },
+};
+const vendorTool = {
+  name: 'killerscan_mac_vendor',
+  description: 'Look up the manufacturer of a MAC address in KillerScan\'s bundled offline OUI database.',
+  inputSchema: {
+    type: 'object',
+    properties: { mac: { type: 'string', description: 'A 12 digit MAC address in any common separator format' } },
+    required: ['mac'],
+    additionalProperties: false,
+  },
+};
 
 function result(message, isError = false) {
   return { content: [{ type: 'text', text: message }], ...(isError ? { isError: true } : {}) };
@@ -99,6 +122,53 @@ function scan(path, input) {
   });
 }
 
+function probe(path, input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)
+    || Object.keys(input).some(key => !['target', 'timeout'].includes(key))
+    || typeof input.target !== 'string' || isIP(input.target) !== 4) {
+    return Promise.resolve(result('Target must be one IPv4 address', true));
+  }
+  if (input.timeout !== undefined && (!Number.isInteger(input.timeout) || input.timeout < 5 || input.timeout > 300)) {
+    return Promise.resolve(result('Timeout must be between 5 and 300 seconds', true));
+  }
+  const timeout = input.timeout ?? 60;
+  const args = ['/probe', input.target, '/json', '/timeout', String(timeout), '/limit', '1'];
+  return new Promise(resolve => {
+    execFile(path, args, { encoding: 'utf8', windowsHide: true, timeout: (timeout + 10) * 1000, maxBuffer: 1048576 },
+      (error, stdout, stderr) => {
+        if (error) {
+          resolve(result((stderr || error.message).trim().slice(0, 1024), true));
+          return;
+        }
+        try {
+          const devices = JSON.parse(stdout);
+          if (!Array.isArray(devices) || devices.length > 1) throw new Error('Invalid probe response');
+          resolve(result(JSON.stringify(devices)));
+        }
+        catch { resolve(result('KillerScan returned an invalid probe response', true)); }
+      });
+  });
+}
+
+function vendor(path, input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)
+    || Object.keys(input).some(key => key !== 'mac') || typeof input.mac !== 'string'
+    || input.mac.replace(/[^0-9a-f]/gi, '').length !== 12) {
+    return Promise.resolve(result('MAC address must contain 12 hexadecimal digits', true));
+  }
+  return new Promise(resolve => {
+    execFile(path, ['/vendor', input.mac], { encoding: 'utf8', windowsHide: true, timeout: 15000, maxBuffer: 8192 },
+      (error, stdout, stderr) => {
+        const value = stdout.trim();
+        if (error && !value) {
+          resolve(result((stderr || error.message).trim().slice(0, 1024), true));
+          return;
+        }
+        resolve(result(JSON.stringify({ mac: input.mac, vendor: value || 'Unknown' })));
+      });
+  });
+}
+
 export async function createKillerScanAdapters(path) {
   let available = false;
   try { available = Boolean(path && isAbsolute(path) && existsSync(path) && statSync(path).isFile()); }
@@ -111,5 +181,7 @@ export async function createKillerScanAdapters(path) {
   const adapters = [];
   if (help.includes('/network')) adapters.push(createLocalNetworkAdapter(path));
   if (help.includes('/scan [targets]')) adapters.push({ tool: scanTool, call: input => scan(path, input) });
+  if (help.includes('/probe <IPv4>')) adapters.push({ tool: probeTool, call: input => probe(path, input) });
+  if (help.includes('/vendor <MAC>')) adapters.push({ tool: vendorTool, call: input => vendor(path, input) });
   return adapters;
 }

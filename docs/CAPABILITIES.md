@@ -156,6 +156,8 @@ App tools appear only when KillerMCP finds a supported installed version that ad
 - Report the active local IPv4 interface, address, subnet, gateway, and DNS server without scanning other hosts.
 - Run a quick discovery scan against one IPv4 address or a CIDR containing no more than 1,024 addresses.
 - Run a full scan with fingerprinting and port checks when explicitly requested.
+- Deep probe one IPv4 host, including ports 1 through 1024.
+- Look up a MAC address manufacturer in KillerScan's offline OUI database.
 - Return no more than 100 discovered devices.
 
 Network scans send probes from the local computer. Only scan networks that the user is authorized to test.

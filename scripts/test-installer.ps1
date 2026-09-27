@@ -58,7 +58,7 @@ try {
     $installedEntry = Get-ItemProperty -LiteralPath $uninstallKey
     if (-not (Test-Path -LiteralPath $setupCopy -PathType Leaf) -or
         $installedEntry.DisplayName -ne 'KillerMCP' -or
-        $installedEntry.DisplayVersion -ne '0.1.1' -or
+        $installedEntry.DisplayVersion -ne '0.1.2' -or
         $installedEntry.InstallLocation -ne $installed -or
         $installedEntry.UninstallString -ne ('"' + $setupCopy + '" /uninstall') -or
         $installedEntry.QuietUninstallString -ne ('"' + $setupCopy + '" /silent /uninstall')) {

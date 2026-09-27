@@ -4,6 +4,14 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - Unreleased
+
+0.1.2 adds update awareness and completes the existing KillerScan command coverage.
+
+### Added
+
+- Added daily update checks, an update status tool, and complete MCP coverage for KillerScan's headless commands.
+
 ## [0.1.1] - 2026-09-26
 
 0.1.1 expands KillerPDF automation and makes local app discovery safer.

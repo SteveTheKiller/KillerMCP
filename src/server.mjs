@@ -10,6 +10,8 @@ import { createKillerPdfAdapters } from './apps/killerpdf.mjs';
 import { createKillerScanAdapters } from './apps/killerscan.mjs';
 import { createKillerShellAdapter } from './apps/killershell.mjs';
 import { discoverAppCli } from './discovery.mjs';
+import { createUpdateAdapter, updateInstruction } from './update-status.mjs';
+import { version } from './version.mjs';
 
 const directory = fileURLToPath(new URL('./', import.meta.url));
 const killerToolsBundle = join(directory, 'killertools.mjs');
@@ -25,9 +27,13 @@ const configuredPdfCli = discoverAppCli('killerpdf');
 const pdfAdapters = await createKillerPdfAdapters(configuredPdfCli);
 const configuredScanCli = discoverAppCli('killerscan');
 const scanAdapters = await createKillerScanAdapters(configuredScanCli);
-const adapters = [shellAdapter, notesAdapter, killendarAdapter, ...scanAdapters, ...benchAdapters, ...pdfAdapters].filter(Boolean);
+const updateAdapter = await createUpdateAdapter(version);
+const adapters = [updateAdapter, shellAdapter, notesAdapter, killendarAdapter, ...scanAdapters, ...benchAdapters, ...pdfAdapters].filter(Boolean);
 const adaptersByName = new Map(adapters.map(adapter => [adapter.tool.name, adapter]));
-const serverInstructions = 'Users can ask for tools in ordinary language. Treat "killer", "killermcp", "killertools", and the app names KillerPDF, KillerNotes, KillerScan, KillerShell, Killendar, and KillerBench as cues to select an available KillerMCP tool by task, without requiring an exact tool name. For example, "killer domain search example.com" can use a domain lookup tool, "killer merge these PDFs" uses killerpdf_merge, and "killerscan 192.168.8.0/24" uses killerscan_scan_network. If the relevant tool is absent, say it is unavailable. Follow the client approval rules for file writes and network scans.';
+const serverInstructions = [
+  'Users can ask for tools in ordinary language. Treat "killer", "killermcp", "killertools", and the app names KillerPDF, KillerNotes, KillerScan, KillerShell, Killendar, and KillerBench as cues to select an available KillerMCP tool by task, without requiring an exact tool name. For example, "killer domain search example.com" can use a domain lookup tool, "killer merge these PDFs" uses killerpdf_merge, "killerscan 192.168.8.0/24" uses killerscan_scan_network, and "killer update status" uses killermcp_update_status. If the relevant tool is absent, say it is unavailable. Follow the client approval rules for file writes and network scans.',
+  updateInstruction(updateAdapter.status),
+].filter(Boolean).join('\n\n');
 
 function respond(id, result) {
   process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id, result })}\n`);

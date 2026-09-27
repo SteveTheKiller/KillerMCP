@@ -12,6 +12,8 @@ const server = join(directory, 'killermcp.mjs');
 if (!existsSync(node) || !existsSync(server)) throw new Error('Installed runtime files are missing');
 
 const environment = { ...process.env };
+environment.KILLERMCP_UPDATE_API = 'http://127.0.0.1:1/unavailable';
+environment.KILLERMCP_UPDATE_CACHE = join(tmpdir(), `killermcp-installer-update-${process.pid}.json`);
 for (const variable of [
   'KILLERPDF_CLI', 'KILLERNOTES_CLI', 'KILLERSCAN_CLI',
   'KILLERSHELL_CLI', 'KILLENDAR_CLI', 'KILLERBENCH_CLI',
@@ -50,12 +52,13 @@ function request(method, params = {}) {
 try {
   const initialized = await request('initialize', {
     protocolVersion: '2025-06-18', capabilities: {},
-    clientInfo: { name: 'killermcp-installer-smoke', version: '0.1.1' },
+    clientInfo: { name: 'killermcp-installer-smoke', version: '0.1.2' },
   });
   assert.ok(initialized.result, JSON.stringify(initialized));
   child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
   const listed = await request('tools/list');
-  assert.equal(listed.result?.tools?.length, 94);
+  assert.equal(listed.result?.tools?.length, 95);
+  assert.ok(listed.result.tools.some(tool => tool.name === 'killermcp_update_status'));
   const converted = await request('tools/call', {
     name: 'convert_case', arguments: { text: 'Hello World' },
   });
