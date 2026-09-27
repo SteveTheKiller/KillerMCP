@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
+import { supportsWindowsFileVersion } from './app-version.mjs';
 
 const name = 'killershell_search_files';
 const tool = {
@@ -53,6 +54,7 @@ export async function createKillerShellAdapter(path) {
   }
   catch { /* An inaccessible CLI cannot be offered as a tool. */ }
   if (!available) return null;
+  if (!await supportsWindowsFileVersion(path, '1.2.6')) return null;
   const help = await new Promise(resolve => {
     execFile(path, cliArgs(path, ['--help']), { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 8192 },
       (error, stdout) => resolve(error ? '' : stdout));

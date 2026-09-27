@@ -15,6 +15,7 @@ const output = join(root, 'dist');
 const files = [
   { source: join(root, 'src', 'server.mjs'), name: 'killermcp.mjs' },
   { source: join(root, 'src', 'discovery.mjs'), name: 'discovery.mjs' },
+  { source: join(root, 'src', 'apps', 'app-version.mjs'), name: 'apps/app-version.mjs' },
   { source: join(root, 'src', 'apps', 'killerbench.mjs'), name: 'apps/killerbench.mjs' },
   { source: join(root, 'src', 'apps', 'killendar.mjs'), name: 'apps/killendar.mjs' },
   { source: join(root, 'src', 'apps', 'killernotes.mjs'), name: 'apps/killernotes.mjs' },

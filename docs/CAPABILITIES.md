@@ -136,9 +136,19 @@ App tools appear only when KillerMCP finds a supported installed version that ad
 ### KillerPDF
 
 - Merge 2 to 8 local PDF files into one new PDF while preserving the requested order.
-- Refuse to overwrite an existing output file.
+- Extract selected pages into a new PDF or split every page into separate PDFs.
+- Remove encryption into a new PDF, using a supplied password when required.
+- Render selected pages as PNG or JPEG images.
+- Flatten a PDF into a new uneditable raster PDF.
+- Print selected pages to a named or default printer.
+- Add a searchable OCR text layer, downloading the selected language model on first use when needed.
+- Resave a PDF through KillerPDF's standard pipeline.
+- Render bounded benchmark images with timing data.
+- Rotate, delete, move, insert, or duplicate pages into a new PDF when the installed KillerPDF version supports those commands.
+- Read document details or search PDF text without changing the file when the installed KillerPDF version supports those commands.
 - Run general, attachment, or print preflight checks when the installed build supports them.
 - Run an accessibility report when the installed build supports it.
+- Refuse to overwrite existing files or output folders.
 - Limit each PDF to 64 MiB and combined merge inputs to 128 MiB.
 
 ### KillerScan
@@ -188,4 +198,4 @@ Requests to the hosted endpoint are processed by the KillerTools Cloudflare Work
 - [KillerTools](https://github.com/SteveTheKiller/killer-tools-site) contains the 81 website utilities, public Cloudflare Worker, local KillerTools bundle, and coverage map.
 - The exact internal operation mapping is maintained in `mcp/coverage.json` in the KillerTools repository.
 
-This document describes the current development implementation. The signed public KillerMCP installer has not been released yet.
+The signed public installer is available from [KillerMCP releases](https://github.com/SteveTheKiller/KillerMCP/releases). App tools appear only when the installed app advertises the required command.

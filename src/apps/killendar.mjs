@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
+import { supportsWindowsFileVersion } from './app-version.mjs';
 
 const tool = {
   name: 'killendar_agenda',
@@ -62,6 +63,7 @@ export async function createKillendarAdapter(path) {
     if (!path || !isAbsolute(path) || !existsSync(path) || !statSync(path).isFile()) return null;
   }
   catch { return null; }
+  if (!await supportsWindowsFileVersion(path, '1.1.4')) return null;
   const help = await new Promise(resolve => {
     execFile(path, cliArgs(path, ['--help']), { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 8192 },
       (error, stdout) => resolve(error ? '' : stdout));

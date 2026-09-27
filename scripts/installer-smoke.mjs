@@ -50,7 +50,7 @@ function request(method, params = {}) {
 try {
   const initialized = await request('initialize', {
     protocolVersion: '2025-06-18', capabilities: {},
-    clientInfo: { name: 'killermcp-installer-smoke', version: '0.1.0' },
+    clientInfo: { name: 'killermcp-installer-smoke', version: '0.1.1' },
   });
   assert.ok(initialized.result, JSON.stringify(initialized));
   child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);

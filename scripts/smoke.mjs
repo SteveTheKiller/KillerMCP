@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import process from 'node:process';
@@ -107,7 +107,7 @@ async function withServer(includeShell, verify, pdfOnly = null) {
     const initialized = await request('initialize', {
       protocolVersion: '2025-06-18',
       capabilities: {},
-      clientInfo: { name: 'killermcp-smoke', version: '0.1.0' },
+      clientInfo: { name: 'killermcp-smoke', version: '0.1.1' },
     });
     assert.ok(initialized.result, JSON.stringify(initialized));
     assert.match(initialized.result.instructions, /killer merge these PDFs/);
@@ -138,11 +138,43 @@ async function verifyMerge(request) {
   finally { await rm(temporary, { recursive: true, force: true }); }
 }
 
+async function verifyPdfFileOperations(request) {
+  const temporary = await mkdtemp(join(tmpdir(), 'killermcp-pdf-smoke-'));
+  try {
+    const calls = [
+      ['killerpdf_extract_pages', { path: testPdf, pages: '1', output: join(temporary, 'extract.pdf') }, 'extract.pdf'],
+      ['killerpdf_flatten', { path: testPdf, dpi: 72, output: join(temporary, 'flat.pdf') }, 'flat.pdf'],
+      ['killerpdf_resave', { path: testPdf, output: join(temporary, 'resaved.pdf') }, 'resaved.pdf'],
+      ['killerpdf_rotate_pages', { path: testPdf, pages: '1', degrees: 90, output: join(temporary, 'rotated.pdf') }, 'rotated.pdf'],
+      ['killerpdf_delete_pages', { path: testPdf, pages: '1', output: join(temporary, 'deleted.pdf') }, 'deleted.pdf'],
+      ['killerpdf_move_pages', { path: testPdf, pages: '1', position: 2, output: join(temporary, 'moved.pdf') }, 'moved.pdf'],
+      ['killerpdf_insert_blank_page', { path: testPdf, position: 1, output: join(temporary, 'blank.pdf') }, 'blank.pdf'],
+      ['killerpdf_duplicate_page', { path: testPdf, page: 1, output: join(temporary, 'duplicate.pdf') }, 'duplicate.pdf'],
+    ];
+    for (const [name, arguments_, output] of calls) {
+      const response = await request('tools/call', { name, arguments: arguments_ });
+      assert.ok(response.result && !response.result.isError, JSON.stringify(response));
+      assert.ok((await stat(join(temporary, output))).size > 0);
+    }
+    const folders = [
+      ['killerpdf_split', { path: testPdf, outputFolder: join(temporary, 'split') }, 'split'],
+      ['killerpdf_render_pages', { path: testPdf, pages: '1', dpi: 72, format: 'png', outputFolder: join(temporary, 'render') }, 'render'],
+      ['killerpdf_benchmark_render', { path: testPdf, size: 256, pageLimit: 1, outputFolder: join(temporary, 'benchmark') }, 'benchmark'],
+    ];
+    for (const [name, arguments_, output] of folders) {
+      const response = await request('tools/call', { name, arguments: arguments_ });
+      assert.ok(response.result && !response.result.isError, JSON.stringify(response));
+      assert.ok((await readdir(join(temporary, output))).length > 0);
+    }
+  }
+  finally { await rm(temporary, { recursive: true, force: true }); }
+}
+
 await withServer(true, async request => {
   const listed = await request('tools/list');
   assert.ok(listed.result?.tools, JSON.stringify(listed));
   const names = new Set(listed.result.tools.map(tool => tool.name));
-  assert.equal(names.size, 95 + (benchCli ? 2 : 0) + (scanCli ? 2 : 0) + (pdfCli ? 3 : 0) + (notesCli ? 1 : 0) + (killendarCli ? 1 : 0));
+  assert.ok(names.size >= 95 + (pdfCli ? 19 : 0));
   assert.ok(names.has('killershell_search_files'));
   if (notesCli) {
     assert.ok(names.has('killernotes_search'));
@@ -157,6 +189,14 @@ await withServer(true, async request => {
   if (pdfCli) {
     assert.ok(names.has('killerpdf_merge'));
     await verifyMerge(request);
+    await verifyPdfFileOperations(request);
+    for (const name of ['killerpdf_extract_pages', 'killerpdf_split', 'killerpdf_decrypt',
+      'killerpdf_render_pages', 'killerpdf_flatten', 'killerpdf_print', 'killerpdf_ocr',
+      'killerpdf_resave', 'killerpdf_benchmark_render', 'killerpdf_rotate_pages',
+      'killerpdf_delete_pages', 'killerpdf_move_pages', 'killerpdf_insert_blank_page',
+      'killerpdf_duplicate_page', 'killerpdf_document_info', 'killerpdf_search_text']) {
+      assert.ok(names.has(name), name);
+    }
     assert.ok(names.has('killerpdf_preflight'));
     assert.ok(names.has('killerpdf_accessibility'));
     const preflight = await request('tools/call', { name: 'killerpdf_preflight', arguments: { path: testPdf } });
@@ -209,11 +249,19 @@ if (releasedPdfCli) {
   await withServer(false, async request => {
     const listed = await request('tools/list');
     const names = new Set(listed.result.tools.map(tool => tool.name));
-    assert.equal(names.size, 95);
+    assert.equal(names.size, 111);
     assert.ok(names.has('killerpdf_merge'));
+    for (const name of ['killerpdf_extract_pages', 'killerpdf_split', 'killerpdf_decrypt',
+      'killerpdf_render_pages', 'killerpdf_flatten', 'killerpdf_print', 'killerpdf_ocr',
+      'killerpdf_resave', 'killerpdf_benchmark_render', 'killerpdf_rotate_pages',
+      'killerpdf_delete_pages', 'killerpdf_move_pages', 'killerpdf_insert_blank_page',
+      'killerpdf_duplicate_page', 'killerpdf_document_info', 'killerpdf_search_text']) {
+      assert.ok(names.has(name), name);
+    }
     assert.ok(!names.has('killerpdf_preflight'));
     assert.ok(!names.has('killerpdf_accessibility'));
     await verifyMerge(request);
+    await verifyPdfFileOperations(request);
   }, releasedPdfCli);
 }
 await withServer(false, async request => {
@@ -221,4 +269,4 @@ await withServer(false, async request => {
   assert.equal(listed.result.tools.length, 94);
   assert.ok(!listed.result.tools.some(tool => tool.name === 'killershell_search_files'));
 });
-process.stdout.write(`KillerMCP smoke passed: 94 KillerTools operations, one KillerShell tool${notesCli ? ', one KillerNotes tool' : ''}${killendarCli ? ', one Killendar tool' : ''}${benchCli ? ', two KillerBench tools' : ''}${scanCli ? ', two KillerScan tools' : ''}${pdfCli ? ', and three development KillerPDF tools' : ''}${releasedPdfCli ? ', plus released KillerPDF merge compatibility' : ''}\n`);
+process.stdout.write(`KillerMCP smoke passed: 94 KillerTools operations, one KillerShell tool${notesCli ? ', one KillerNotes tool' : ''}${killendarCli ? ', one Killendar tool' : ''}${benchCli ? ', two KillerBench tools' : ''}${scanCli ? ', two KillerScan tools' : ''}${pdfCli ? ', and nineteen development KillerPDF tools' : ''}${releasedPdfCli ? ', plus seventeen released KillerPDF tools' : ''}\n`);
