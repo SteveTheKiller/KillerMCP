@@ -1,14 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -21,7 +19,7 @@ namespace KillerMCP.Setup
         private const string TestRootVariable = "KILLERMCP_TEST_INSTALL_ROOT";
         private const string UninstallRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\KillerMCP";
 
-        private static string CurrentVersion
+        internal static string CurrentVersion
         {
             get
             {
@@ -102,11 +100,18 @@ namespace KillerMCP.Setup
                 }
             }
 
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new InstallerWindow(destination, connectCodex, connectClaude, cursorConfiguration,
-                copilotConfiguration, geminiConfiguration, windsurfConfiguration, claudeDesktopConfiguration));
-            return 0;
+            return InstallerWizard.Run(destination, () =>
+            {
+                Install(destination);
+                RegisterInstalledApp(destination);
+                if (connectCodex) RegisterCodex(destination);
+                if (connectClaude) RegisterClaudeCode(destination);
+                if (cursorConfiguration != null) RegisterJsonClient(destination, cursorConfiguration, "Cursor");
+                if (copilotConfiguration != null) RegisterJsonClient(destination, copilotConfiguration, "GitHub Copilot");
+                if (geminiConfiguration != null) RegisterJsonClient(destination, geminiConfiguration, "Gemini CLI");
+                if (windsurfConfiguration != null) RegisterJsonClient(destination, windsurfConfiguration, "Windsurf");
+                if (claudeDesktopConfiguration != null) RegisterJsonClient(destination, claudeDesktopConfiguration, "Claude Desktop");
+            });
         }
 
         private static string ValidateTestRoot(string value)
@@ -707,122 +712,5 @@ namespace KillerMCP.Setup
             public string? sha256 { get; set; }
         }
 
-        private sealed class InstallerWindow : Form
-        {
-            private readonly string _destination;
-            private readonly bool _connectCodex;
-            private readonly bool _connectClaude;
-            private readonly string? _cursorConfiguration;
-            private readonly string? _copilotConfiguration;
-            private readonly string? _geminiConfiguration;
-            private readonly string? _windsurfConfiguration;
-            private readonly string? _claudeDesktopConfiguration;
-            private readonly Label _status;
-            private readonly Button _install;
-
-            internal InstallerWindow(string destination, bool connectCodex, bool connectClaude,
-                string? cursorConfiguration, string? copilotConfiguration, string? geminiConfiguration,
-                string? windsurfConfiguration, string? claudeDesktopConfiguration)
-            {
-                _destination = destination;
-                _connectCodex = connectCodex;
-                _connectClaude = connectClaude;
-                _cursorConfiguration = cursorConfiguration;
-                _copilotConfiguration = copilotConfiguration;
-                _geminiConfiguration = geminiConfiguration;
-                _windsurfConfiguration = windsurfConfiguration;
-                _claudeDesktopConfiguration = claudeDesktopConfiguration;
-                Text = "KillerMCP Setup";
-                Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-                ClientSize = new Size(560, 300);
-                FormBorderStyle = FormBorderStyle.FixedDialog;
-                MaximizeBox = false;
-                StartPosition = FormStartPosition.CenterScreen;
-                BackColor = Color.FromArgb(30, 30, 30);
-                ForeColor = Color.FromArgb(230, 230, 230);
-                Font = new Font("Segoe UI", 10);
-
-                var title = new Label
-                {
-                    Text = "KillerMCP",
-                    Font = new Font("Consolas", 26, FontStyle.Bold),
-                    ForeColor = Color.FromArgb(33, 209, 194),
-                    Location = new Point(28, 24),
-                    Size = new Size(490, 45),
-                };
-                var description = new Label
-                {
-                    Text = "One connection for KillerTools and your installed Killer apps. Available tools appear when their apps are installed.",
-                    Location = new Point(30, 86),
-                    Size = new Size(495, 65),
-                };
-                var version = new Label
-                {
-                    Text = "Version " + CurrentVersion,
-                    ForeColor = Color.FromArgb(160, 160, 160),
-                    TextAlign = ContentAlignment.MiddleRight,
-                    Location = new Point(410, 35),
-                    Size = new Size(115, 24),
-                };
-                var location = new Label
-                {
-                    Text = "Installs to " + destination,
-                    ForeColor = Color.FromArgb(160, 160, 160),
-                    Location = new Point(30, 158),
-                    Size = new Size(495, 35),
-                };
-                _status = new Label
-                {
-                    Text = "Ready to install",
-                    ForeColor = Color.FromArgb(180, 180, 180),
-                    Location = new Point(30, 208),
-                    Size = new Size(350, 48),
-                };
-                _install = new Button
-                {
-                    Text = "Install",
-                    FlatStyle = FlatStyle.Flat,
-                    ForeColor = Color.FromArgb(33, 209, 194),
-                    BackColor = Color.FromArgb(36, 36, 36),
-                    Location = new Point(422, 218),
-                    Size = new Size(105, 38),
-                };
-                _install.FlatAppearance.BorderColor = Color.FromArgb(33, 209, 194);
-                _install.Click += InstallClicked;
-                Controls.AddRange(new Control[] { title, version, description, location, _status, _install });
-            }
-
-            private async void InstallClicked(object? sender, EventArgs e)
-            {
-                _install.Enabled = false;
-                _status.Text = "Installing verified runtime...";
-                try
-                {
-                    string result = await Task.Run(() =>
-                    {
-                        Install(_destination);
-                        RegisterInstalledApp(_destination);
-                        if (_connectCodex) RegisterCodex(_destination);
-                        if (_connectClaude) RegisterClaudeCode(_destination);
-                        if (_cursorConfiguration != null) RegisterJsonClient(_destination, _cursorConfiguration, "Cursor");
-                        if (_copilotConfiguration != null) RegisterJsonClient(_destination, _copilotConfiguration, "GitHub Copilot");
-                        if (_geminiConfiguration != null) RegisterJsonClient(_destination, _geminiConfiguration, "Gemini CLI");
-                        if (_windsurfConfiguration != null) RegisterJsonClient(_destination, _windsurfConfiguration, "Windsurf");
-                        if (_claudeDesktopConfiguration != null) RegisterJsonClient(_destination, _claudeDesktopConfiguration, "Claude Desktop");
-                        return "Installed. Available agent clients are connected.";
-                    });
-                    _status.Text = result;
-                    _install.Text = "Done";
-                    _install.Click -= InstallClicked;
-                    _install.Click += (_, _) => Close();
-                    _install.Enabled = true;
-                }
-                catch (Exception error)
-                {
-                    _status.Text = error.Message;
-                    _install.Enabled = true;
-                }
-            }
-        }
     }
 }
