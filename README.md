@@ -15,7 +15,7 @@ Once connected, ask naturally:
 
 - `killer domain search example.com`
 - `killer merge these PDFs`
-- `killerscan 192.168.8.0/24`
+- `killerscan my network`
 - `killer update status`
 
 The server supplies tool descriptions and instructions to help the client select the appropriate tool. Client behavior varies, so these phrases are guidance rather than guaranteed commands.
@@ -24,7 +24,7 @@ KillerMCP checks GitHub Releases at most once a day when it starts. If a newer v
 
 ## Current status
 
-KillerMCP has a shared stdio host. It runs the bundled server from the [KillerTools site repository](https://github.com/SteveTheKiller/killer-tools-site) and adds app tools to the same connection. The released KillerPDF 1.8 line supports merging, page extraction, splitting, decryption, image rendering, flattening, printing, OCR, resaving, and benchmark rendering. Preflight and accessibility reports appear when an installed build advertises those commands. KillerScan offers local network details, bounded scans, deep host probes, and offline MAC vendor lookup. KillerShell file search, KillerNotes search, and Killendar agenda lookup appear when their CLI executables are available. Notes and calendar queries read the active database without changing it and currently cannot unlock encrypted files. The signed Windows installer packages the runtime, registers one MCP connection in Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when those clients are available, and adds a Windows Installed Apps uninstall entry. The exact signed installer passes isolated install, reinstall, seven client registrations, MCP discovery, representative calls, modified-file protection, uninstall, and clean Windows Sandbox testing.
+KillerMCP has a shared stdio host. It runs the bundled server from the [KillerTools site repository](https://github.com/SteveTheKiller/killer-tools-site) and adds app tools to the same connection. The released KillerPDF 1.8 line supports merging, page extraction, splitting, decryption, image rendering, flattening, printing, OCR, resaving, and benchmark rendering. Preflight and accessibility reports appear when an installed build advertises those commands. KillerScan offers local network details, bounded scans, deep host probes, offline MAC vendor lookup, ping, route tracing, host diagnostics, availability watching, and KillerSpeed tests. KillerShell file search, KillerNotes search, and Killendar agenda lookup appear when their CLI executables are available. Notes and calendar queries read the active database without changing it and currently cannot unlock encrypted files. The signed Windows installer packages the runtime, registers one MCP connection in Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when those clients are available, and adds a Windows Installed Apps uninstall entry. The exact signed installer passes isolated install, reinstall, seven client registrations, MCP discovery, representative calls, modified-file protection, uninstall, and clean Windows Sandbox testing.
 
 The public app websites each have an `/mcp` page describing their tools and linking to the same KillerMCP setup. The single local connection does not require a separate MCP subdomain for each app.
 

@@ -31,7 +31,7 @@ const updateAdapter = await createUpdateAdapter(version);
 const adapters = [updateAdapter, shellAdapter, notesAdapter, killendarAdapter, ...scanAdapters, ...benchAdapters, ...pdfAdapters].filter(Boolean);
 const adaptersByName = new Map(adapters.map(adapter => [adapter.tool.name, adapter]));
 const serverInstructions = [
-  'Users can ask for tools in ordinary language. Treat "killer", "killermcp", "killertools", and the app names KillerPDF, KillerNotes, KillerScan, KillerShell, Killendar, and KillerBench as cues to select an available KillerMCP tool by task, without requiring an exact tool name. For example, "killer domain search example.com" can use a domain lookup tool, "killer merge these PDFs" uses killerpdf_merge, "killerscan 192.168.8.0/24" uses killerscan_scan_network, and "killer update status" uses killermcp_update_status. If the relevant tool is absent, say it is unavailable. Follow the client approval rules for file writes and network scans.',
+  'Users can ask for tools in ordinary language. Treat "killer", "killermcp", "killertools", and the app names KillerPDF, KillerNotes, KillerScan, KillerShell, Killendar, and KillerBench as cues to select an available KillerMCP tool by task, without requiring an exact tool name. For example, "killer domain search example.com" can use a domain lookup tool, "killer merge these PDFs" uses killerpdf_merge, "killerscan my network" uses killerscan_scan_network without a target, and "killer update status" uses killermcp_update_status. If the relevant tool is absent, say it is unavailable. Follow the client approval rules for file writes and network scans.',
   updateInstruction(updateAdapter.status),
 ].filter(Boolean).join('\n\n');
 

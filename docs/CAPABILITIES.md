@@ -8,7 +8,7 @@ Examples:
 killer domain search thekiller.net
 killer calculate 192.168.10.0/24
 killer merge these PDFs
-killerscan 192.168.8.0/24
+killerscan my network
 killer find my notes about the office network
 ```
 
@@ -158,9 +158,14 @@ App tools appear only when KillerMCP finds a supported installed version that ad
 - Run a full scan with fingerprinting and port checks when explicitly requested.
 - Deep probe one IPv4 host, including ports 1 through 1024.
 - Look up a MAC address manufacturer in KillerScan's offline OUI database.
+- Ping one IPv4 address or hostname and report latency and packet loss.
+- Trace the route to one IPv4 address or hostname.
+- Diagnose DNS, ping, route selection, and selected TCP ports for one target.
+- Watch up to 16 IPv4 addresses for bounded availability and latency samples.
+- Run KillerScan's native KillerSpeed test when explicitly requested.
 - Return no more than 100 discovered devices.
 
-Network scans send probes from the local computer. Only scan networks that the user is authorized to test.
+Network tools send probes from the local computer. Only test networks that the user is authorized to test. KillerSpeed contacts speed.killerscan.net and can transfer up to 6 GiB of generated test data plus network overhead.
 
 ### KillerShell
 

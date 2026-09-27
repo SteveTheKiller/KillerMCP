@@ -113,7 +113,7 @@ async function withServer(includeShell, verify, pdfOnly = null) {
     });
     assert.ok(initialized.result, JSON.stringify(initialized));
     assert.match(initialized.result.instructions, /killer merge these PDFs/);
-    assert.match(initialized.result.instructions, /killerscan 192\.168\.8\.0\/24/);
+    assert.match(initialized.result.instructions, /killerscan my network/);
     child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
     await verify(request);
   }

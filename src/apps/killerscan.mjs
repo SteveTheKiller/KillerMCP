@@ -10,15 +10,14 @@ const tool = {
 };
 const scanTool = {
   name: 'killerscan_scan_network',
-  description: 'Scan an IPv4 host or CIDR with KillerScan and return discovered devices as JSON. Use for requests such as "killerscan 192.168.8.0/24". Runs quick discovery by default; set full for fingerprinting and port checks. Scanning sends network probes.',
+  description: 'Scan the active local IPv4 network, an IPv4 host, or a CIDR with KillerScan and return discovered devices as JSON. Omit target for requests such as "killerscan my network". Runs quick discovery by default; set full for fingerprinting and port checks. Scanning sends network probes.',
   inputSchema: {
     type: 'object',
     properties: {
-      target: { type: 'string', description: 'IPv4 address or CIDR with at most 1024 addresses' },
+      target: { type: 'string', description: 'IPv4 address or CIDR with at most 1024 addresses. Omit to scan the active local subnet.' },
       full: { type: 'boolean', default: false },
       limit: { type: 'integer', minimum: 1, maximum: 100, default: 100 },
     },
-    required: ['target'],
     additionalProperties: false,
   },
 };
@@ -44,6 +43,31 @@ const vendorTool = {
     required: ['mac'],
     additionalProperties: false,
   },
+};
+const pingTool = {
+  name: 'killerscan_ping',
+  description: 'Send a bounded set of ICMP checks to one IPv4 address or hostname with KillerScan and return latency and packet loss as JSON.',
+  inputSchema: { type: 'object', properties: { target: { type: 'string' }, count: { type: 'integer', minimum: 1, maximum: 20, default: 4 } }, required: ['target'], additionalProperties: false },
+};
+const traceTool = {
+  name: 'killerscan_trace_route',
+  description: 'Trace the network path to one IPv4 address or hostname with KillerScan and return up to 64 hops as JSON.',
+  inputSchema: { type: 'object', properties: { target: { type: 'string' }, maxHops: { type: 'integer', minimum: 1, maximum: 64, default: 30 } }, required: ['target'], additionalProperties: false },
+};
+const diagnoseTool = {
+  name: 'killerscan_diagnose_host',
+  description: 'Check DNS, ping, route selection, and selected TCP ports for one IPv4 address or hostname with KillerScan.',
+  inputSchema: { type: 'object', properties: { target: { type: 'string' }, ports: { type: 'array', items: { type: 'integer', minimum: 1, maximum: 65535 }, maxItems: 32 } }, required: ['target'], additionalProperties: false },
+};
+const watchTool = {
+  name: 'killerscan_watch_hosts',
+  description: 'Sample availability and latency for 1 to 16 IPv4 addresses with KillerScan. Sends repeated ICMP checks for the requested bounded interval.',
+  inputSchema: { type: 'object', properties: { targets: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 16 }, count: { type: 'integer', minimum: 1, maximum: 20, default: 4 }, interval: { type: 'integer', minimum: 1, maximum: 10, default: 1 } }, required: ['targets'], additionalProperties: false },
+};
+const speedTestTool = {
+  name: 'killerscan_speed_test',
+  description: 'Run KillerScan\'s native KillerSpeed test. This contacts speed.killerscan.net and can transfer up to 6 GiB of generated test data plus network overhead.',
+  inputSchema: { type: 'object', properties: {}, additionalProperties: false },
 };
 
 function result(message, isError = false) {
@@ -87,11 +111,13 @@ function createLocalNetworkAdapter(path) {
 function validateScan(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)
     || Object.keys(input).some(key => !['target', 'full', 'limit'].includes(key))) return 'Expected scan arguments';
-  if (typeof input.target !== 'string' || input.target.length > 43) return 'Target must be an IPv4 host or CIDR';
-  const parts = input.target.split('/');
-  if (parts.length > 2 || isIP(parts[0]) !== 4
-    || (parts.length === 2 && (!/^\d{1,2}$/.test(parts[1]) || Number(parts[1]) < 22 || Number(parts[1]) > 32))) {
-    return 'Target must be an IPv4 host or CIDR with at most 1024 addresses';
+  if (input.target !== undefined) {
+    if (typeof input.target !== 'string' || input.target.length > 43) return 'Target must be an IPv4 host or CIDR';
+    const parts = input.target.split('/');
+    if (parts.length > 2 || isIP(parts[0]) !== 4
+      || (parts.length === 2 && (!/^\d{1,2}$/.test(parts[1]) || Number(parts[1]) < 22 || Number(parts[1]) > 32))) {
+      return 'Target must be an IPv4 host or CIDR with at most 1024 addresses';
+    }
   }
   if (input.full !== undefined && typeof input.full !== 'boolean') return 'Full must be true or false';
   if (input.limit !== undefined && (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100)) {
@@ -103,7 +129,9 @@ function validateScan(input) {
 function scan(path, input) {
   const problem = validateScan(input);
   if (problem) return Promise.resolve(result(problem, true));
-  const args = ['/scan', input.target, '/json', '/timeout', '60', '/limit', String(input.limit ?? 100)];
+  const args = ['/scan'];
+  if (input.target !== undefined) args.push(input.target);
+  args.push('/json', '/timeout', '60', '/limit', String(input.limit ?? 100));
   if (!input.full) args.push('/quick');
   return new Promise(resolve => {
     execFile(path, args, { encoding: 'utf8', windowsHide: true, timeout: 70000, maxBuffer: 1048576 },
@@ -169,6 +197,57 @@ function vendor(path, input) {
   });
 }
 
+function validTarget(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= 253
+    && (isIP(value) === 4 || /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(value));
+}
+
+function jsonCommand(path, input, allowed, args, timeout, validate) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)
+    || Object.keys(input).some(key => !allowed.includes(key))) return Promise.resolve(result('Invalid arguments', true));
+  const problem = validate(input);
+  if (problem) return Promise.resolve(result(problem, true));
+  return new Promise(resolve => {
+    execFile(path, args(input), { encoding: 'utf8', windowsHide: true, timeout, maxBuffer: 1048576 },
+      (error, stdout, stderr) => {
+        if (error) { resolve(result((stderr || error.message).trim().slice(0, 1024), true)); return; }
+        try { resolve(result(JSON.stringify(JSON.parse(stdout)))); }
+        catch { resolve(result('KillerScan returned invalid JSON', true)); }
+      });
+  });
+}
+
+function ping(path, input) {
+  return jsonCommand(path, input, ['target', 'count'], value => ['/ping', value.target, '/count', String(value.count ?? 4), '/json'], 120000, value =>
+    !validTarget(value.target) ? 'Target must be one IPv4 address or hostname' : value.count !== undefined && (!Number.isInteger(value.count) || value.count < 1 || value.count > 20) ? 'Count must be between 1 and 20' : null);
+}
+
+function trace(path, input) {
+  return jsonCommand(path, input, ['target', 'maxHops'], value => ['/trace', value.target, '/max-hops', String(value.maxHops ?? 30), '/json'], 180000, value =>
+    !validTarget(value.target) ? 'Target must be one IPv4 address or hostname' : value.maxHops !== undefined && (!Number.isInteger(value.maxHops) || value.maxHops < 1 || value.maxHops > 64) ? 'Max hops must be between 1 and 64' : null);
+}
+
+function diagnose(path, input) {
+  return jsonCommand(path, input, ['target', 'ports'], value => ['/diagnose', value.target, ...(value.ports?.length ? ['/ports', value.ports.join(',')] : []), '/json'], 120000, value => {
+    if (!validTarget(value.target)) return 'Target must be one IPv4 address or hostname';
+    if (value.ports !== undefined && (!Array.isArray(value.ports) || value.ports.length > 32 || value.ports.some(port => !Number.isInteger(port) || port < 1 || port > 65535))) return 'Ports must contain up to 32 port numbers from 1 to 65535';
+    return null;
+  });
+}
+
+function watch(path, input) {
+  return jsonCommand(path, input, ['targets', 'count', 'interval'], value => ['/watch', ...value.targets, '/count', String(value.count ?? 4), '/interval', String(value.interval ?? 1), '/json'], 220000, value => {
+    if (!Array.isArray(value.targets) || value.targets.length < 1 || value.targets.length > 16 || value.targets.some(target => isIP(target) !== 4)) return 'Targets must contain 1 to 16 IPv4 addresses';
+    if (value.count !== undefined && (!Number.isInteger(value.count) || value.count < 1 || value.count > 20)) return 'Count must be between 1 and 20';
+    if (value.interval !== undefined && (!Number.isInteger(value.interval) || value.interval < 1 || value.interval > 10)) return 'Interval must be between 1 and 10 seconds';
+    return null;
+  });
+}
+
+function speedTest(path, input) {
+  return jsonCommand(path, input, [], () => ['/speedtest', '/json'], 120000, () => null);
+}
+
 export async function createKillerScanAdapters(path) {
   let available = false;
   try { available = Boolean(path && isAbsolute(path) && existsSync(path) && statSync(path).isFile()); }
@@ -183,5 +262,10 @@ export async function createKillerScanAdapters(path) {
   if (help.includes('/scan [targets]')) adapters.push({ tool: scanTool, call: input => scan(path, input) });
   if (help.includes('/probe <IPv4>')) adapters.push({ tool: probeTool, call: input => probe(path, input) });
   if (help.includes('/vendor <MAC>')) adapters.push({ tool: vendorTool, call: input => vendor(path, input) });
+  if (help.includes('/ping <target>')) adapters.push({ tool: pingTool, call: input => ping(path, input) });
+  if (help.includes('/trace <target>')) adapters.push({ tool: traceTool, call: input => trace(path, input) });
+  if (help.includes('/diagnose <target>')) adapters.push({ tool: diagnoseTool, call: input => diagnose(path, input) });
+  if (help.includes('/watch <targets>')) adapters.push({ tool: watchTool, call: input => watch(path, input) });
+  if (help.includes('/speedtest')) adapters.push({ tool: speedTestTool, call: input => speedTest(path, input) });
   return adapters;
 }
