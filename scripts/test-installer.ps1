@@ -11,6 +11,7 @@ $claudeHome = Join-Path $scratch 'ClaudeHome'
 $cursorConfiguration = Join-Path $scratch 'CursorHome\mcp.json'
 $copilotConfiguration = Join-Path $scratch 'CopilotHome\mcp-config.json'
 $geminiConfiguration = Join-Path $scratch 'GeminiHome\settings.json'
+$windsurfConfiguration = Join-Path $scratch 'WindsurfHome\mcp_config.json'
 $previousInstallRoot = $env:KILLERMCP_TEST_INSTALL_ROOT
 $previousRegister = $env:KILLERMCP_TEST_REGISTER_CODEX
 $previousClaudeRegister = $env:KILLERMCP_TEST_REGISTER_CLAUDE
@@ -19,12 +20,13 @@ $previousClaudeHome = $env:CLAUDE_CONFIG_DIR
 $previousCursorConfiguration = $env:KILLERMCP_TEST_CURSOR_CONFIG
 $previousCopilotConfiguration = $env:KILLERMCP_TEST_COPILOT_CONFIG
 $previousGeminiConfiguration = $env:KILLERMCP_TEST_GEMINI_CONFIG
+$previousWindsurfConfiguration = $env:KILLERMCP_TEST_WINDSURF_CONFIG
 $success = $false
 
 try {
     New-Item -ItemType Directory -Path $codexHome -Force | Out-Null
     New-Item -ItemType Directory -Path $claudeHome -Force | Out-Null
-    foreach ($configuration in @($cursorConfiguration, $copilotConfiguration, $geminiConfiguration)) {
+    foreach ($configuration in @($cursorConfiguration, $copilotConfiguration, $geminiConfiguration, $windsurfConfiguration)) {
         New-Item -ItemType Directory -Path (Split-Path $configuration) -Force | Out-Null
         @{
             preservedSetting = 'keep'
@@ -39,6 +41,7 @@ try {
     $env:KILLERMCP_TEST_CURSOR_CONFIG = $cursorConfiguration
     $env:KILLERMCP_TEST_COPILOT_CONFIG = $copilotConfiguration
     $env:KILLERMCP_TEST_GEMINI_CONFIG = $geminiConfiguration
+    $env:KILLERMCP_TEST_WINDSURF_CONFIG = $windsurfConfiguration
 
     foreach ($pass in 1..2) {
         $process = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
@@ -122,7 +125,13 @@ try {
         $geminiRegistration.args[0] -ne (Join-Path $installed 'killermcp.mjs')) {
         throw 'Gemini CLI did not retain the expected one-connection configuration.'
     }
-    foreach ($configuration in @($cursorConfiguration, $copilotConfiguration, $geminiConfiguration)) {
+    $windsurfRegistration = (Get-Content -LiteralPath $windsurfConfiguration -Raw | ConvertFrom-Json).mcpServers.killermcp
+    if ($windsurfRegistration.command -ne (Join-Path $installed 'node.exe') -or
+        $windsurfRegistration.args.Count -ne 1 -or
+        $windsurfRegistration.args[0] -ne (Join-Path $installed 'killermcp.mjs')) {
+        throw 'Windsurf did not retain the expected one-connection configuration.'
+    }
+    foreach ($configuration in @($cursorConfiguration, $copilotConfiguration, $geminiConfiguration, $windsurfConfiguration)) {
         $preservedConfiguration = Get-Content -LiteralPath $configuration -Raw | ConvertFrom-Json
         if ($preservedConfiguration.preservedSetting -ne 'keep' -or
             $preservedConfiguration.mcpServers.existing.command -ne 'existing-command' -or
@@ -188,7 +197,9 @@ try {
     if ($null -ne $copilotRegistration) { throw 'Uninstall left the KillerMCP GitHub Copilot connection in place.' }
     $geminiRegistration = (Get-Content -LiteralPath $geminiConfiguration -Raw | ConvertFrom-Json).mcpServers.killermcp
     if ($null -ne $geminiRegistration) { throw 'Uninstall left the KillerMCP Gemini CLI connection in place.' }
-    foreach ($configuration in @($cursorConfiguration, $copilotConfiguration, $geminiConfiguration)) {
+    $windsurfRegistration = (Get-Content -LiteralPath $windsurfConfiguration -Raw | ConvertFrom-Json).mcpServers.killermcp
+    if ($null -ne $windsurfRegistration) { throw 'Uninstall left the KillerMCP Windsurf connection in place.' }
+    foreach ($configuration in @($cursorConfiguration, $copilotConfiguration, $geminiConfiguration, $windsurfConfiguration)) {
         $preservedConfiguration = Get-Content -LiteralPath $configuration -Raw | ConvertFrom-Json
         if ($preservedConfiguration.preservedSetting -ne 'keep' -or
             $preservedConfiguration.mcpServers.existing.command -ne 'existing-command' -or
@@ -197,7 +208,7 @@ try {
         }
     }
     $success = $true
-    Write-Output 'KillerMCP isolated install, reinstall, Installed Apps entry, five client registrations, MCP calls, and uninstall passed.'
+    Write-Output 'KillerMCP isolated install, reinstall, Installed Apps entry, six client registrations, MCP calls, and uninstall passed.'
 }
 finally {
     $env:KILLERMCP_TEST_INSTALL_ROOT = $previousInstallRoot
@@ -208,6 +219,7 @@ finally {
     $env:KILLERMCP_TEST_CURSOR_CONFIG = $previousCursorConfiguration
     $env:KILLERMCP_TEST_COPILOT_CONFIG = $previousCopilotConfiguration
     $env:KILLERMCP_TEST_GEMINI_CONFIG = $previousGeminiConfiguration
+    $env:KILLERMCP_TEST_WINDSURF_CONFIG = $previousWindsurfConfiguration
     $temporary = [IO.Path]::GetFullPath($env:TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
     $target = [IO.Path]::GetFullPath($scratch)
     if ($success -and $target.StartsWith($temporary, [StringComparison]::OrdinalIgnoreCase) -and

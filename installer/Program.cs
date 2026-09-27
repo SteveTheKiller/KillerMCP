@@ -45,6 +45,7 @@ namespace KillerMCP.Setup
             string? cursorConfiguration = CursorConfigurationPath(isolatedTest);
             string? copilotConfiguration = CopilotConfigurationPath(isolatedTest);
             string? geminiConfiguration = GeminiConfigurationPath(isolatedTest);
+            string? windsurfConfiguration = WindsurfConfigurationPath(isolatedTest);
             if (isolatedTest && connectCodex)
             {
                 string? codexHome = Environment.GetEnvironmentVariable("CODEX_HOME");
@@ -74,7 +75,7 @@ namespace KillerMCP.Setup
                     {
                         ValidateSetupRegistration(destination);
                         Uninstall(destination, connectCodex, connectClaude, cursorConfiguration,
-                            copilotConfiguration, geminiConfiguration);
+                            copilotConfiguration, geminiConfiguration, windsurfConfiguration);
                         RemoveInstalledApp(destination);
                     }
                     else
@@ -86,6 +87,7 @@ namespace KillerMCP.Setup
                         if (cursorConfiguration != null) RegisterJsonClient(destination, cursorConfiguration, "Cursor");
                         if (copilotConfiguration != null) RegisterJsonClient(destination, copilotConfiguration, "GitHub Copilot");
                         if (geminiConfiguration != null) RegisterJsonClient(destination, geminiConfiguration, "Gemini CLI");
+                        if (windsurfConfiguration != null) RegisterJsonClient(destination, windsurfConfiguration, "Windsurf");
                     }
                     return 0;
                 }
@@ -100,7 +102,7 @@ namespace KillerMCP.Setup
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new InstallerWindow(destination, connectCodex, connectClaude, cursorConfiguration,
-                copilotConfiguration, geminiConfiguration));
+                copilotConfiguration, geminiConfiguration, windsurfConfiguration));
             return 0;
         }
 
@@ -138,7 +140,7 @@ namespace KillerMCP.Setup
                     if (movedPrevious) Directory.Move(backup, destination);
                     throw;
                 }
-                if (movedPrevious) Uninstall(backup, false, false, null, null, null);
+                if (movedPrevious) Uninstall(backup, false, false, null, null, null, null);
                 return destination;
             }
             finally
@@ -282,7 +284,8 @@ namespace KillerMCP.Setup
         }
 
         internal static void Uninstall(string destination, bool disconnectCodex, bool disconnectClaude,
-            string? cursorConfiguration, string? copilotConfiguration, string? geminiConfiguration)
+            string? cursorConfiguration, string? copilotConfiguration, string? geminiConfiguration,
+            string? windsurfConfiguration)
         {
             if (!Directory.Exists(destination)) return;
             ValidateInstalledEntries(destination, out List<string> files, out List<string> directories);
@@ -291,6 +294,7 @@ namespace KillerMCP.Setup
             if (cursorConfiguration != null) RemoveJsonClientRegistration(destination, cursorConfiguration, "Cursor");
             if (copilotConfiguration != null) RemoveJsonClientRegistration(destination, copilotConfiguration, "GitHub Copilot");
             if (geminiConfiguration != null) RemoveJsonClientRegistration(destination, geminiConfiguration, "Gemini CLI");
+            if (windsurfConfiguration != null) RemoveJsonClientRegistration(destination, windsurfConfiguration, "Windsurf");
             foreach (string file in files) File.Delete(file);
             foreach (string directory in directories.OrderByDescending(path => path.Length)) Directory.Delete(directory);
             Directory.Delete(destination);
@@ -492,6 +496,20 @@ namespace KillerMCP.Setup
             return installed ? Path.Combine(configurationDirectory, "settings.json") : null;
         }
 
+        private static string? WindsurfConfigurationPath(bool isolatedTest)
+        {
+            string? testPath = Environment.GetEnvironmentVariable("KILLERMCP_TEST_WINDSURF_CONFIG");
+            if (!string.IsNullOrWhiteSpace(testPath)) return ValidateTestConfigurationPath(testPath, "Windsurf");
+            if (isolatedTest) return null;
+
+            string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string configurationDirectory = Path.Combine(profile, ".codeium", "windsurf");
+            string localPrograms = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            bool installed = FindOnPath("windsurf.exe") != null || Directory.Exists(configurationDirectory) ||
+                File.Exists(Path.Combine(localPrograms, "Programs", "Windsurf", "Windsurf.exe"));
+            return installed ? Path.Combine(configurationDirectory, "mcp_config.json") : null;
+        }
+
         private static string ValidateTestConfigurationPath(string value, string clientName)
         {
             string path = Path.GetFullPath(value);
@@ -676,11 +694,13 @@ namespace KillerMCP.Setup
             private readonly string? _cursorConfiguration;
             private readonly string? _copilotConfiguration;
             private readonly string? _geminiConfiguration;
+            private readonly string? _windsurfConfiguration;
             private readonly Label _status;
             private readonly Button _install;
 
             internal InstallerWindow(string destination, bool connectCodex, bool connectClaude,
-                string? cursorConfiguration, string? copilotConfiguration, string? geminiConfiguration)
+                string? cursorConfiguration, string? copilotConfiguration, string? geminiConfiguration,
+                string? windsurfConfiguration)
             {
                 _destination = destination;
                 _connectCodex = connectCodex;
@@ -688,6 +708,7 @@ namespace KillerMCP.Setup
                 _cursorConfiguration = cursorConfiguration;
                 _copilotConfiguration = copilotConfiguration;
                 _geminiConfiguration = geminiConfiguration;
+                _windsurfConfiguration = windsurfConfiguration;
                 Text = "KillerMCP Setup";
                 ClientSize = new Size(560, 300);
                 FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -762,6 +783,7 @@ namespace KillerMCP.Setup
                         if (_cursorConfiguration != null) RegisterJsonClient(_destination, _cursorConfiguration, "Cursor");
                         if (_copilotConfiguration != null) RegisterJsonClient(_destination, _copilotConfiguration, "GitHub Copilot");
                         if (_geminiConfiguration != null) RegisterJsonClient(_destination, _geminiConfiguration, "Gemini CLI");
+                        if (_windsurfConfiguration != null) RegisterJsonClient(_destination, _windsurfConfiguration, "Windsurf");
                         return "Installed. Available agent clients are connected.";
                     });
                     _status.Text = result;
