@@ -41,7 +41,7 @@ namespace KillerMCP.Setup
         {
             BackButton.IsEnabled = _page > 0 && !_installed;
             CancelButton.Visibility = _installed ? Visibility.Collapsed : Visibility.Visible;
-            Details.Visibility = _installed ? Visibility.Collapsed : Visibility.Visible;
+            Details.Visibility = !_installed && _page == 1 ? Visibility.Visible : Visibility.Collapsed;
             if (_page == 0)
             {
                 Heading.Text = "Welcome to KillerMCP Setup";
