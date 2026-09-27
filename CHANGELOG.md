@@ -6,11 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ## [0.2.1] - Unreleased
 
-0.2.1 expands KillerShell file access through the shared MCP connection.
+0.2.1 expands KillerShell file and Windows inspection through the shared MCP connection.
 
 ### Added
 
-- Added KillerShell tools for directory listings, file details, and bounded text reading.
+- Added read-only KillerShell tools for file browsing, text reading, file hashing, processes, services, event logs, registry keys, and drives.
 
 ## [0.2.0] - 2026-09-27
 

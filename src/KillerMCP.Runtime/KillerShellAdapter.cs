@@ -49,6 +49,24 @@ public static class KillerShellAdapter
         Add(help, "read <file>", adapters,
             new RuntimeTool("killershell_read_text_file", "Read a bounded amount of text from one local file with KillerShell.", ReadSchema()),
             (input, token) => ReadAsync(path!, input, token));
+        Add(help, "processes [", adapters,
+            new RuntimeTool("killershell_list_processes", "List running processes with their process IDs and memory use. This tool cannot start or stop processes.", LimitSchema(100)),
+            (input, token) => LimitedCommandAsync(path!, "processes", "processes", input, 100, token));
+        Add(help, "services [", adapters,
+            new RuntimeTool("killershell_list_services", "List Windows services and their current status. This tool cannot start, stop, or reconfigure services.", LimitSchema(100)),
+            (input, token) => LimitedCommandAsync(path!, "services", "services", input, 100, token));
+        Add(help, "events <", adapters,
+            new RuntimeTool("killershell_read_event_log", "Read recent entries from the local Application, System, or Security event log. This tool cannot clear or change logs.", EventSchema()),
+            (input, token) => EventsAsync(path!, input, token));
+        Add(help, "registry <", adapters,
+            new RuntimeTool("killershell_read_registry_key", "List bounded subkeys and values from one local registry key. This tool cannot create, edit, rename, or delete registry data.", RegistrySchema()),
+            (input, token) => RegistryAsync(path!, input, token));
+        Add(help, "drives", adapters,
+            new RuntimeTool("killershell_list_drives", "List local drives with type, readiness, capacity, and free space. This tool does not scan file contents.", EmptySchema()),
+            (input, token) => EmptyCommandAsync(path!, "drives", "drives", input, token));
+        Add(help, "hash <file>", adapters,
+            new RuntimeTool("killershell_hash_file", "Calculate the SHA-256 hash of one local file without changing it.", PathSchema("Absolute path to a local file")),
+            (input, token) => HashAsync(path!, input, token));
         return adapters;
     }
 
@@ -112,6 +130,44 @@ public static class KillerShellAdapter
         return RunJsonAsync(path, ["read", target!, "--max-chars", maximum.ToString(CultureInfo.InvariantCulture)], "text", JsonValueKind.String, 262144, cancellationToken);
     }
 
+    private static Task<AppCallResult> LimitedCommandAsync(string path, string command, string property, JsonElement input, int maximum, CancellationToken cancellationToken)
+    {
+        if (!ValidateLimitOnly(input, maximum, out var limit))
+            return Task.FromResult(new AppCallResult("Expected an optional limit from 1 to " + maximum.ToString(CultureInfo.InvariantCulture), true));
+        return RunJsonAsync(path, [command, "--limit", limit.ToString(CultureInfo.InvariantCulture)], property, JsonValueKind.Array, 262144, cancellationToken);
+    }
+
+    private static Task<AppCallResult> EventsAsync(string path, JsonElement input, CancellationToken cancellationToken)
+    {
+        if (input.ValueKind != JsonValueKind.Object || input.EnumerateObject().Any(item => item.Name is not ("log" or "limit"))
+            || !ReadString(input, "log", 16, out var log) || log is not ("Application" or "System" or "Security")
+            || !ReadOptionalLimit(input, 100, 50, out var limit))
+            return Task.FromResult(new AppCallResult("Expected log Application, System, or Security and an optional limit from 1 to 100", true));
+        return RunJsonAsync(path, ["events", log!, "--limit", limit.ToString(CultureInfo.InvariantCulture)], "events", JsonValueKind.Array, 524288, cancellationToken);
+    }
+
+    private static Task<AppCallResult> RegistryAsync(string path, JsonElement input, CancellationToken cancellationToken)
+    {
+        if (input.ValueKind != JsonValueKind.Object || input.EnumerateObject().Any(item => item.Name is not ("path" or "limit"))
+            || !ReadString(input, "path", 1024, out var key) || !ReadOptionalLimit(input, 100, 100, out var limit))
+            return Task.FromResult(new AppCallResult("Expected a registry key path and an optional limit from 1 to 100", true));
+        return RunJsonAsync(path, ["registry", key!, "--limit", limit.ToString(CultureInfo.InvariantCulture)], "values", JsonValueKind.Array, 524288, cancellationToken);
+    }
+
+    private static Task<AppCallResult> EmptyCommandAsync(string path, string command, string property, JsonElement input, CancellationToken cancellationToken)
+    {
+        if (input.ValueKind != JsonValueKind.Object || input.EnumerateObject().Any())
+            return Task.FromResult(new AppCallResult("Expected no arguments", true));
+        return RunJsonAsync(path, [command], property, JsonValueKind.Array, 65536, cancellationToken);
+    }
+
+    private static Task<AppCallResult> HashAsync(string path, JsonElement input, CancellationToken cancellationToken)
+    {
+        if (!ValidatePathInput(input, false, false, out var target, out _))
+            return Task.FromResult(new AppCallResult("Expected one absolute file path", true));
+        return RunJsonAsync(path, ["hash", target!], "hash", JsonValueKind.String, 32768, cancellationToken);
+    }
+
     private static async Task<AppCallResult> RunJsonAsync(string path, IEnumerable<string> arguments, string property, JsonValueKind kind, int maximumOutput, CancellationToken cancellationToken, JsonValueKind? alternateKind = null)
     {
         try
@@ -158,6 +214,54 @@ public static class KillerShellAdapter
         var schema = PathSchema("Absolute path to a text file");
         ((JsonObject)schema["properties"]!)["maxCharacters"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 32768, ["default"] = 32768 };
         return schema;
+    }
+
+    private static JsonObject LimitSchema(int maximum) => new()
+    {
+        ["type"] = "object",
+        ["properties"] = new JsonObject { ["limit"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = maximum, ["default"] = Math.Min(100, maximum) } },
+        ["additionalProperties"] = false,
+    };
+
+    private static JsonObject EventSchema() => new()
+    {
+        ["type"] = "object",
+        ["properties"] = new JsonObject
+        {
+            ["log"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("Application", "System", "Security") },
+            ["limit"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 100, ["default"] = 50 },
+        },
+        ["required"] = new JsonArray("log"),
+        ["additionalProperties"] = false,
+    };
+
+    private static JsonObject RegistrySchema() => new()
+    {
+        ["type"] = "object",
+        ["properties"] = new JsonObject
+        {
+            ["path"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024, ["description"] = "Registry path beginning with a full HKEY name" },
+            ["limit"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 100, ["default"] = 100 },
+        },
+        ["required"] = new JsonArray("path"),
+        ["additionalProperties"] = false,
+    };
+
+    private static JsonObject EmptySchema() => new() { ["type"] = "object", ["properties"] = new JsonObject(), ["additionalProperties"] = false };
+
+    private static bool ValidateLimitOnly(JsonElement input, int maximum, out int limit)
+    {
+        limit = Math.Min(100, maximum);
+        return input.ValueKind == JsonValueKind.Object
+            && !input.EnumerateObject().Any(item => item.Name != "limit")
+            && ReadOptionalLimit(input, maximum, limit, out limit);
+    }
+
+    private static bool ReadOptionalLimit(JsonElement input, int maximum, int fallback, out int limit)
+    {
+        limit = fallback;
+        return !input.TryGetProperty("limit", out var value)
+            || value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out limit) && limit >= 1 && limit <= maximum;
     }
 
     private static void Add(ProcessResult help, string marker, List<AppAdapter> adapters, RuntimeTool tool, Func<JsonElement, CancellationToken, Task<AppCallResult>> call)

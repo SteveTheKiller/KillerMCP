@@ -34,7 +34,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1" || Environ
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1") Console.WriteLine("  --merge <out.pdf>\n--extract-pages <in.pdf>\n--split <in.pdf>\n--decrypt <in.pdf>\n--to-image <in.pdf>\n--flatten <in.pdf>\n--print <in.pdf>\n--ocr <in.pdf>\n--batch-resave <in>\n--batch-render <in>\n--rotate-pages <in.pdf>\n--delete-pages <in.pdf>\n--move-pages <in.pdf>\n--insert-blank <in.pdf>\n--duplicate-page <in.pdf>\n--document-info <in.pdf>\n--search-text <in.pdf>\n--preflight <in.pdf>\n--accessibility <in.pdf>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>");
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>\nlist <folder>\ninfo <path>\nread <file>");
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>\nlist <folder>\ninfo <path>\nread <file>\nprocesses [--limit]\nservices [--limit]\nevents <log>\nregistry <key>\ndrives\nhash <file>");
         return;
     }
     if (arguments.Length > 0 && arguments[0] is "--preflight" or "--accessibility")
@@ -101,6 +101,12 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1" || Environ
         Console.Write(JsonSerializer.Serialize(new { path = arguments[1], text = "fixture text", truncated = false }));
         return;
     }
+    if (arguments.Length == 3 && arguments[0] == "processes") { Console.Write(JsonSerializer.Serialize(new { processes = new[] { new { name = "fixture", pid = 42 } } })); return; }
+    if (arguments.Length == 3 && arguments[0] == "services") { Console.Write(JsonSerializer.Serialize(new { services = new[] { new { name = "Fixture", status = "Running" } } })); return; }
+    if (arguments.Length == 4 && arguments[0] == "events") { Console.Write(JsonSerializer.Serialize(new { events = new[] { new { id = 1000, provider = "Fixture" } } })); return; }
+    if (arguments.Length == 4 && arguments[0] == "registry") { Console.Write(JsonSerializer.Serialize(new { subkeys = new[] { "Software" }, values = new[] { new { name = "Fixture", data = "Value" } } })); return; }
+    if (arguments.Length == 1 && arguments[0] == "drives") { Console.Write(JsonSerializer.Serialize(new { drives = new[] { new { name = "C:\\", ready = true } } })); return; }
+    if (arguments.Length == 2 && arguments[0] == "hash") { Console.Write(JsonSerializer.Serialize(new { hash = new string('a', 64) })); return; }
     if (arguments.Length == 2 && arguments[0] is "device-code" or "win32-code")
     {
         Console.Write(JsonSerializer.Serialize(new { code = arguments[1], name = arguments[0] == "device-code" ? "Device problem" : "Windows error" }));
@@ -179,7 +185,7 @@ try
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", "1");
     var shellAdapters = await KillerShellAdapter.CreateAsync(Environment.ProcessPath);
-    Equal(4, shellAdapters.Count);
+    Equal(10, shellAdapters.Count);
     var shellByName = shellAdapters.ToDictionary(item => item.Tool.Name);
     using var search = JsonDocument.Parse(JsonSerializer.Serialize(new { root, name = "*.txt", limit = 2 }));
     var searchResult = await shellByName["killershell_search_files"].CallAsync(search.RootElement, CancellationToken.None);
@@ -191,6 +197,15 @@ try
     Equal("notes.txt", JsonDocument.Parse((await shellByName["killershell_list_directory"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("entries")[0].GetProperty("name").GetString());
     Equal(false, JsonDocument.Parse((await shellByName["killershell_file_info"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("isDirectory").GetBoolean());
     Equal("fixture text", JsonDocument.Parse((await shellByName["killershell_read_text_file"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("text").GetString());
+    using var emptyShell = JsonDocument.Parse("{}");
+    Equal("fixture", JsonDocument.Parse((await shellByName["killershell_list_processes"].CallAsync(emptyShell.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("processes")[0].GetProperty("name").GetString());
+    Equal("Fixture", JsonDocument.Parse((await shellByName["killershell_list_services"].CallAsync(emptyShell.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("services")[0].GetProperty("name").GetString());
+    using var eventArgs = JsonDocument.Parse("{\"log\":\"System\",\"limit\":1}");
+    Equal(1000, JsonDocument.Parse((await shellByName["killershell_read_event_log"].CallAsync(eventArgs.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("events")[0].GetProperty("id").GetInt32());
+    using var registryArgs = JsonDocument.Parse("{\"path\":\"HKEY_CURRENT_USER\\\\Software\",\"limit\":1}");
+    Equal("Fixture", JsonDocument.Parse((await shellByName["killershell_read_registry_key"].CallAsync(registryArgs.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("values")[0].GetProperty("name").GetString());
+    Equal("C:\\", JsonDocument.Parse((await shellByName["killershell_list_drives"].CallAsync(emptyShell.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("drives")[0].GetProperty("name").GetString());
+    Equal(64, JsonDocument.Parse((await shellByName["killershell_hash_file"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("hash").GetString()!.Length);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", null);
     Console.WriteLine("PASS native KillerShell adapter");
 

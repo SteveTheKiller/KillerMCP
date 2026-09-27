@@ -171,7 +171,15 @@ Network tools send probes from the local computer. Only test networks that the u
 - List up to 100 files and folders directly inside one absolute directory.
 - Read file or folder size, timestamps, type, and attributes.
 - Read up to 32,768 characters from one text file.
-- Return bounded results without changing files.
+- Calculate the SHA-256 hash of one local file.
+- List up to 100 running processes with process IDs and memory use.
+- List up to 100 Windows services with their current status.
+- Read up to 100 recent Application, System, or Security event log entries.
+- List bounded subkeys and values from one registry key.
+- Report local drive type, readiness, capacity, and free space.
+- Return bounded results without changing files or Windows settings.
+
+All KillerShell MCP tools are read-only. They cannot run terminal commands, start or stop processes, control services, change the registry, clear event logs, or create, edit, move, rename, or delete files. Returned data can include local paths, file text, process and service names, event messages, registry values, drive information, and file hashes. The MCP client and its model provider can receive those results.
 
 ### KillerNotes
 

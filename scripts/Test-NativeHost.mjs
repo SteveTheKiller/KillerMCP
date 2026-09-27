@@ -97,6 +97,8 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killernotes_search',
   'killendar_agenda',
   'killershell_search_files', 'killershell_list_directory', 'killershell_file_info', 'killershell_read_text_file',
+  'killershell_list_processes', 'killershell_list_services', 'killershell_read_event_log',
+  'killershell_read_registry_key', 'killershell_list_drives', 'killershell_hash_file',
   'killerbench_device_code', 'killerbench_win32_code',
   'killerscan_local_network', 'killerscan_scan_network', 'killerscan_probe_host',
   'killerscan_mac_vendor', 'killerscan_ping', 'killerscan_trace_route',
