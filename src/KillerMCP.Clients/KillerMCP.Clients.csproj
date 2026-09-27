@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Cross-platform client registration for the native KillerMCP host.</Description>
+  </PropertyGroup>
+</Project>

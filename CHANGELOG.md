@@ -4,13 +4,17 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.2] - Unreleased
+## [0.2.0] - 2026-09-27
 
-0.1.2 adds update awareness and completes the existing KillerScan command coverage.
+0.2.0 replaces the bundled Node server with a smaller native .NET 10 host.
 
 ### Added
 
-- Added daily update checks, an update status tool, and complete MCP coverage for KillerScan's headless commands.
+- Added the native KillerTools engine, daily update checks, KillerBench tools, and complete KillerScan command coverage.
+
+### Changed
+
+- Rebuilt the host, client registration, installer, repair, upgrade, and uninstall paths for native .NET 10.
 
 ## [0.1.1] - 2026-09-26
 

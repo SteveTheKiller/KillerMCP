@@ -3,4 +3,6 @@ artifacts/
 node_modules/
 installer/bin/
 installer/obj/
+**/bin/
+**/obj/
 *.log

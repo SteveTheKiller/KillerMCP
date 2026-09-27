@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="dependencies/KillerTools/src/KillerTools.Engine/KillerTools.Engine.csproj" />
+  <Project Path="src/KillerMCP.Clients/KillerMCP.Clients.csproj" />
+  <Project Path="src/KillerMCP.Configure/KillerMCP.Configure.csproj" />
+  <Project Path="src/KillerMCP.Runtime/KillerMCP.Runtime.csproj" />
+  <Project Path="src/KillerMCP/KillerMCP.csproj" />
+  <Project Path="tests/KillerMCP.Clients.Checks/KillerMCP.Clients.Checks.csproj" />
+  <Project Path="tests/KillerMCP.Runtime.Checks/KillerMCP.Runtime.Checks.csproj" />
+</Solution>

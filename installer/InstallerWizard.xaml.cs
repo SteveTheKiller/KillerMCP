@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -10,105 +11,112 @@ namespace KillerMCP.Setup
     public partial class InstallerWizard : Window
     {
         private readonly string _destination;
-        private readonly Action _install;
-        private int _page;
+        private readonly bool _isolated;
         private bool _installed;
+        private string? _installedVersion;
 
-        private InstallerWizard(string destination, Action install)
+        private InstallerWizard(string destination, bool isolated)
         {
             _destination = destination;
-            _install = install;
+            _isolated = isolated;
             InitializeComponent();
-            SetupVersionLabel.Text = "SETUP " + Program.CurrentVersion;
+            VersionLabel.Text = "SETUP " + Program.CurrentVersion;
             InstallLocation.Text = destination;
             ImageBrush grain = CreateGrain();
             GrainLayer.Background = grain;
             SidebarGrain.Background = grain;
             FrameGrain.Background = grain;
-            RenderPage();
+            SetRuntimeStatus();
+            SetInstallState();
         }
 
-        internal static int Run(string destination, Action install)
+        internal static int Run(string destination, bool isolated)
         {
-            var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-            var wizard = new InstallerWizard(destination, install);
+            var application = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            var wizard = new InstallerWizard(destination, isolated);
             bool? result = wizard.ShowDialog();
             application.Shutdown();
             return result == true ? 0 : 1;
         }
 
-        private void RenderPage()
+        private void SetRuntimeStatus()
         {
-            BackButton.IsEnabled = _page > 0 && !_installed;
-            CancelButton.Visibility = _installed ? Visibility.Collapsed : Visibility.Visible;
-            Details.Visibility = !_installed && _page == 1 ? Visibility.Visible : Visibility.Collapsed;
-            if (_page == 0)
-            {
-                Heading.Text = "Welcome to KillerMCP Setup";
-                Copy.Text = "Install one shared connection for KillerTools and supported Killer apps. No Node installation or source checkout is required.";
-                Status.Text = "Ready to review";
-                NextButton.Content = "Next";
-            }
-            else if (!_installed)
-            {
-                Heading.Text = "Ready to install";
-                Copy.Text = "Setup will install KillerMCP for your Windows account and connect every compatible agent client it finds.";
-                Status.Text = "Version " + Program.CurrentVersion;
-                NextButton.Content = "Install";
-            }
-            else
-            {
-                Heading.Text = "KillerMCP is ready";
-                Copy.Text = "The shared runtime is installed. Open a new agent chat and ask naturally, such as: killer domain search thekiller.net";
-                Status.Text = "Installed and connected";
-                NextButton.Content = "Done";
-            }
+            bool ready = Program.HasRuntime10(_isolated);
+            RuntimeStatus.Text = ready ? ".NET 10 runtime detected" : ".NET 10 runtime required before installation";
+            RuntimeStatus.Foreground = new SolidColorBrush(ready ? System.Windows.Media.Color.FromRgb(30, 165, 76) : System.Windows.Media.Color.FromRgb(255, 190, 80));
+            RuntimeLink.Visibility = ready ? Visibility.Collapsed : Visibility.Visible;
+            InstallButton.IsEnabled = ready;
         }
 
-        private async void Next_Click(object sender, RoutedEventArgs e)
+        private void SetInstallState()
+        {
+            _installedVersion = Program.InstalledVersion(_destination);
+            bool present = _installedVersion != null;
+            UninstallButton.Visibility = present ? Visibility.Visible : Visibility.Collapsed;
+            if (!present) return;
+
+            bool current = string.Equals(_installedVersion, Program.CurrentVersion, StringComparison.Ordinal);
+            Heading.Text = current ? "KillerMCP is already installed" : "KillerMCP is ready to upgrade";
+            Status.Text = "Installed version " + _installedVersion;
+            InstallButton.Content = current ? "Reinstall" : "Upgrade";
+        }
+
+        private async void Install_Click(object sender, RoutedEventArgs e)
         {
             if (_installed) { DialogResult = true; return; }
-            if (_page == 0) { _page = 1; RenderPage(); return; }
+            if (!Program.HasRuntime10(_isolated)) { SetRuntimeStatus(); return; }
             try
             {
-                NextButton.IsEnabled = BackButton.IsEnabled = CancelButton.IsEnabled = false;
+                InstallButton.IsEnabled = false;
                 Heading.Text = "Installing KillerMCP";
-                Copy.Text = "Verifying the packaged runtime and connecting compatible agent clients.";
-                Details.Visibility = Visibility.Collapsed;
-                Status.Visibility = Visibility.Collapsed;
-                InstallProgress.Visibility = Visibility.Visible;
-                await Task.WhenAll(Task.Run(_install), Task.Delay(900));
+                Status.Text = "Verifying the native runtime and connecting compatible agent clients...";
+                await Task.WhenAll(Task.Run(() => Program.Install(_destination)), Task.Delay(700));
                 _installed = true;
-                InstallProgress.Visibility = Visibility.Collapsed;
-                Status.Visibility = Visibility.Visible;
-                NextButton.IsEnabled = true;
-                RenderPage();
+                Heading.Text = "KillerMCP is ready";
+                Status.Text = "Installed and connected. Open a new agent chat to use the tools.";
+                Status.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(30, 165, 76));
+                InstallButton.Content = "Done";
+                InstallButton.IsEnabled = true;
+                UninstallButton.Visibility = Visibility.Collapsed;
             }
-            catch (Exception error)
+            catch (Exception exception)
             {
-                InstallProgress.Visibility = Visibility.Collapsed;
-                Status.Visibility = Visibility.Visible;
-                Status.Text = error.Message;
-                Status.Foreground = new SolidColorBrush(Color.FromRgb(227, 93, 106));
-                Details.Visibility = Visibility.Visible;
-                NextButton.IsEnabled = BackButton.IsEnabled = CancelButton.IsEnabled = true;
+                Status.Text = exception.Message;
+                Status.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(227, 93, 106));
+                InstallButton.IsEnabled = true;
             }
         }
 
-        private void Back_Click(object sender, RoutedEventArgs e)
+        private async void Uninstall_Click(object sender, RoutedEventArgs e)
         {
-            if (_page > 0) { _page--; RenderPage(); }
+            if (!SetupDialog.ConfirmUninstall(this)) return;
+            try
+            {
+                InstallButton.IsEnabled = false;
+                UninstallButton.IsEnabled = false;
+                Heading.Text = "Uninstalling KillerMCP";
+                Status.Text = "Removing the native runtime and agent connections...";
+                await Task.WhenAll(Task.Run(() => Program.UninstallRegistered(_destination)), Task.Delay(700));
+                _installed = true;
+                Heading.Text = "KillerMCP was uninstalled";
+                Status.Text = "KillerMCP and its agent connections were removed.";
+                Status.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(30, 165, 76));
+                InstallButton.Content = "Done";
+                InstallButton.IsEnabled = true;
+                UninstallButton.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception exception)
+            {
+                Status.Text = exception.Message;
+                Status.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(227, 93, 106));
+                InstallButton.IsEnabled = true;
+                UninstallButton.IsEnabled = true;
+            }
         }
 
-        private void Cancel_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = false;
-        }
-
-        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            if (e.LeftButton == MouseButtonState.Pressed) DragMove();
-        }
+        private void RuntimeLink_Click(object sender, MouseButtonEventArgs e) => Process.Start(new ProcessStartInfo("https://dotnet.microsoft.com/en-us/download/dotnet/10.0") { UseShellExecute = true });
+        private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (e.LeftButton == MouseButtonState.Pressed) DragMove(); }
 
         private static ImageBrush CreateGrain()
         {

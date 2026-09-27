@@ -1,0 +1,81 @@
+<Window x:Class="KillerMCP.Setup.SetupDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="KillerMCP Setup" Width="390" SizeToContent="Height"
+        WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize"
+        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="False"
+        FontFamily="Segoe UI" Foreground="#e0e0e0" UseLayoutRounding="True" SnapsToDevicePixels="True">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0" CornerRadius="7"
+                            GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
+    </shell:WindowChrome.WindowChrome>
+    <Window.Resources>
+        <FontFamily x:Key="Wordmark">./Assets/#Typewriter - a602 (dead postman 2004)</FontFamily>
+        <SolidColorBrush x:Key="Accent" Color="#d71c1c"/>
+        <Style x:Key="SurfaceButton" TargetType="Button">
+            <Setter Property="Height" Value="28"/><Setter Property="MinWidth" Value="80"/>
+            <Setter Property="Padding" Value="12,2"/><Setter Property="Foreground" Value="#e0e0e0"/>
+            <Setter Property="Background" Value="#3a3a3a"/><Setter Property="BorderBrush" Value="#505050"/>
+            <Setter Property="BorderThickness" Value="1"/><Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+                <Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#424242"/><Setter TargetName="Face" Property="BorderBrush" Value="#707070"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#242424"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+        <Style x:Key="OutlineButton" TargetType="Button" BasedOn="{StaticResource SurfaceButton}">
+            <Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="{StaticResource Accent}"/><Setter Property="Foreground" Value="#ef3b3b"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+                <Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#ef3b3b"/><Setter Property="Foreground" Value="#0a0a0a"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#3a0d0d"/><Setter Property="Foreground" Value="#ef3b3b"/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+    </Window.Resources>
+    <Border Margin="10" Background="#1c1c1c" BorderBrush="#3f3f3f" BorderThickness="1" CornerRadius="7">
+        <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="3" Direction="270" Opacity="0.72"/></Border.Effect>
+        <Grid ClipToBounds="True">
+            <Border x:Name="GrainLayer" CornerRadius="7" IsHitTestVisible="False" Opacity="0.46"/>
+            <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="38"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <Border Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                    <Grid Margin="16,0,9,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Image Source="Assets/mcp.png" Width="24" Height="24" Margin="0,0,8,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <TextBlock VerticalAlignment="Center" FontFamily="{StaticResource Wordmark}" FontSize="15"><Run Text="Killer"/><Run Text="MCP" FontSize="19.5" Foreground="{StaticResource Accent}"/></TextBlock>
+                        </StackPanel>
+                        <Button Width="28" Height="28" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click">
+                            <Button.Template><ControlTemplate TargetType="Button"><Border x:Name="Face" Background="Transparent" CornerRadius="3"><TextBlock Text="&#x2715;" Foreground="#b8b8b8" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#c42b1c"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template>
+                        </Button>
+                    </Grid>
+                </Border>
+                <Grid Grid.Row="1" Margin="24,18,24,18">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Border x:Name="NoticeRing" Width="28" Height="28" CornerRadius="14" BorderThickness="2" Background="#242424" HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <TextBlock x:Name="NoticeGlyph" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="17" FontWeight="SemiBold"/>
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock x:Name="HeadingText" FontSize="16" FontWeight="SemiBold" Foreground="#f0f0f0" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="DetailText" Margin="0,10,0,0" Foreground="#c8c8c8" FontSize="12" LineHeight="19" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
+                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="24,0,24,20">
+                    <Button x:Name="CancelButton" Content="Cancel" Style="{StaticResource SurfaceButton}" Margin="0,0,8,0" Click="Cancel_Click"/>
+                    <Button x:Name="OkButton" Content="Uninstall" Style="{StaticResource OutlineButton}" IsDefault="True" Click="Ok_Click"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

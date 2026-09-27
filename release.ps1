@@ -1,15 +1,8 @@
-# release.ps1 - KillerMCP release workflow
+# KillerMCP native release workflow.
 # Builds, signs with Certum SimplySign, verifies, tests, and optionally publishes.
-# Compatible with Windows PowerShell 5.1 and PowerShell 7.
-#
-# Usage:
-#   .\release.ps1
-#   .\release.ps1 -Publish
-#   .\release.ps1 -SkipSign
 
 [CmdletBinding()]
 param(
-    [string]$KillerToolsRoot = (Join-Path $env:USERPROFILE 'killer-tools-site'),
     [string]$CertThumbprint = '',
     [string]$CertName = 'Open Source Developer Stephen Riley',
     [switch]$SkipSign,
@@ -42,27 +35,24 @@ if ($Publish -and $SkipSign) {
     Fail 'An unsigned KillerMCP installer cannot be published.'
 }
 
-$package = Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json
-$Version = [string]$package.version
-if ($Version -notmatch '^\d+\.\d+\.\d+$') { Fail 'package.json does not contain an x.y.z version.' }
+[xml]$project = Get-Content -LiteralPath 'src\KillerMCP\KillerMCP.csproj' -Raw
+$Version = [string]$project.Project.PropertyGroup.Version
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { Fail 'KillerMCP.csproj does not contain an x.y.z version.' }
+
 $Tag = "v$Version"
 $installer = Join-Path $PSScriptRoot 'artifacts\installer\KillerMCP-Setup.exe'
 $sumsFile = Join-Path $PSScriptRoot 'artifacts\installer\SHA256SUMS.txt'
 $changelogFile = Join-Path $PSScriptRoot 'CHANGELOG.md'
-$killerToolsMcp = Join-Path $KillerToolsRoot 'mcp'
-$killerToolsBundle = Join-Path $killerToolsMcp 'dist\killermcp.mjs'
+$engineProject = Join-Path $PSScriptRoot 'dependencies\KillerTools\src\KillerTools.Engine\KillerTools.Engine.csproj'
 
 Step "Checking KillerMCP $Version release inputs"
-if (-not (Test-Path -LiteralPath $killerToolsMcp -PathType Container)) {
-    Fail "KillerTools MCP source was not found at $killerToolsMcp"
-}
 if ((git branch --show-current).Trim() -ne 'main') { Fail 'KillerMCP releases must run from main.' }
-$changelog = Get-Content -LiteralPath $changelogFile -Raw
-if ($changelog -match "(?m)^## \[$([regex]::Escape($Version))\] - Unreleased$") {
-    Fail "CHANGELOG.md section [$Version] is still marked Unreleased."
+if (-not (Test-Path -LiteralPath $engineProject -PathType Leaf)) {
+    Fail 'The pinned KillerTools submodule is missing. Run git submodule update --init.'
 }
-if ($changelog -notmatch "(?m)^## \[$([regex]::Escape($Version))\] - \d{4}-\d{2}-\d{2}$") {
-    Fail "CHANGELOG.md has no dated [$Version] section."
+$submoduleState = @(git submodule status --recursive)
+if ($LASTEXITCODE -ne 0 -or $submoduleState.Count -eq 0 -or @($submoduleState | Where-Object { $_ -match '^[+-]' }).Count) {
+    Fail 'The KillerTools submodule is missing or differs from the pinned commit.'
 }
 $dashMatches = @(git grep -n -I -P '[\x{2013}\x{2014}]' -- . 2>$null)
 if ($dashMatches.Count) {
@@ -70,38 +60,35 @@ if ($dashMatches.Count) {
     Fail 'Prohibited Unicode dash characters were found.'
 }
 
+$changelog = Get-Content -LiteralPath $changelogFile -Raw
 if ($Publish) {
+    if ($changelog -match "(?m)^## \[$([regex]::Escape($Version))\] - Unreleased$") {
+        Fail "CHANGELOG.md section [$Version] is still marked Unreleased."
+    }
+    if ($changelog -notmatch "(?m)^## \[$([regex]::Escape($Version))\] - \d{4}-\d{2}-\d{2}$") {
+        Fail "CHANGELOG.md has no dated [$Version] section."
+    }
     $dirty = @(git status --porcelain)
     if ($dirty.Count) { Fail "The working tree is not clean:`n$($dirty -join "`n")" }
     git fetch origin main --quiet
     if ($LASTEXITCODE -ne 0) { Fail 'Could not fetch origin/main.' }
-    $local = (git rev-parse HEAD).Trim()
-    $remote = (git rev-parse origin/main).Trim()
-    if ($local -ne $remote) { Fail 'Local main and origin/main differ. Push the reviewed source first.' }
+    if ((git rev-parse HEAD).Trim() -ne (git rev-parse origin/main).Trim()) {
+        Fail 'Local main and origin/main differ. Push the reviewed source first.'
+    }
     if (git tag --list $Tag) { Fail "Tag $Tag already exists locally." }
     if (git ls-remote --tags origin $Tag) { Fail "Tag $Tag already exists on origin." }
 }
 
-Step 'Building and checking the KillerTools local bundle'
-Push-Location $killerToolsMcp
-try {
-    Invoke-Checked { pnpm typecheck } 'KillerTools MCP typecheck failed.'
-    Invoke-Checked { pnpm coverage } 'KillerTools MCP coverage check failed.'
-    Invoke-Checked { pnpm build:local } 'KillerTools local MCP bundle failed to build.'
-} finally {
-    Pop-Location
-}
-if (-not (Test-Path -LiteralPath $killerToolsBundle -PathType Leaf)) {
-    Fail 'The KillerTools local MCP bundle was not produced.'
-}
-
-Step 'Building the KillerMCP portable runtime'
-Invoke-Checked { node scripts\build.mjs $killerToolsBundle } 'KillerMCP runtime staging failed.'
-Invoke-Checked { node scripts\discovery-test.mjs } 'KillerMCP discovery tests failed.'
-Invoke-Checked { node scripts\build-portable.mjs } 'KillerMCP portable build failed.'
+Step 'Building and testing the native host'
+Invoke-Checked { dotnet build KillerMCP.slnx -c Release } 'KillerMCP solution build failed.'
+Invoke-Checked { dotnet list src\KillerMCP\KillerMCP.csproj package --vulnerable --include-transitive } 'The dependency vulnerability check failed.'
+Invoke-Checked { dotnet run --project tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj -c Release --no-build } 'Client registration checks failed.'
+Invoke-Checked { dotnet run --project tests\KillerMCP.Runtime.Checks\KillerMCP.Runtime.Checks.csproj -c Release --no-build } 'Runtime checks failed.'
+Invoke-Checked { node scripts\Test-NativeHost.mjs } 'Native host checks failed.'
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-NativePackage.ps1 } 'Native package checks failed.'
 
 Step 'Building KillerMCP Setup'
-Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-installer.ps1 } 'KillerMCP installer build failed.'
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Build-WindowsInstaller.ps1 } 'KillerMCP installer build failed.'
 if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { Fail "Installer was not produced: $installer" }
 
 if ($SkipSign) {
@@ -111,7 +98,6 @@ if ($SkipSign) {
     if (-not (Get-Process -Name 'SimplySignDesktop' -ErrorAction SilentlyContinue)) {
         Fail 'SimplySign Desktop is not running. Start it, sign in, and run the release again.'
     }
-
     $signtool = (Get-Command signtool -ErrorAction SilentlyContinue).Source
     if (-not $signtool) {
         $kitBase = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
@@ -123,35 +109,24 @@ if ($SkipSign) {
         }
     }
     if (-not $signtool) { Fail 'signtool.exe was not found. Install the Windows SDK.' }
-    Write-Host "signtool: $signtool"
-
     $certArgs = if ($CertThumbprint) { @('/sha1', $CertThumbprint) } else { @('/n', $CertName) }
-    $timestampServers = @(
-        'http://timestamp.digicert.com',
-        'http://timestamp.sectigo.com',
-        'http://ts.ssl.com'
-    )
     $signed = $false
-    foreach ($timestampServer in $timestampServers) {
-        Write-Host "Trying timestamp server: $timestampServer"
-        & $signtool sign /fd sha256 /tr $timestampServer /td sha256 @certArgs `
-            /d 'KillerMCP' /du 'https://github.com/SteveTheKiller/KillerMCP' /v $installer
+    foreach ($timestampServer in @('http://timestamp.digicert.com', 'http://timestamp.sectigo.com', 'http://ts.ssl.com')) {
+        & $signtool sign /fd sha256 /tr $timestampServer /td sha256 @certArgs /d 'KillerMCP' /du 'https://github.com/SteveTheKiller/KillerMCP' /v $installer
         if ($LASTEXITCODE -eq 0) { $signed = $true; break }
         Start-Sleep -Seconds 3
     }
     if (-not $signed) { Fail 'Signing failed with every timestamp server.' }
-
     & $signtool verify /pa /v $installer
     if ($LASTEXITCODE -ne 0) { Fail 'The signed installer failed Authenticode verification.' }
     $signature = Get-AuthenticodeSignature -LiteralPath $installer
-    if ($signature.Status -ne 'Valid') { Fail "Authenticode status is $($signature.Status)." }
-    if (-not $signature.TimeStamperCertificate) { Fail 'The installer signature does not have a timestamp.' }
-    Write-Host "Signer: $($signature.SignerCertificate.Subject)" -ForegroundColor Green
-    Write-Host "Timestamp: $($signature.TimeStamperCertificate.Subject)" -ForegroundColor Green
+    if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate) {
+        Fail 'The installer does not have a valid timestamped signature.'
+    }
 }
 
 Step 'Testing the exact release installer'
-Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-installer.ps1 -Installer $installer } 'The exact release installer failed its test suite.'
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-WindowsInstaller.ps1 -Installer $installer } 'The exact release installer failed its test suite.'
 if (-not $SkipSign) {
     $signature = Get-AuthenticodeSignature -LiteralPath $installer
     if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate) {
@@ -159,13 +134,10 @@ if (-not $SkipSign) {
     }
 }
 
-Step 'Writing the release checksum'
+Step 'Writing release artifacts'
 $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
 $checksumLine = "${hash}  KillerMCP-Setup.exe"
 [IO.File]::WriteAllLines($sumsFile, @($checksumLine), [Text.Encoding]::ASCII)
-Write-Host $checksumLine -ForegroundColor Green
-
-Step 'Extracting release notes from CHANGELOG.md'
 $changelogLines = Get-Content -LiteralPath $changelogFile
 $notes = New-Object System.Collections.Generic.List[string]
 $inSection = $false
@@ -176,8 +148,7 @@ foreach ($line in $changelogLines) {
 }
 if ($notes.Count -eq 0) { Fail "Could not extract [$Version] notes from CHANGELOG.md." }
 $notesFile = Join-Path $env:TEMP "KillerMCP-$Version-notes.md"
-$notes -join "`r`n" | Set-Content -LiteralPath $notesFile -Encoding UTF8
-Write-Host "Notes written to $notesFile ($($notes.Count) lines)"
+[IO.File]::WriteAllText($notesFile, ($notes -join "`r`n"), [Text.UTF8Encoding]::new($false))
 
 if ($Publish) {
     Step "Publishing KillerMCP $Tag"
@@ -191,5 +162,4 @@ if ($Publish) {
 } else {
     Write-Host ''
     Write-Host 'Release artifacts are verified. Nothing was published.' -ForegroundColor Green
-    Write-Host "Run .\release.ps1 -Publish after main is pushed and the release is approved."
 }

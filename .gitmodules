@@ -1,0 +1,3 @@
+[submodule "dependencies/KillerTools"]
+	path = dependencies/KillerTools
+	url = https://github.com/SteveTheKiller/KillerTools.git

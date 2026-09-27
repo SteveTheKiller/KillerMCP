@@ -14,13 +14,9 @@ killer find my notes about the office network
 
 The agent chooses a matching available tool from the request and context. `killer` is usually enough. An app name such as `killerpdf`, `killerscan`, or `killernotes` can make the intended target explicit.
 
-## Installed KillerMCP and the hosted server
+## How KillerMCP works
 
-The installed KillerMCP runtime includes all 81 KillerTools website utilities, plus tools supplied by supported Killer apps found on the computer. It runs as one local stdio MCP connection.
-
-The optional public endpoint at `https://mcp.killertools.net` is a separate Cloudflare Worker. It offers 74 operations across 64 KillerTools utilities without an installation. The remaining 17 KillerTools utilities need local files, browser interaction, or private values, so they are available only through installed KillerMCP.
-
-The public Worker does not provide desktop app tools and cannot reach local files, notes, calendars, or networks.
+The installed native .NET 10 host includes all 81 KillerTools website utilities from the pinned KillerTools engine, plus tools supplied by supported Killer apps found on the computer. It runs as one local stdio MCP connection.
 
 ## KillerTools utilities
 
@@ -103,7 +99,7 @@ The public Worker does not provide desktop app tools and cannot reach local file
 
 ### Private and cryptographic tools
 
-These tools run through installed KillerMCP and are not exposed by the public Cloudflare Worker.
+These tools run locally through installed KillerMCP.
 
 - `bcrypt`: Hash or verify text with bcrypt.
 - `bip39-generator`: Generate BIP39 mnemonic material locally.
@@ -193,16 +189,13 @@ Password-protected calendars cannot currently be unlocked through MCP.
 
 ## Where data goes
 
-Installed KillerMCP runs its local tools and app adapters on the computer. Local app data and files are not sent to the public Cloudflare Worker. Some KillerTools network and reference lookups still contact their named public data sources.
+Installed KillerMCP runs its tools and app adapters on the computer. Some KillerTools network and reference lookups still contact their named public data sources.
 
 The MCP client and its model provider can receive tool arguments and results, including local paths, snippets, calendar fields, network results, or private values. The provider's data handling rules still apply. Review sensitive inputs and requested paths before approving a tool call.
 
-Requests to the hosted endpoint are processed by the KillerTools Cloudflare Worker. It has no sign-in, rejects request bodies over 64 KiB, applies bounded input schemas, and rate limits requests by connecting IP. Do not send passwords, private files, tokens, or client data to the public endpoint.
-
 ## Source and exact operation names
 
-- [KillerMCP](https://github.com/SteveTheKiller/KillerMCP) contains the shared local runtime, app adapters, installer, and integration checks.
-- [KillerTools](https://github.com/SteveTheKiller/killer-tools-site) contains the 81 website utilities, public Cloudflare Worker, local KillerTools bundle, and coverage map.
-- The exact internal operation mapping is maintained in `mcp/coverage.json` in the KillerTools repository.
+- [KillerMCP](https://github.com/SteveTheKiller/KillerMCP) contains the native host, app adapters, client registration, installer, and integration checks.
+- [KillerTools](https://github.com/SteveTheKiller/KillerTools) contains the native engine for the 81 website utilities, parity checks, and migration inventory.
 
 The signed public installer is available from [KillerMCP releases](https://github.com/SteveTheKiller/KillerMCP/releases). App tools appear only when the installed app advertises the required command.

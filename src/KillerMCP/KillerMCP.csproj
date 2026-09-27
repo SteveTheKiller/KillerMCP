@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>KillerMCP</AssemblyName>
+    <RootNamespace>KillerMCP</RootNamespace>
+    <Version>0.2.0</Version>
+    <ApplicationIcon>..\..\assets\KillerMCP.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="browser-companion.html" />
+    <ProjectReference Include="..\..\dependencies\KillerTools\src\KillerTools.Engine\KillerTools.Engine.csproj" />
+    <ProjectReference Include="..\KillerMCP.Runtime\KillerMCP.Runtime.csproj" />
+  </ItemGroup>
+</Project>
