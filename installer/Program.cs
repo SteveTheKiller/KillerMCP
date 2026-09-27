@@ -21,6 +21,15 @@ namespace KillerMCP.Setup
         private const string TestRootVariable = "KILLERMCP_TEST_INSTALL_ROOT";
         private const string UninstallRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\KillerMCP";
 
+        private static string CurrentVersion
+        {
+            get
+            {
+                Version version = Assembly.GetExecutingAssembly().GetName().Version;
+                return version.Major + "." + version.Minor + "." + version.Build;
+            }
+        }
+
         [STAThread]
         private static int Main(string[] args)
         {
@@ -218,7 +227,7 @@ namespace KillerMCP.Setup
                 ?? throw new InvalidOperationException("Could not create the KillerMCP uninstall entry."))
             {
                 key.SetValue("DisplayName", "KillerMCP");
-                key.SetValue("DisplayVersion", Assembly.GetExecutingAssembly().GetName().Version.ToString());
+                key.SetValue("DisplayVersion", CurrentVersion);
                 key.SetValue("Publisher", "Steve the Killer");
                 key.SetValue("InstallLocation", destination);
                 key.SetValue("DisplayIcon", setup + ",0");
@@ -543,6 +552,14 @@ namespace KillerMCP.Setup
                     Location = new Point(30, 86),
                     Size = new Size(495, 65),
                 };
+                var version = new Label
+                {
+                    Text = "Version " + CurrentVersion,
+                    ForeColor = Color.FromArgb(160, 160, 160),
+                    TextAlign = ContentAlignment.MiddleRight,
+                    Location = new Point(410, 35),
+                    Size = new Size(115, 24),
+                };
                 var location = new Label
                 {
                     Text = "Installs to " + destination,
@@ -568,7 +585,7 @@ namespace KillerMCP.Setup
                 };
                 _install.FlatAppearance.BorderColor = Color.FromArgb(33, 209, 194);
                 _install.Click += InstallClicked;
-                Controls.AddRange(new Control[] { title, description, location, _status, _install });
+                Controls.AddRange(new Control[] { title, version, description, location, _status, _install });
             }
 
             private async void InstallClicked(object? sender, EventArgs e)
