@@ -43,6 +43,8 @@ namespace KillerMCP.Setup
             bool connectClaude = !isolatedTest ||
                 string.Equals(Environment.GetEnvironmentVariable("KILLERMCP_TEST_REGISTER_CLAUDE"), "1", StringComparison.Ordinal);
             string? cursorConfiguration = CursorConfigurationPath(isolatedTest);
+            string? copilotConfiguration = CopilotConfigurationPath(isolatedTest);
+            string? geminiConfiguration = GeminiConfigurationPath(isolatedTest);
             if (isolatedTest && connectCodex)
             {
                 string? codexHome = Environment.GetEnvironmentVariable("CODEX_HOME");
@@ -71,7 +73,8 @@ namespace KillerMCP.Setup
                     if (uninstall)
                     {
                         ValidateSetupRegistration(destination);
-                        Uninstall(destination, connectCodex, connectClaude, cursorConfiguration);
+                        Uninstall(destination, connectCodex, connectClaude, cursorConfiguration,
+                            copilotConfiguration, geminiConfiguration);
                         RemoveInstalledApp(destination);
                     }
                     else
@@ -80,7 +83,9 @@ namespace KillerMCP.Setup
                         RegisterInstalledApp(destination);
                         if (connectCodex) RegisterCodex(destination);
                         if (connectClaude) RegisterClaudeCode(destination);
-                        if (cursorConfiguration != null) RegisterCursor(destination, cursorConfiguration);
+                        if (cursorConfiguration != null) RegisterJsonClient(destination, cursorConfiguration, "Cursor");
+                        if (copilotConfiguration != null) RegisterJsonClient(destination, copilotConfiguration, "GitHub Copilot");
+                        if (geminiConfiguration != null) RegisterJsonClient(destination, geminiConfiguration, "Gemini CLI");
                     }
                     return 0;
                 }
@@ -94,7 +99,8 @@ namespace KillerMCP.Setup
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new InstallerWindow(destination, connectCodex, connectClaude, cursorConfiguration));
+            Application.Run(new InstallerWindow(destination, connectCodex, connectClaude, cursorConfiguration,
+                copilotConfiguration, geminiConfiguration));
             return 0;
         }
 
@@ -132,7 +138,7 @@ namespace KillerMCP.Setup
                     if (movedPrevious) Directory.Move(backup, destination);
                     throw;
                 }
-                if (movedPrevious) Uninstall(backup, false, false, null);
+                if (movedPrevious) Uninstall(backup, false, false, null, null, null);
                 return destination;
             }
             finally
@@ -276,13 +282,15 @@ namespace KillerMCP.Setup
         }
 
         internal static void Uninstall(string destination, bool disconnectCodex, bool disconnectClaude,
-            string? cursorConfiguration)
+            string? cursorConfiguration, string? copilotConfiguration, string? geminiConfiguration)
         {
             if (!Directory.Exists(destination)) return;
             ValidateInstalledEntries(destination, out List<string> files, out List<string> directories);
             if (disconnectCodex) RemoveCodexRegistration(destination);
             if (disconnectClaude) RemoveClaudeRegistration(destination);
-            if (cursorConfiguration != null) RemoveCursorRegistration(destination, cursorConfiguration);
+            if (cursorConfiguration != null) RemoveJsonClientRegistration(destination, cursorConfiguration, "Cursor");
+            if (copilotConfiguration != null) RemoveJsonClientRegistration(destination, copilotConfiguration, "GitHub Copilot");
+            if (geminiConfiguration != null) RemoveJsonClientRegistration(destination, geminiConfiguration, "Gemini CLI");
             foreach (string file in files) File.Delete(file);
             foreach (string directory in directories.OrderByDescending(path => path.Length)) Directory.Delete(directory);
             Directory.Delete(destination);
@@ -459,22 +467,55 @@ namespace KillerMCP.Setup
             return installed ? Path.Combine(configurationDirectory, "mcp.json") : null;
         }
 
-        private static Dictionary<string, object> ReadCursorConfiguration(string path,
-            out Dictionary<string, object> servers)
+        private static string? CopilotConfigurationPath(bool isolatedTest)
+        {
+            string? testPath = Environment.GetEnvironmentVariable("KILLERMCP_TEST_COPILOT_CONFIG");
+            if (!string.IsNullOrWhiteSpace(testPath)) return ValidateTestConfigurationPath(testPath, "GitHub Copilot");
+            if (isolatedTest) return null;
+
+            string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string configurationDirectory = Path.Combine(profile, ".copilot");
+            bool installed = FindOnPath("copilot.exe") != null || FindOnPath("code.exe") != null ||
+                Directory.Exists(configurationDirectory);
+            return installed ? Path.Combine(configurationDirectory, "mcp-config.json") : null;
+        }
+
+        private static string? GeminiConfigurationPath(bool isolatedTest)
+        {
+            string? testPath = Environment.GetEnvironmentVariable("KILLERMCP_TEST_GEMINI_CONFIG");
+            if (!string.IsNullOrWhiteSpace(testPath)) return ValidateTestConfigurationPath(testPath, "Gemini CLI");
+            if (isolatedTest) return null;
+
+            string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string configurationDirectory = Path.Combine(profile, ".gemini");
+            bool installed = FindOnPath("gemini.exe") != null || Directory.Exists(configurationDirectory);
+            return installed ? Path.Combine(configurationDirectory, "settings.json") : null;
+        }
+
+        private static string ValidateTestConfigurationPath(string value, string clientName)
+        {
+            string path = Path.GetFullPath(value);
+            ValidateTestRoot(Path.GetDirectoryName(path)
+                ?? throw new InvalidOperationException("The isolated " + clientName + " configuration path is invalid."));
+            return path;
+        }
+
+        private static Dictionary<string, object> ReadJsonClientConfiguration(string path,
+            string clientName, out Dictionary<string, object> servers)
         {
             Dictionary<string, object> root;
             if (File.Exists(path))
             {
                 root = new JavaScriptSerializer { MaxJsonLength = 4 * 1024 * 1024 }
                     .DeserializeObject(File.ReadAllText(path)) as Dictionary<string, object>
-                    ?? throw new InvalidDataException("Cursor MCP configuration is invalid.");
+                    ?? throw new InvalidDataException(clientName + " MCP configuration is invalid.");
             }
             else root = new Dictionary<string, object>();
 
             if (root.TryGetValue("mcpServers", out object? value))
             {
                 servers = value as Dictionary<string, object>
-                    ?? throw new InvalidDataException("Cursor MCP server configuration is invalid.");
+                    ?? throw new InvalidDataException(clientName + " MCP server configuration is invalid.");
             }
             else
             {
@@ -484,7 +525,7 @@ namespace KillerMCP.Setup
             return root;
         }
 
-        private static bool MatchesCursorRegistration(object value, string destination)
+        private static bool MatchesJsonClientRegistration(object value, string destination)
         {
             var configuration = value as Dictionary<string, object>;
             if (configuration == null || !configuration.TryGetValue("command", out object? command)) return false;
@@ -513,25 +554,27 @@ namespace KillerMCP.Setup
             }
         }
 
-        private static void RemoveCursorRegistration(string destination, string path)
+        private static void RemoveJsonClientRegistration(string destination, string path, string clientName)
         {
             if (!File.Exists(path)) return;
-            Dictionary<string, object> root = ReadCursorConfiguration(path, out Dictionary<string, object> servers);
+            Dictionary<string, object> root = ReadJsonClientConfiguration(path, clientName,
+                out Dictionary<string, object> servers);
             if (!servers.TryGetValue("killermcp", out object? existing)) return;
-            if (!MatchesCursorRegistration(existing, destination))
-                throw new InvalidOperationException("Cursor has a different killermcp connection. It was left unchanged.");
+            if (!MatchesJsonClientRegistration(existing, destination))
+                throw new InvalidOperationException(clientName + " has a different killermcp connection. It was left unchanged.");
             servers.Remove("killermcp");
             WriteJsonConfiguration(path, root);
         }
 
-        internal static string RegisterCursor(string destination, string path)
+        internal static string RegisterJsonClient(string destination, string path, string clientName)
         {
-            Dictionary<string, object> root = ReadCursorConfiguration(path, out Dictionary<string, object> servers);
+            Dictionary<string, object> root = ReadJsonClientConfiguration(path, clientName,
+                out Dictionary<string, object> servers);
             if (servers.TryGetValue("killermcp", out object? existing))
             {
-                if (!MatchesCursorRegistration(existing, destination))
-                    throw new InvalidOperationException("Cursor already has a different killermcp connection. Its settings were left unchanged.");
-                return "Cursor already has the correct KillerMCP connection.";
+                if (!MatchesJsonClientRegistration(existing, destination))
+                    throw new InvalidOperationException(clientName + " already has a different killermcp connection. Its settings were left unchanged.");
+                return clientName + " already has the correct KillerMCP connection.";
             }
             servers["killermcp"] = new Dictionary<string, object>
             {
@@ -539,7 +582,7 @@ namespace KillerMCP.Setup
                 ["args"] = new object[] { Path.Combine(destination, "killermcp.mjs") },
             };
             WriteJsonConfiguration(path, root);
-            return "KillerMCP was added to Cursor.";
+            return "KillerMCP was added to " + clientName + ".";
         }
 
         internal static string RegisterCodex(string destination)
@@ -631,16 +674,20 @@ namespace KillerMCP.Setup
             private readonly bool _connectCodex;
             private readonly bool _connectClaude;
             private readonly string? _cursorConfiguration;
+            private readonly string? _copilotConfiguration;
+            private readonly string? _geminiConfiguration;
             private readonly Label _status;
             private readonly Button _install;
 
             internal InstallerWindow(string destination, bool connectCodex, bool connectClaude,
-                string? cursorConfiguration)
+                string? cursorConfiguration, string? copilotConfiguration, string? geminiConfiguration)
             {
                 _destination = destination;
                 _connectCodex = connectCodex;
                 _connectClaude = connectClaude;
                 _cursorConfiguration = cursorConfiguration;
+                _copilotConfiguration = copilotConfiguration;
+                _geminiConfiguration = geminiConfiguration;
                 Text = "KillerMCP Setup";
                 ClientSize = new Size(560, 300);
                 FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -712,7 +759,9 @@ namespace KillerMCP.Setup
                         RegisterInstalledApp(_destination);
                         if (_connectCodex) RegisterCodex(_destination);
                         if (_connectClaude) RegisterClaudeCode(_destination);
-                        if (_cursorConfiguration != null) RegisterCursor(_destination, _cursorConfiguration);
+                        if (_cursorConfiguration != null) RegisterJsonClient(_destination, _cursorConfiguration, "Cursor");
+                        if (_copilotConfiguration != null) RegisterJsonClient(_destination, _copilotConfiguration, "GitHub Copilot");
+                        if (_geminiConfiguration != null) RegisterJsonClient(_destination, _geminiConfiguration, "Gemini CLI");
                         return "Installed. Available agent clients are connected.";
                     });
                     _status.Text = result;
