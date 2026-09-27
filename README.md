@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://killertools.net/mcp"><img src="installer/Assets/mcp.png" width="150" alt="KillerMCP logo"></a><br>
-  <a href="https://killertools.net/mcp"><img src="docs/wordmark.svg" width="520" alt="KillerMCP"></a>
+  <a href="https://killertools.net/mcp"><img src="docs/wordmark.png" width="520" alt="KillerMCP"></a>
 </p>
 
 One local MCP connection for KillerTools and the Killer app family: KillerPDF, KillerNotes, KillerScan, KillerShell, and Killendar.
@@ -21,7 +21,7 @@ The server supplies tool descriptions and instructions to help the client select
 
 ## Current status
 
-Version 0.1.0 has a shared stdio host. It runs the bundled server from the [KillerTools site repository](https://github.com/SteveTheKiller/killer-tools-site) and adds app tools to the same connection. Current app adapters offer KillerPDF merging on the released 1.8 line, with preflight and accessibility reports when a build advertises those commands. KillerScan offers local network information and bounded scans. KillerShell file search, KillerNotes search, and Killendar agenda lookup appear when their CLI executables are available. Notes and calendar queries read the active database without changing it and currently cannot unlock encrypted files. The signed Windows installer packages the runtime, registers one MCP connection in Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when those clients are available, and adds a Windows Installed Apps uninstall entry. The exact signed installer passes isolated install, reinstall, seven client registrations, MCP discovery, representative calls, modified-file protection, uninstall, and clean Windows Sandbox testing.
+KillerMCP has a shared stdio host. It runs the bundled server from the [KillerTools site repository](https://github.com/SteveTheKiller/killer-tools-site) and adds app tools to the same connection. Current app adapters offer KillerPDF merging on the released 1.8 line, with preflight and accessibility reports when a build advertises those commands. KillerScan offers local network information and bounded scans. KillerShell file search, KillerNotes search, and Killendar agenda lookup appear when their CLI executables are available. Notes and calendar queries read the active database without changing it and currently cannot unlock encrypted files. The signed Windows installer packages the runtime, registers one MCP connection in Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when those clients are available, and adds a Windows Installed Apps uninstall entry. The exact signed installer passes isolated install, reinstall, seven client registrations, MCP discovery, representative calls, modified-file protection, uninstall, and clean Windows Sandbox testing.
 
 The public app websites each have an `/mcp` page describing their tools and linking to the same KillerMCP setup. The single local connection does not require a separate MCP subdomain for each app.
 
