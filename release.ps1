@@ -48,6 +48,7 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') { Fail 'package.json does not contain 
 $Tag = "v$Version"
 $installer = Join-Path $PSScriptRoot 'artifacts\installer\KillerMCP-Setup.exe'
 $sumsFile = Join-Path $PSScriptRoot 'artifacts\installer\SHA256SUMS.txt'
+$changelogFile = Join-Path $PSScriptRoot 'CHANGELOG.md'
 $killerToolsMcp = Join-Path $KillerToolsRoot 'mcp'
 $killerToolsBundle = Join-Path $killerToolsMcp 'dist\killermcp.mjs'
 
@@ -56,6 +57,13 @@ if (-not (Test-Path -LiteralPath $killerToolsMcp -PathType Container)) {
     Fail "KillerTools MCP source was not found at $killerToolsMcp"
 }
 if ((git branch --show-current).Trim() -ne 'main') { Fail 'KillerMCP releases must run from main.' }
+$changelog = Get-Content -LiteralPath $changelogFile -Raw
+if ($changelog -match "(?m)^## \[$([regex]::Escape($Version))\] - Unreleased$") {
+    Fail "CHANGELOG.md section [$Version] is still marked Unreleased."
+}
+if ($changelog -notmatch "(?m)^## \[$([regex]::Escape($Version))\] - \d{4}-\d{2}-\d{2}$") {
+    Fail "CHANGELOG.md has no dated [$Version] section."
+}
 $dashMatches = @(git grep -n -I -P '[\x{2013}\x{2014}]' -- . 2>$null)
 if ($dashMatches.Count) {
     Write-Host ($dashMatches -join "`n")
@@ -157,13 +165,27 @@ $checksumLine = "${hash}  KillerMCP-Setup.exe"
 [IO.File]::WriteAllLines($sumsFile, @($checksumLine), [Text.Encoding]::ASCII)
 Write-Host $checksumLine -ForegroundColor Green
 
+Step 'Extracting release notes from CHANGELOG.md'
+$changelogLines = Get-Content -LiteralPath $changelogFile
+$notes = New-Object System.Collections.Generic.List[string]
+$inSection = $false
+foreach ($line in $changelogLines) {
+    if ($line -match "^## \[$([regex]::Escape($Version))\]") { $inSection = $true; continue }
+    if ($inSection -and $line -match '^## \[') { break }
+    if ($inSection) { $notes.Add($line) }
+}
+if ($notes.Count -eq 0) { Fail "Could not extract [$Version] notes from CHANGELOG.md." }
+$notesFile = Join-Path $env:TEMP "KillerMCP-$Version-notes.md"
+$notes -join "`r`n" | Set-Content -LiteralPath $notesFile -Encoding UTF8
+Write-Host "Notes written to $notesFile ($($notes.Count) lines)"
+
 if ($Publish) {
     Step "Publishing KillerMCP $Tag"
     git tag -a $Tag -m "KillerMCP $Tag"
     if ($LASTEXITCODE -ne 0) { Fail "Could not create tag $Tag." }
     git push origin $Tag
     if ($LASTEXITCODE -ne 0) { Fail "Could not push tag $Tag." }
-    gh release create $Tag $installer $sumsFile --title "KillerMCP $Tag" --generate-notes --verify-tag
+    gh release create $Tag $installer $sumsFile --title "KillerMCP $Tag" --notes-file $notesFile --verify-tag
     if ($LASTEXITCODE -ne 0) { Fail 'GitHub release creation failed.' }
     gh release view $Tag --json url --jq '.url'
 } else {
