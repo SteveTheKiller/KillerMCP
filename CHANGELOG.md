@@ -4,6 +4,14 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - Unreleased
+
+0.2.1 expands KillerShell file access through the shared MCP connection.
+
+### Added
+
+- Added KillerShell tools for directory listings, file details, and bounded text reading.
+
 ## [0.2.0] - 2026-09-27
 
 0.2.0 replaces the bundled Node server with a smaller native .NET 10 host.

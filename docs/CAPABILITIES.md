@@ -168,7 +168,10 @@ Network tools send probes from the local computer. Only test networks that the u
 - Search one absolute local folder by filename text or wildcard pattern.
 - Search file contents for a text value.
 - Combine filename and content filters.
-- Return no more than 100 results without changing files.
+- List up to 100 files and folders directly inside one absolute directory.
+- Read file or folder size, timestamps, type, and attributes.
+- Read up to 32,768 characters from one text file.
+- Return bounded results without changing files.
 
 ### KillerNotes
 

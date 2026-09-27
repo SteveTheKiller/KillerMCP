@@ -17,7 +17,7 @@ let updateRequests = 0;
 const updateServer = createServer((request, response) => {
   updateRequests++;
   response.writeHead(200, { 'Content-Type': 'application/json' });
-  response.end(JSON.stringify({ tag_name: 'v0.2.1' }));
+  response.end(JSON.stringify({ tag_name: 'v0.2.2' }));
 });
 await new Promise(resolve => updateServer.listen(0, '127.0.0.1', resolve));
 const updateAddress = updateServer.address();
@@ -63,8 +63,8 @@ function request(method, params = {}) {
 
 const initialized = await request('initialize', { protocolVersion: '2025-06-18' });
 assert.equal(initialized.serverInfo.name, 'KillerMCP');
-assert.equal(initialized.serverInfo.version, '0.2.0');
-assert.match(initialized.instructions, /KillerMCP 0\.2\.1 is available/);
+assert.equal(initialized.serverInfo.version, '0.2.1');
+assert.match(initialized.instructions, /KillerMCP 0\.2\.2 is available/);
 const listed = await request('tools/list');
 assert.deepEqual(listed.tools.map(tool => tool.name), [
   'text_statistics', 'convert_case', 'encode_base64', 'decode_base64', 'text_to_ascii_binary',
@@ -96,7 +96,7 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killermcp_update_status',
   'killernotes_search',
   'killendar_agenda',
-  'killershell_search_files',
+  'killershell_search_files', 'killershell_list_directory', 'killershell_file_info', 'killershell_read_text_file',
   'killerbench_device_code', 'killerbench_win32_code',
   'killerscan_local_network', 'killerscan_scan_network', 'killerscan_probe_host',
   'killerscan_mac_vendor', 'killerscan_ping', 'killerscan_trace_route',

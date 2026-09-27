@@ -31,11 +31,7 @@ if (killendar is not null)
 {
     appAdapters.Add(killendar);
 }
-var killerShell = await KillerShellAdapter.CreateAsync(AppDiscovery.Discover("killershell"));
-if (killerShell is not null)
-{
-    appAdapters.Add(killerShell);
-}
+appAdapters.AddRange(await KillerShellAdapter.CreateAsync(AppDiscovery.Discover("killershell")));
 appAdapters.AddRange(KillerBenchAdapter.Create(AppDiscovery.Discover("killerbench")));
 appAdapters.AddRange(await KillerScanAdapter.CreateAsync(AppDiscovery.Discover("killerscan")));
 appAdapters.AddRange(await KillerPdfAdapter.CreateAsync(AppDiscovery.Discover("killerpdf")));

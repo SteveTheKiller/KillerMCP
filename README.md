@@ -30,7 +30,7 @@ KillerMCP checks GitHub Releases at most once a day when it starts. If a newer v
 - Install, reinstall, repair, and uninstall behavior through the KillerUI styled Windows setup.
 - A framework dependent native package for each supported operating system and processor architecture.
 
-KillerPDF provides PDF editing, conversion, inspection, OCR, printing, and accessibility tools when the installed version advertises them. KillerScan provides local network details, bounded scans, host probes, offline MAC vendor lookup, ping, route tracing, diagnostics, availability watching, and KillerSpeed tests. KillerShell file search, KillerNotes search, Killendar agenda lookup, and KillerBench reference tools appear when compatible app versions are installed.
+KillerPDF provides PDF editing, conversion, inspection, OCR, printing, and accessibility tools when the installed version advertises them. KillerScan provides local network details, bounded scans, host probes, offline MAC vendor lookup, ping, route tracing, diagnostics, availability watching, and KillerSpeed tests. KillerShell can search files, list directories, inspect file details, and read bounded text. KillerNotes search, Killendar agenda lookup, and KillerBench reference tools appear when compatible app versions are installed.
 
 See [What KillerMCP can do](docs/CAPABILITIES.md) for the complete tool guide, examples, limits, and data handling details.
 

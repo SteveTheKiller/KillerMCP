@@ -34,7 +34,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1" || Environ
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1") Console.WriteLine("  --merge <out.pdf>\n--extract-pages <in.pdf>\n--split <in.pdf>\n--decrypt <in.pdf>\n--to-image <in.pdf>\n--flatten <in.pdf>\n--print <in.pdf>\n--ocr <in.pdf>\n--batch-resave <in>\n--batch-render <in>\n--rotate-pages <in.pdf>\n--delete-pages <in.pdf>\n--move-pages <in.pdf>\n--insert-blank <in.pdf>\n--duplicate-page <in.pdf>\n--document-info <in.pdf>\n--search-text <in.pdf>\n--preflight <in.pdf>\n--accessibility <in.pdf>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>");
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>");
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>\nlist <folder>\ninfo <path>\nread <file>");
         return;
     }
     if (arguments.Length > 0 && arguments[0] is "--preflight" or "--accessibility")
@@ -84,6 +84,21 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1" || Environ
     if (arguments.Length >= 5 && arguments[0] == "search" && Path.IsPathFullyQualified(arguments[1]))
     {
         Console.Write(JsonSerializer.Serialize(new { results = new[] { new { path = Path.Combine(arguments[1], "notes.txt") } }, truncated = false }));
+        return;
+    }
+    if (arguments.Length == 4 && arguments[0] == "list" && Path.IsPathFullyQualified(arguments[1]))
+    {
+        Console.Write(JsonSerializer.Serialize(new { path = arguments[1], entries = new[] { new { name = "notes.txt", path = Path.Combine(arguments[1], "notes.txt"), isDirectory = false } }, limitReached = false }));
+        return;
+    }
+    if (arguments.Length == 2 && arguments[0] == "info" && Path.IsPathFullyQualified(arguments[1]))
+    {
+        Console.Write(JsonSerializer.Serialize(new { path = arguments[1], isDirectory = false, sizeBytes = 12 }));
+        return;
+    }
+    if (arguments.Length == 4 && arguments[0] == "read" && Path.IsPathFullyQualified(arguments[1]))
+    {
+        Console.Write(JsonSerializer.Serialize(new { path = arguments[1], text = "fixture text", truncated = false }));
         return;
     }
     if (arguments.Length == 2 && arguments[0] is "device-code" or "win32-code")
@@ -163,18 +178,19 @@ try
     Console.WriteLine("PASS native Killendar adapter");
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", "1");
-    var shellAdapter = await KillerShellAdapter.CreateAsync(Environment.ProcessPath);
-    if (shellAdapter is null)
-    {
-        throw new InvalidOperationException("The KillerShell fixture adapter was not discovered.");
-    }
-    Equal("killershell_search_files", shellAdapter.Tool.Name);
+    var shellAdapters = await KillerShellAdapter.CreateAsync(Environment.ProcessPath);
+    Equal(4, shellAdapters.Count);
+    var shellByName = shellAdapters.ToDictionary(item => item.Tool.Name);
     using var search = JsonDocument.Parse(JsonSerializer.Serialize(new { root, name = "*.txt", limit = 2 }));
-    var searchResult = await shellAdapter.CallAsync(search.RootElement, CancellationToken.None);
+    var searchResult = await shellByName["killershell_search_files"].CallAsync(search.RootElement, CancellationToken.None);
     Equal(false, searchResult.IsError);
     Equal("notes.txt", Path.GetFileName(JsonDocument.Parse(searchResult.Text).RootElement.GetProperty("results")[0].GetProperty("path").GetString()));
     using var missingSearch = JsonDocument.Parse(JsonSerializer.Serialize(new { root }));
-    Equal(true, (await shellAdapter.CallAsync(missingSearch.RootElement, CancellationToken.None)).IsError);
+    Equal(true, (await shellByName["killershell_search_files"].CallAsync(missingSearch.RootElement, CancellationToken.None)).IsError);
+    using var shellPath = JsonDocument.Parse(JsonSerializer.Serialize(new { path = root }));
+    Equal("notes.txt", JsonDocument.Parse((await shellByName["killershell_list_directory"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("entries")[0].GetProperty("name").GetString());
+    Equal(false, JsonDocument.Parse((await shellByName["killershell_file_info"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("isDirectory").GetBoolean());
+    Equal("fixture text", JsonDocument.Parse((await shellByName["killershell_read_text_file"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("text").GetString());
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", null);
     Console.WriteLine("PASS native KillerShell adapter");
 
