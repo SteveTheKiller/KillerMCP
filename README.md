@@ -25,3 +25,7 @@ Once connected, people can ask the agent in ordinary language, such as `killer d
 Run `node scripts/discovery-test.mjs` to check standard install-folder detection and development overrides. KillerNotes 1.3.1, Killendar 1.1.4, and KillerShell 1.2.6 serve their commands from their installed executables with `--cli` after those app versions are installed.
 
 No release or installation instructions are available until the packaged runtime and installer are verified.
+
+## License
+
+KillerMCP is licensed under the [GNU General Public License Version 3](LICENSE).
