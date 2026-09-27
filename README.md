@@ -10,6 +10,8 @@ Development is in progress. This repository has a shared stdio host. It runs the
 
 The public app websites will each have an `/mcp` page describing their tools and linking to the one KillerMCP setup. The single local connection does not require a separate MCP subdomain for each app.
 
+See [What KillerMCP can do](docs/CAPABILITIES.md) for a human-readable guide to every KillerTools utility, the public app integrations, example requests, limits, and data handling.
+
 ## Development build
 
 Build the KillerTools local MCP bundle first. Then run `node scripts/build.mjs <absolute path to killermcp.mjs>` in this repository. This stages the shared host, the KillerTools bundle, and app adapter files in `dist/`. The runtime looks for the app executables in their standard per-user and machine-wide install folders. It checks the KillerPDF, KillerScan, KillerNotes, and Killendar help output before listing their supported tools. For development builds or custom locations, set `KILLERPDF_CLI`, `KILLERSCAN_CLI`, `KILLERNOTES_CLI`, `KILLENDAR_CLI`, and `KILLERSHELL_CLI` to absolute executable paths. An invalid override leaves that app's tools unavailable instead of falling back to another copy.
