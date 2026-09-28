@@ -1,7 +1,7 @@
 using KillerMCP.Runtime;
 using System.Text.Json;
 
-if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1")
+if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1")
 {
     var arguments = Environment.GetCommandLineArgs().Skip(1).ToArray();
     if (arguments.SequenceEqual(["/help"]) && Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN") == "1")
@@ -32,8 +32,8 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1" || Environ
     if (arguments.SequenceEqual(["--help"]))
     {
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1") Console.WriteLine("  --merge <out.pdf>\n--extract-pages <in.pdf>\n--split <in.pdf>\n--decrypt <in.pdf>\n--to-image <in.pdf>\n--flatten <in.pdf>\n--print <in.pdf>\n--ocr <in.pdf>\n--batch-resave <in>\n--batch-render <in>\n--rotate-pages <in.pdf>\n--delete-pages <in.pdf>\n--move-pages <in.pdf>\n--insert-blank <in.pdf>\n--duplicate-page <in.pdf>\n--document-info <in.pdf>\n--search-text <in.pdf>\n--preflight <in.pdf>\n--accessibility <in.pdf>");
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>");
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>");
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>\ncreate --title");
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>\ncreate <json>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>\nlist <folder>\ninfo <path>\nread <file>\nprocesses [--limit]\nservices [--limit]\nevents <log>\nregistry <key>\ndrives\nhash <file>");
         return;
     }
@@ -86,6 +86,28 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1" || Environ
         Console.Write(JsonSerializer.Serialize(new { results = new[] { new { path = Path.Combine(arguments[1], "notes.txt") } }, truncated = false }));
         return;
     }
+    if (arguments.Length == 2 && arguments[0] == "create" && Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1")
+    {
+        using var appointment = JsonDocument.Parse(arguments[1]);
+        Console.Write(JsonSerializer.Serialize(new { id = Guid.Empty, title = appointment.RootElement.GetProperty("title").GetString() }));
+        return;
+    }
+    if (arguments.Length >= 5 && arguments[0] == "create" && arguments[1] == "--title")
+    {
+        Console.Write(JsonSerializer.Serialize(new { id = 42, title = arguments[2] }));
+        return;
+    }
+    if (arguments.Length == 5 && arguments[0] == "export" && arguments[1] == "--id" && arguments[3] == "--output")
+    {
+        File.WriteAllText(arguments[4], "<!doctype html><html><body><h1>Fixture note</h1></body></html>");
+        Console.Write(JsonSerializer.Serialize(new { output = arguments[4] }));
+        return;
+    }
+    if (arguments.Length >= 3 && arguments[0] == "import-image" && arguments[1] == "--path")
+    {
+        Console.Write(JsonSerializer.Serialize(new { id = 43, path = arguments[2] }));
+        return;
+    }
     if (arguments.Length == 4 && arguments[0] == "list" && Path.IsPathFullyQualified(arguments[1]))
     {
         Console.Write(JsonSerializer.Serialize(new { path = arguments[1], entries = new[] { new { name = "notes.txt", path = Path.Combine(arguments[1], "notes.txt"), isDirectory = false } }, limitReached = false }));
@@ -107,11 +129,6 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1" || Environ
     if (arguments.Length == 4 && arguments[0] == "registry") { Console.Write(JsonSerializer.Serialize(new { subkeys = new[] { "Software" }, values = new[] { new { name = "Fixture", data = "Value" } } })); return; }
     if (arguments.Length == 1 && arguments[0] == "drives") { Console.Write(JsonSerializer.Serialize(new { drives = new[] { new { name = "C:\\", ready = true } } })); return; }
     if (arguments.Length == 2 && arguments[0] == "hash") { Console.Write(JsonSerializer.Serialize(new { hash = new string('a', 64) })); return; }
-    if (arguments.Length == 2 && arguments[0] is "device-code" or "win32-code")
-    {
-        Console.Write(JsonSerializer.Serialize(new { code = arguments[1], name = arguments[0] == "device-code" ? "Device problem" : "Windows error" }));
-        return;
-    }
     Environment.ExitCode = 2;
     Console.Error.Write("Unknown fixture command");
     return;
@@ -127,7 +144,6 @@ try
         ["killerpdf"] = Path.Combine(local, "Programs", "KillerPDF", "KillerPDF.App.exe"),
         ["killerscan"] = Path.Combine(machine, "KillerScan", "KillerScan.exe"),
         ["killershell"] = Path.Combine(local, "Programs", "KillerShell", "KillerShell.exe"),
-        ["killerbench"] = Path.Combine(machine, "KillerBench", "killerbench-cli.exe"),
         ["killernotes"] = Path.Combine(machine, "KillerNotes", "KillerNotes.exe"),
         ["killendar"] = Path.Combine(local, "Programs", "Killendar", "Killendar.exe"),
     };
@@ -152,12 +168,14 @@ try
     Console.WriteLine("PASS native KillerMCP app discovery");
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", "1");
-    var adapter = await KillerNotesAdapter.CreateAsync(Environment.ProcessPath);
+    var notesAdapters = await KillerNotesAdapter.CreateAsync(Environment.ProcessPath);
+    var adapter = notesAdapters.FirstOrDefault(item => item.Tool.Name == "killernotes_search");
     if (adapter is null)
     {
         throw new InvalidOperationException("The KillerNotes fixture adapter was not discovered.");
     }
     Equal("killernotes_search", adapter.Tool.Name);
+    Equal(16, notesAdapters.Count);
     using var valid = JsonDocument.Parse("{\"query\":\"subnet\",\"limit\":1}");
     var result = await adapter.CallAsync(valid.RootElement, CancellationToken.None);
     Equal(false, result.IsError);
@@ -180,6 +198,15 @@ try
     Equal("Field visit", JsonDocument.Parse(agendaResult.Text).RootElement[0].GetProperty("title").GetString());
     using var badDate = JsonDocument.Parse("{\"date\":\"2026-02-30\"}");
     Equal(true, (await calendarAdapter.CallAsync(badDate.RootElement, CancellationToken.None)).IsError);
+    var createAdapter = await KillendarAdapter.CreateAppointmentAsync(Environment.ProcessPath);
+    if (createAdapter is null) throw new InvalidOperationException("The Killendar create tool was not discovered.");
+    Equal("killendar_create_appointment", createAdapter.Tool.Name);
+    using var appointment = JsonDocument.Parse("{\"title\":\"Site visit\",\"start\":\"2026-10-01T09:00\",\"end\":\"2026-10-01T10:00\"}");
+    var created = await createAdapter.CallAsync(appointment.RootElement, CancellationToken.None);
+    Equal(false, created.IsError);
+    Equal("Site visit", JsonDocument.Parse(created.Text).RootElement.GetProperty("title").GetString());
+    using var invalidAppointment = JsonDocument.Parse("{\"title\":\"Site visit\",\"start\":\"2026-10-01T10:00\",\"end\":\"2026-10-01T09:00\"}");
+    Equal(true, (await createAdapter.CallAsync(invalidAppointment.RootElement, CancellationToken.None)).IsError);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", null);
     Console.WriteLine("PASS native Killendar adapter");
 
@@ -208,18 +235,6 @@ try
     Equal(64, JsonDocument.Parse((await shellByName["killershell_hash_file"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("hash").GetString()!.Length);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", null);
     Console.WriteLine("PASS native KillerShell adapter");
-
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", "1");
-    var benchAdapters = KillerBenchAdapter.Create(Environment.ProcessPath);
-    Equal(2, benchAdapters.Count);
-    using var code = JsonDocument.Parse("{\"code\":\"0x1F\"}");
-    var codeResult = await benchAdapters[0].CallAsync(code.RootElement, CancellationToken.None);
-    Equal(false, codeResult.IsError);
-    Equal("0x1F", JsonDocument.Parse(codeResult.Text).RootElement.GetProperty("code").GetString());
-    using var badCode = JsonDocument.Parse("{\"code\":\"4294967296\"}");
-    Equal(true, (await benchAdapters[1].CallAsync(badCode.RootElement, CancellationToken.None)).IsError);
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", null);
-    Console.WriteLine("PASS native KillerBench adapters");
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", "1");
     var scanAdapters = await KillerScanAdapter.CreateAsync(Environment.ProcessPath);
@@ -282,6 +297,31 @@ try
     Equal(true, (await Pdf("killerpdf_merge", new { inputs = new[] { sourceOne, sourceTwo }, output = Path.Combine(root, "merged.pdf") })).IsError);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", null);
     Console.WriteLine("PASS native KillerPDF adapters");
+
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", "1");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", "1");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", "1");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", "1");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
+    var integrationAdapters = IntegrationAdapter.Create(Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath);
+    Equal(9, integrationAdapters.Count);
+    var integrationByName = integrationAdapters.ToDictionary(item => item.Tool.Name);
+    async Task<AppCallResult> Integration(string name, object arguments)
+    {
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(arguments));
+        return await integrationByName[name].CallAsync(document.RootElement, CancellationToken.None);
+    }
+    Equal(false, (await Integration("killerscan_save_report_note", new { limit = 5 })).IsError);
+    Equal(false, (await Integration("killendar_save_agenda_note", new { date = "2026-09-28", days = 7, limit = 5 })).IsError);
+    Equal(false, (await Integration("killershell_save_directory_note", new { path = root, limit = 5 })).IsError);
+    Equal(false, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = 150 })).IsError);
+    Equal(true, (await Integration("killer_create_pdf", new { content = "report", output = "relative.pdf" })).IsError);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", null);
+    Console.WriteLine("PASS cross-app integration adapters");
 }
 finally
 {

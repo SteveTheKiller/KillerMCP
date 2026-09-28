@@ -35,6 +35,7 @@ namespace KillerMCP.Setup
             bool isolated = !string.IsNullOrWhiteSpace(testRoot);
             string destination = isolated ? ValidateTestRoot(testRoot!) : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "KillerMCP");
             bool silent = args.Any(value => value.Equals("/silent", StringComparison.OrdinalIgnoreCase));
+            bool notify = args.Any(value => value.Equals("/notify", StringComparison.OrdinalIgnoreCase));
             bool uninstall = args.Any(value => value.Equals("/uninstall", StringComparison.OrdinalIgnoreCase));
             try
             {
@@ -49,6 +50,7 @@ namespace KillerMCP.Setup
                 {
                     if (!HasRuntime10(isolated)) return MissingRuntimeExitCode;
                     Install(destination);
+                    if (notify) NotifySuccess(destination);
                     return 0;
                 }
                 return InstallerWizard.Run(destination, isolated);
@@ -157,6 +159,13 @@ namespace KillerMCP.Setup
                 if (!process.WaitForExit(60000)) { process.Kill(); throw new TimeoutException("KillerMCP client configuration timed out."); }
                 if (process.ExitCode != 0) throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? output.Trim() : error.Trim());
             }
+        }
+
+        private static void NotifySuccess(string destination)
+        {
+            string notifier = Path.Combine(destination, "KillerMCP.Notify.exe");
+            if (!File.Exists(notifier)) return;
+            Process.Start(new ProcessStartInfo(notifier, "--updated --version " + Quote(CurrentVersion)) { UseShellExecute = true });
         }
 
         private static void CloseRunningProcesses(string destination)

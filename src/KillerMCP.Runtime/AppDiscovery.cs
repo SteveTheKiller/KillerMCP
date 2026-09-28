@@ -7,7 +7,6 @@ public static class AppDiscovery
     private static readonly IReadOnlyDictionary<string, Definition> Apps = new Dictionary<string, Definition>(StringComparer.OrdinalIgnoreCase)
     {
         ["killendar"] = new("KILLENDAR_CLI", "Killendar", "Killendar.exe"),
-        ["killerbench"] = new("KILLERBENCH_CLI", "KillerBench", "killerbench-cli.exe"),
         ["killernotes"] = new("KILLERNOTES_CLI", "KillerNotes", "KillerNotes.exe"),
         ["killerpdf"] = new("KILLERPDF_CLI", "KillerPDF", "KillerPDF.App.exe"),
         ["killerscan"] = new("KILLERSCAN_CLI", "KillerScan", "KillerScan.exe"),

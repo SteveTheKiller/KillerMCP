@@ -20,6 +20,11 @@ if ($LASTEXITCODE -ne 0) { throw 'Native KillerMCP publish failed.' }
 dotnet publish (Join-Path $root 'src\KillerMCP.Configure\KillerMCP.Configure.csproj') -c Release -r $RuntimeIdentifier --self-contained false `
     -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o $staging
 if ($LASTEXITCODE -ne 0) { throw 'Native KillerMCP configurator publish failed.' }
+if ($RuntimeIdentifier.StartsWith('win-', [StringComparison]::Ordinal)) {
+    dotnet publish (Join-Path $root 'src\KillerMCP.Notify\KillerMCP.Notify.csproj') -c Release -r $RuntimeIdentifier --self-contained false `
+        -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o $staging
+    if ($LASTEXITCODE -ne 0) { throw 'KillerMCP update notifier publish failed.' }
+}
 
 $files = [ordered]@{}
 Get-ChildItem -LiteralPath $staging -File -Recurse | Sort-Object FullName | ForEach-Object {
@@ -34,6 +39,9 @@ if (-not $files.Contains('KillerMCP.exe') -and -not $files.Contains('KillerMCP')
 }
 if (-not $files.Contains('KillerMCP.Configure.exe') -and -not $files.Contains('KillerMCP.Configure')) {
     throw 'The native package does not contain the KillerMCP configurator.'
+}
+if ($RuntimeIdentifier.StartsWith('win-', [StringComparison]::Ordinal) -and -not $files.Contains('KillerMCP.Notify.exe')) {
+    throw 'The Windows package does not contain the KillerMCP update notifier.'
 }
 
 $manifest = [ordered]@{

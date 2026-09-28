@@ -4,6 +4,19 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - Unreleased
+
+### Added
+
+- Added Killendar appointment creation through its open, unlocked calendar.
+- Added a Black/Fuchsia Windows updater with a large KillerMCP icon and controls to disable checks, check and ask, download and ask, or install automatically.
+- Added KillerNotes tools for reading, writing, organizing, coloring, image import, history, links, statistics, and file export through the open app.
+- Added cross app workflows for PDF creation, note export, network reports, agenda reports, directory reports, and PDF page image notes.
+
+### Fixed
+
+- Update checks now refresh hourly instead of keeping a stale release result for a full day.
+
 ## [0.2.1] - 2026-09-27
 
 0.2.1 expands KillerShell file and Windows inspection through the shared MCP connection.
@@ -18,7 +31,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Added
 
-- Added the native KillerTools engine, daily update checks, KillerBench tools, and complete KillerScan command coverage.
+- Added the native KillerTools engine, daily update checks, and complete KillerScan command coverage.
 
 ### Changed
 

@@ -3,7 +3,7 @@
   <a href="https://killertools.net/mcp"><img src="docs/wordmark.png" width="520" alt="KillerMCP"></a>
 </p>
 
-One local MCP connection for KillerTools and the Killer app family: KillerPDF, KillerNotes, KillerScan, KillerShell, Killendar, and KillerBench.
+One local MCP connection for KillerTools and the Killer app family: KillerPDF, KillerNotes, KillerScan, KillerShell, and Killendar.
 
 KillerMCP is a native .NET 10 host. It detects supported Killer apps, exposes their available commands, and registers one MCP server with compatible agent clients. The separate [KillerTools repository](https://github.com/SteveTheKiller/KillerTools) provides the shared engine for the website utilities.
 
@@ -20,17 +20,19 @@ Once connected, ask naturally:
 
 The server supplies tool descriptions and instructions that help the client select the appropriate tool. Client behavior varies, so these phrases are guidance rather than guaranteed commands.
 
-KillerMCP checks GitHub Releases at most once a day when it starts. If a newer version is available, the agent receives an update notice and can provide the signed installer link. KillerMCP never downloads or installs an update without the user's approval.
+KillerMCP checks GitHub Releases hourly and shows a Black/Fuchsia update window when a newer version is available. Choose whether future updates should stay off, check and ask, download and ask, or install automatically. Every downloaded installer must match the published SHA256 and pass Windows signature verification before it can run.
 
 ## What it includes
 
 - All 81 KillerTools website utilities from the native KillerTools engine.
-- Automatic tool discovery for supported versions of KillerPDF, KillerScan, KillerNotes, KillerShell, Killendar, and KillerBench.
+- Automatic tool discovery for supported versions of KillerPDF, KillerScan, KillerNotes, KillerShell, and Killendar.
 - Safe migration from the earlier Node based KillerMCP installation and client registrations.
 - Install, reinstall, repair, and uninstall behavior through the KillerUI styled Windows setup.
 - A framework dependent native package for each supported operating system and processor architecture.
 
-KillerPDF provides PDF editing, conversion, inspection, OCR, printing, and accessibility tools when the installed version advertises them. KillerScan provides local network details, bounded scans, host probes, offline MAC vendor lookup, ping, route tracing, diagnostics, availability watching, and KillerSpeed tests. KillerShell provides read-only file browsing, text reading, file hashing, process and service listings, event log reading, registry inspection, and drive information. KillerNotes search, Killendar agenda lookup, and KillerBench reference tools appear when compatible app versions are installed.
+KillerPDF provides PDF editing, conversion, inspection, OCR, printing, and accessibility tools when the installed version advertises them. KillerScan provides local network details, bounded scans, host probes, offline MAC vendor lookup, ping, route tracing, diagnostics, availability watching, and KillerSpeed tests. KillerShell provides read-only file browsing, text reading, file hashing, process and service listings, event log reading, registry inspection, and drive information. KillerNotes can search, read, create, edit, organize, color, import images, inspect links and history, and export notes. Killendar provides agenda lookup and creates single appointments while its window is open and unlocked.
+
+Cross app workflows can export a KillerNotes note, KillerScan network report, Killendar agenda, or KillerShell directory listing to PDF. They can also save scan, agenda, and directory reports as notes, or render selected KillerPDF pages into image notes.
 
 See [What KillerMCP can do](docs/CAPABILITIES.md) for the complete tool guide, examples, limits, and data handling details.
 
@@ -64,7 +66,7 @@ powershell -NoProfile -File scripts\Test-WindowsInstaller.ps1
 
 The native host requires the .NET 10 runtime. The Windows installer checks for it before installation and links to the official Microsoft download when it is missing.
 
-For development builds or custom app locations, set `KILLERPDF_CLI`, `KILLERSCAN_CLI`, `KILLERNOTES_CLI`, `KILLENDAR_CLI`, `KILLERSHELL_CLI`, or `KILLERBENCH_CLI` to an absolute executable path. An invalid override leaves that app unavailable instead of silently selecting another copy.
+For development builds or custom app locations, set `KILLERPDF_CLI`, `KILLERSCAN_CLI`, `KILLERNOTES_CLI`, `KILLENDAR_CLI`, or `KILLERSHELL_CLI` to an absolute executable path. An invalid override leaves that app unavailable instead of silently selecting another copy.
 
 Run `powershell -NoProfile -File release.ps1` to build, sign, verify, and test the exact release installer without publishing it. Add `-Publish` only after the reviewed source is on `origin/main` and the changelog entry is dated for release.
 

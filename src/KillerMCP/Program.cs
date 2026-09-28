@@ -20,21 +20,25 @@ var json = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.C
 var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version!;
 var currentVersion = $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}";
 ToolRegistry.Status = await UpdateChecker.CheckForUpdateAsync(currentVersion);
+UpdateChecker.StartMonitoring(currentVersion, ToolRegistry.Status, status => ToolRegistry.Status = status);
 var appAdapters = new List<AppAdapter>();
-var killerNotes = await KillerNotesAdapter.CreateAsync(AppDiscovery.Discover("killernotes"));
-if (killerNotes is not null)
-{
-    appAdapters.Add(killerNotes);
-}
-var killendar = await KillendarAdapter.CreateAsync(AppDiscovery.Discover("killendar"));
+var killerNotesPath = AppDiscovery.Discover("killernotes");
+var killendarPath = AppDiscovery.Discover("killendar");
+var killerShellPath = AppDiscovery.Discover("killershell");
+var killerScanPath = AppDiscovery.Discover("killerscan");
+var killerPdfPath = AppDiscovery.Discover("killerpdf");
+appAdapters.AddRange(await KillerNotesAdapter.CreateAsync(killerNotesPath));
+var killendar = await KillendarAdapter.CreateAsync(killendarPath);
 if (killendar is not null)
 {
     appAdapters.Add(killendar);
 }
-appAdapters.AddRange(await KillerShellAdapter.CreateAsync(AppDiscovery.Discover("killershell")));
-appAdapters.AddRange(KillerBenchAdapter.Create(AppDiscovery.Discover("killerbench")));
-appAdapters.AddRange(await KillerScanAdapter.CreateAsync(AppDiscovery.Discover("killerscan")));
-appAdapters.AddRange(await KillerPdfAdapter.CreateAsync(AppDiscovery.Discover("killerpdf")));
+var killendarCreate = await KillendarAdapter.CreateAppointmentAsync(killendarPath);
+if (killendarCreate is not null) appAdapters.Add(killendarCreate);
+appAdapters.AddRange(await KillerShellAdapter.CreateAsync(killerShellPath));
+appAdapters.AddRange(await KillerScanAdapter.CreateAsync(killerScanPath));
+appAdapters.AddRange(await KillerPdfAdapter.CreateAsync(killerPdfPath));
+appAdapters.AddRange(IntegrationAdapter.Create(killerNotesPath, killendarPath, killerShellPath, killerScanPath, killerPdfPath));
 ToolRegistry.SetAdapters(appAdapters);
 string? line;
 while ((line = Console.ReadLine()) is not null)

@@ -17,7 +17,7 @@ let updateRequests = 0;
 const updateServer = createServer((request, response) => {
   updateRequests++;
   response.writeHead(200, { 'Content-Type': 'application/json' });
-  response.end(JSON.stringify({ tag_name: 'v0.2.2' }));
+  response.end(JSON.stringify({ tag_name: 'v0.3.1' }));
 });
 await new Promise(resolve => updateServer.listen(0, '127.0.0.1', resolve));
 const updateAddress = updateServer.address();
@@ -29,14 +29,12 @@ const environment = {
   KILLERMCP_FAKE_NOTES: '1',
   KILLERMCP_FAKE_KILLENDAR: '1',
   KILLERMCP_FAKE_SHELL: '1',
-  KILLERMCP_FAKE_BENCH: '1',
   KILLERMCP_FAKE_SCAN: '1',
   KILLERMCP_FAKE_PDF: '1',
   KILLERPDF_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
   KILLERSCAN_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
   KILLERSHELL_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
   KILLENDAR_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
-  KILLERBENCH_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
 };
 const child = spawn('dotnet', ['run', '--project', 'src/KillerMCP/KillerMCP.csproj', '-c', 'Release', '--no-build'], { stdio: ['pipe', 'pipe', 'inherit'], env: environment });
 let buffer = '';
@@ -63,8 +61,8 @@ function request(method, params = {}) {
 
 const initialized = await request('initialize', { protocolVersion: '2025-06-18' });
 assert.equal(initialized.serverInfo.name, 'KillerMCP');
-assert.equal(initialized.serverInfo.version, '0.2.1');
-assert.match(initialized.instructions, /KillerMCP 0\.2\.2 is available/);
+assert.equal(initialized.serverInfo.version, '0.3.0');
+assert.match(initialized.instructions, /KillerMCP 0\.3\.1 is available/);
 const listed = await request('tools/list');
 assert.deepEqual(listed.tools.map(tool => tool.name), [
   'text_statistics', 'convert_case', 'encode_base64', 'decode_base64', 'text_to_ascii_binary',
@@ -94,12 +92,15 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'list_film_stocks', 'calculate_reciprocity',
   'list_film_development_options', 'calculate_film_development',
   'killermcp_update_status',
-  'killernotes_search',
-  'killendar_agenda',
+  'killernotes_search', 'killernotes_list', 'killernotes_get', 'killernotes_groups',
+  'killernotes_tags', 'killernotes_backlinks', 'killernotes_links', 'killernotes_history',
+  'killernotes_stats', 'killernotes_create', 'killernotes_update', 'killernotes_create_group',
+  'killernotes_set_group_color', 'killernotes_set_title_color', 'killernotes_import_image',
+  'killernotes_export',
+  'killendar_agenda', 'killendar_create_appointment',
   'killershell_search_files', 'killershell_list_directory', 'killershell_file_info', 'killershell_read_text_file',
   'killershell_list_processes', 'killershell_list_services', 'killershell_read_event_log',
   'killershell_read_registry_key', 'killershell_list_drives', 'killershell_hash_file',
-  'killerbench_device_code', 'killerbench_win32_code',
   'killerscan_local_network', 'killerscan_scan_network', 'killerscan_probe_host',
   'killerscan_mac_vendor', 'killerscan_ping', 'killerscan_trace_route',
   'killerscan_diagnose_host', 'killerscan_watch_hosts', 'killerscan_speed_test',
@@ -109,6 +110,9 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killerpdf_delete_pages', 'killerpdf_move_pages', 'killerpdf_insert_blank_page',
   'killerpdf_duplicate_page', 'killerpdf_document_info', 'killerpdf_search_text',
   'killerpdf_preflight', 'killerpdf_accessibility',
+  'killer_create_pdf', 'killernotes_export_pdf', 'killerscan_export_report_pdf',
+  'killerscan_save_report_note', 'killendar_export_agenda_pdf', 'killendar_save_agenda_note',
+  'killershell_export_directory_pdf', 'killershell_save_directory_note', 'killerpdf_save_pages_as_notes',
 ]);
 const called = await request('tools/call', { name: 'text_statistics', arguments: { text: 'hello world' } });
 assert.deepEqual(JSON.parse(called.content[0].text), { characterCount: 11, wordCount: 2, lineCount: 1, byteSize: 11 });
@@ -289,10 +293,10 @@ const notes = await request('tools/call', { name: 'killernotes_search', argument
 assert.equal(JSON.parse(notes.content[0].text)[0].title, 'Subnet plans');
 const agenda = await request('tools/call', { name: 'killendar_agenda', arguments: { date: '2026-09-28', days: 7, limit: 5 } });
 assert.equal(JSON.parse(agenda.content[0].text)[0].title, 'Field visit');
+const appointment = await request('tools/call', { name: 'killendar_create_appointment', arguments: { title: 'Field visit', start: '2026-09-28T09:00', end: '2026-09-28T10:00' } });
+assert.equal(JSON.parse(appointment.content[0].text).title, 'Field visit');
 const files = await request('tools/call', { name: 'killershell_search_files', arguments: { root: resolve('.'), name: '*.txt', limit: 2 } });
 assert.equal(JSON.parse(files.content[0].text).results.length, 1);
-const deviceCode = await request('tools/call', { name: 'killerbench_device_code', arguments: { code: '31' } });
-assert.equal(JSON.parse(deviceCode.content[0].text).name, 'Device problem');
 const network = await request('tools/call', { name: 'killerscan_local_network', arguments: {} });
 assert.equal(JSON.parse(network.content[0].text).localIp, '192.0.2.10');
 const scan = await request('tools/call', { name: 'killerscan_scan_network', arguments: {} });

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>KillerMCP.Notify</AssemblyName>
+    <RootNamespace>KillerMCP.Notify</RootNamespace>
+    <ApplicationIcon>..\..\assets\KillerMCP.ico</ApplicationIcon>
+    <Version>0.3.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\mcp.png" />
+    <Resource Include="Assets\Typewriter-A602.ttf" />
+  </ItemGroup>
+</Project>

@@ -15,7 +15,7 @@ if (!existsSync(executable) || !existsSync(configurator) || !existsSync(join(dir
 const environment = { ...process.env };
 environment.KILLERMCP_UPDATE_API = 'http://127.0.0.1:1/unavailable';
 environment.KILLERMCP_UPDATE_CACHE = join(tmpdir(), `killermcp-native-package-${process.pid}.json`);
-for (const variable of ['KILLERPDF_CLI', 'KILLERNOTES_CLI', 'KILLERSCAN_CLI', 'KILLERSHELL_CLI', 'KILLENDAR_CLI', 'KILLERBENCH_CLI']) {
+for (const variable of ['KILLERPDF_CLI', 'KILLERNOTES_CLI', 'KILLERSCAN_CLI', 'KILLERSHELL_CLI', 'KILLENDAR_CLI']) {
   environment[variable] = join(directory, 'missing-app-cli');
 }
 
@@ -46,7 +46,7 @@ function request(method, params = {}) {
 try {
   const initialized = await request('initialize', { protocolVersion: '2025-06-18' });
   assert.equal(initialized.serverInfo.name, 'KillerMCP');
-  assert.equal(initialized.serverInfo.version, '0.2.1');
+  assert.equal(initialized.serverInfo.version, '0.3.0');
   const listed = await request('tools/list');
   assert.ok(listed.tools.some(tool => tool.name === 'killermcp_update_status'));
   assert.ok(listed.tools.some(tool => tool.name === 'convert_case'));
