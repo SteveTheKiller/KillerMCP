@@ -11,38 +11,38 @@
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
         <FontFamily x:Key="Wordmark">./Assets/#Typewriter - a602 (dead postman 2004)</FontFamily>
-        <SolidColorBrush x:Key="Accent" Color="#d71c1c"/>
+        <SolidColorBrush x:Key="Accent" Color="#ff2bbd"/>
         <Style x:Key="Button" TargetType="Button">
             <Setter Property="Height" Value="28"/><Setter Property="MinWidth" Value="68"/><Setter Property="Margin" Value="6,0,0,0"/>
-            <Setter Property="Padding" Value="12,2"/><Setter Property="Foreground" Value="#e0e0e0"/><Setter Property="Background" Value="#3a3a3a"/>
-            <Setter Property="BorderBrush" Value="#505050"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Padding" Value="12,2"/><Setter Property="Foreground" Value="#f4edf3"/><Setter Property="Background" Value="#171116"/>
+            <Setter Property="BorderBrush" Value="#5c4757"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
                 <Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#424242"/><Setter TargetName="Face" Property="BorderBrush" Value="#707070"/></Trigger>
-                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#242424"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#24101f"/><Setter TargetName="Face" Property="BorderBrush" Value="#ff2bbd"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#7a155f"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
                     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.35"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
         <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource Button}">
-            <Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="{StaticResource Accent}"/><Setter Property="Foreground" Value="#ef3b3b"/>
+            <Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="{StaticResource Accent}"/><Setter Property="Foreground" Value="#ff52c9"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
                 <Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#ef3b3b"/><Setter Property="Foreground" Value="#0a0a0a"/></Trigger>
-                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#3a0d0d"/><Setter Property="Foreground" Value="#ef3b3b"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#ff2bbd"/><Setter Property="Foreground" Value="#13000d"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#7a155f"/><Setter Property="Foreground" Value="#ffffff"/></Trigger>
                     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.35"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
     </Window.Resources>
-    <Border Margin="8" Background="#1c1c1c" BorderBrush="#3f3f3f" BorderThickness="1" CornerRadius="7" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+    <Border Margin="8" Background="#121012" BorderBrush="#ff2bbd" BorderThickness="1" CornerRadius="7" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
         <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect>
         <Grid ClipToBounds="True">
             <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <Border x:Name="FrameGrain" Grid.ColumnSpan="2" CornerRadius="7" IsHitTestVisible="False" Opacity="0.40"/>
-            <Border Grid.Column="0" Background="#1c1c1c" CornerRadius="7,0,0,7">
+            <Border Grid.Column="0" Background="#121012" CornerRadius="7,0,0,7">
                 <Grid>
                     <Border x:Name="SidebarGrain" CornerRadius="7,0,0,7" IsHitTestVisible="False" Opacity="0.40"/>
                     <Grid Margin="22,20,18,16">
@@ -58,8 +58,8 @@
                 </Grid>
             </Border>
             <Grid Grid.Column="1" Margin="8">
-                <Border Background="#171717" CornerRadius="6"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect></Border>
-                <Border Background="#3a3a3a" BorderBrush="#2e2e2e" BorderThickness="1" CornerRadius="6">
+                <Border Background="#090709" CornerRadius="6"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect></Border>
+                <Border Background="#171116" BorderBrush="#5c4757" BorderThickness="1" CornerRadius="6">
                   <Grid>
                     <Border x:Name="GrainLayer" CornerRadius="6" IsHitTestVisible="False" Opacity="0.52"/>
                     <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click" Panel.ZIndex="3"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><Path x:Name="CloseGlyph" Data="M 5,5 L 13,13 M 13,5 L 5,13" Stroke="#b8b8b8" StrokeThickness="1.2" HorizontalAlignment="Center" VerticalAlignment="Center" Width="18" Height="18"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Stroke" Value="#e35d6a"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
@@ -68,7 +68,7 @@
                     <TextBlock x:Name="Heading" Text="Welcome to KillerMCP Setup" FontSize="18" FontWeight="SemiBold" Margin="0,0,28,0"/>
                     <TextBlock Grid.Row="1" Margin="0,6,25,14" Foreground="#b8b8b8" TextWrapping="Wrap" LineHeight="19" Text="Install the native KillerMCP host and connect compatible agent clients on this computer."/>
                     <StackPanel Grid.Row="2">
-                        <Border Background="#292929" BorderBrush="#505050" BorderThickness="1" CornerRadius="3" Padding="11,9">
+                        <Border Background="#24101f" BorderBrush="#5c4757" BorderThickness="1" CornerRadius="3" Padding="11,9">
                             <StackPanel><TextBlock Text="Install location" FontSize="10" Foreground="#929292"/><TextBlock x:Name="InstallLocation" FontFamily="Consolas" FontSize="10.5" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel>
                         </Border>
                         <TextBlock x:Name="RuntimeStatus" Margin="1,13,0,0" FontFamily="Consolas" FontSize="10.5" TextWrapping="Wrap"/>
