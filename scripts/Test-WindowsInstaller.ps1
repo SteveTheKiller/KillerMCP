@@ -112,7 +112,7 @@ try {
     }
 
     $entry = Get-ItemProperty -LiteralPath $uninstallKey
-    if (-not (Test-Path -LiteralPath $setupCopy -PathType Leaf) -or $entry.DisplayVersion -ne '0.3.2' -or $entry.InstallLocation -ne $installed) { throw 'Installed Apps registration is incorrect.' }
+    if (-not (Test-Path -LiteralPath $setupCopy -PathType Leaf) -or $entry.DisplayVersion -ne '0.3.3' -or $entry.InstallLocation -ne $installed) { throw 'Installed Apps registration is incorrect.' }
     $codex = Get-Content -LiteralPath $codexState -Raw | ConvertFrom-Json
     if ($codex.transport.command -ne (Join-Path $installed 'KillerMCP.exe') -or $codex.transport.args.Count -ne 0) { throw 'Codex registration is incorrect.' }
     foreach ($name in $names) {

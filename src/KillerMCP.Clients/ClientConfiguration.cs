@@ -52,9 +52,29 @@ public static class ClientConfiguration
             FindOnPath(OperatingSystem.IsWindows() ? "gemini.exe" : "gemini", values) is not null || Directory.Exists(Path.Combine(profile, ".gemini")));
         Add(clients, values, "KILLERMCP_TEST_WINDSURF_CONFIG", "Windsurf", Path.Combine(profile, ".codeium", "windsurf", "mcp_config.json"),
             FindOnPath(OperatingSystem.IsWindows() ? "windsurf.exe" : "windsurf", values) is not null || Directory.Exists(Path.Combine(profile, ".codeium", "windsurf")) || File.Exists(Path.Combine(local, "Programs", "Windsurf", "Windsurf.exe")));
-        Add(clients, values, "KILLERMCP_TEST_CLAUDE_DESKTOP_CONFIG", "Claude Desktop", Path.Combine(roaming, "Claude", "claude_desktop_config.json"),
-            Directory.Exists(Path.Combine(roaming, "Claude")) || File.Exists(Path.Combine(local, "Programs", "Claude", "Claude.exe")) || File.Exists(Path.Combine(local, "AnthropicClaude", "claude.exe")) || File.Exists(Path.Combine(programFiles, "Claude", "Claude.exe")));
+        string ordinaryClaudeDirectory = Path.Combine(roaming, "Claude");
+        string ordinaryClaudeConfig = Path.Combine(ordinaryClaudeDirectory, "claude_desktop_config.json");
+        string? packagedClaudeConfig = FindPackagedClaudeConfig(local);
+        string claudeConfig = packagedClaudeConfig is not null && (File.Exists(packagedClaudeConfig) || !Directory.Exists(ordinaryClaudeDirectory))
+            ? packagedClaudeConfig : ordinaryClaudeConfig;
+        Add(clients, values, "KILLERMCP_TEST_CLAUDE_DESKTOP_CONFIG", "Claude Desktop", claudeConfig,
+            Directory.Exists(ordinaryClaudeDirectory) || File.Exists(Path.Combine(local, "Programs", "Claude", "Claude.exe")) || File.Exists(Path.Combine(local, "AnthropicClaude", "claude.exe")) || File.Exists(Path.Combine(programFiles, "Claude", "Claude.exe")) || packagedClaudeConfig is not null);
         return clients;
+    }
+
+    private static string? FindPackagedClaudeConfig(string local)
+    {
+        try
+        {
+            string packages = Path.Combine(local, "Packages");
+            if (!Directory.Exists(packages)) return null;
+            string[] configurations = Directory.EnumerateDirectories(packages, "Claude_*", SearchOption.TopDirectoryOnly)
+                .Select(directory => Path.Combine(directory, "LocalCache", "Roaming", "Claude", "claude_desktop_config.json"))
+                .ToArray();
+            return configurations.FirstOrDefault(File.Exists) ?? configurations.FirstOrDefault();
+        }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
     }
 
     private static string RegisterCodex(string codex, string executablePath)

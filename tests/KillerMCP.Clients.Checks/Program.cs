@@ -73,6 +73,25 @@ try
     File.WriteAllText(malformed, "{");
     Throws<InvalidDataException>(() => ClientRegistration.RegisterJsonClient(malformed, "Cursor", executable));
 
+    var packagedClaude = Path.Combine(root, "packaged-claude");
+    var packagedConfiguration = Path.Combine(packagedClaude, "Packages", "Claude_pzs8sxrjxfjjc", "LocalCache", "Roaming", "Claude", "claude_desktop_config.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(packagedConfiguration)!);
+    File.WriteAllText(packagedConfiguration, "{}");
+    var packagedEnvironment = new Dictionary<string, string?>
+    {
+        ["PATH"] = string.Empty,
+        ["USERPROFILE"] = root,
+        ["APPDATA"] = Path.Combine(root, "uninitialized-roaming"),
+        ["LOCALAPPDATA"] = packagedClaude,
+        ["ProgramFiles"] = root
+    };
+    var packagedClient = ClientConfiguration.JsonClients(packagedEnvironment).Single(client => client.Name == "Claude Desktop");
+    Equal(packagedConfiguration, packagedClient.Path);
+    Directory.CreateDirectory(Path.Combine(root, "uninitialized-roaming", "Claude"));
+    Equal(packagedConfiguration, ClientConfiguration.JsonClients(packagedEnvironment).Single(client => client.Name == "Claude Desktop").Path);
+    File.Delete(packagedConfiguration);
+    Equal(Path.Combine(root, "uninitialized-roaming", "Claude", "claude_desktop_config.json"), ClientConfiguration.JsonClients(packagedEnvironment).Single(client => client.Name == "Claude Desktop").Path);
+
     var clientNames = new[] { "CLAUDE", "CURSOR", "COPILOT", "GEMINI", "WINDSURF", "CLAUDE_DESKTOP" };
     var codexState = Path.Combine(root, "codex-state.json");
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_CODEX_STATE", codexState);
