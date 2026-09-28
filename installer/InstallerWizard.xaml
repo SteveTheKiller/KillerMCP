@@ -52,14 +52,17 @@
                         <TextBlock><TextBlock.Effect><DropShadowEffect Color="Black" BlurRadius="3" ShadowDepth="1" Direction="270" Opacity="0.65"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="25"/><Run Text="MCP" FontFamily="{StaticResource Wordmark}" FontSize="25" Foreground="{StaticResource Accent}"/></TextBlock>
                         <TextBlock x:Name="VersionLabel" FontFamily="Consolas" FontSize="9.5" Foreground="#a0a0a0" Margin="1,2,0,0"/>
                     </StackPanel>
-                    <TextBlock Grid.Row="2" Margin="1,22,5,0" TextWrapping="Wrap" Foreground="#d0d0d0" LineHeight="17" Text="One connection for KillerTools and every supported Killer app."/>
+                    <StackPanel Grid.Row="2" Margin="1,22,5,0">
+                        <TextBlock TextWrapping="Wrap" Foreground="#d0d0d0" LineHeight="17" Text="One connection for KillerTools and every supported Killer app:"/>
+                        <TextBlock Margin="0,9,0,0" Foreground="#d0d0d0" LineHeight="18" Text="KillerPDF&#10;KillerNotes&#10;KillerScan&#10;KillerShell&#10;Killendar"/>
+                    </StackPanel>
                     <TextBlock Grid.Row="3" FontFamily="Consolas" FontSize="10" Foreground="#a0a0a0" Text="© 2026 Steve the Killer"/>
                     </Grid>
                 </Grid>
             </Border>
             <Grid Grid.Column="1" Margin="8">
                 <Border Background="#000000" CornerRadius="6"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect></Border>
-                <Border Background="#000000" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="6">
+                <Border Background="#0a0a0a" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="6">
                   <Grid>
                     <Border x:Name="GrainLayer" CornerRadius="6" IsHitTestVisible="False" Opacity="0"/>
                     <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click" Panel.ZIndex="3"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><Path x:Name="CloseGlyph" Data="M 5,5 L 13,13 M 13,5 L 5,13" Stroke="#b8b8b8" StrokeThickness="1.2" HorizontalAlignment="Center" VerticalAlignment="Center" Width="18" Height="18"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Stroke" Value="#ff2bbd"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
