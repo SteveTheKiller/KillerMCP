@@ -47,7 +47,7 @@
     <Border Margin="10" Background="#000000" BorderBrush="#2a2a2a" BorderThickness="1" CornerRadius="7">
         <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="3" Direction="270" Opacity="0.72"/></Border.Effect>
         <Grid ClipToBounds="True">
-            <Border x:Name="GrainLayer" CornerRadius="7" IsHitTestVisible="False" Opacity="0.46"/>
+            <Border x:Name="GrainLayer" CornerRadius="7" IsHitTestVisible="False" Opacity="0"/>
             <Grid>
                 <Grid.RowDefinitions><RowDefinition Height="38"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Border Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">

@@ -41,10 +41,10 @@
         <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect>
         <Grid ClipToBounds="True">
             <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-            <Border x:Name="FrameGrain" Grid.ColumnSpan="2" CornerRadius="7" IsHitTestVisible="False" Opacity="0.40"/>
+            <Border x:Name="FrameGrain" Grid.ColumnSpan="2" CornerRadius="7" IsHitTestVisible="False" Opacity="0"/>
             <Border Grid.Column="0" Background="#000000" CornerRadius="7,0,0,7">
                 <Grid>
-                    <Border x:Name="SidebarGrain" CornerRadius="7,0,0,7" IsHitTestVisible="False" Opacity="0.40"/>
+                    <Border x:Name="SidebarGrain" CornerRadius="7,0,0,7" IsHitTestVisible="False" Opacity="0"/>
                     <Grid Margin="22,20,18,16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Image Source="Assets/mcp.png" Width="72" Height="72" HorizontalAlignment="Left" RenderOptions.BitmapScalingMode="HighQuality"><Image.Effect><DropShadowEffect Color="Black" BlurRadius="5" ShadowDepth="2" Opacity="0.9"/></Image.Effect></Image>
@@ -61,7 +61,7 @@
                 <Border Background="#000000" CornerRadius="6"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect></Border>
                 <Border Background="#000000" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="6">
                   <Grid>
-                    <Border x:Name="GrainLayer" CornerRadius="6" IsHitTestVisible="False" Opacity="0.52"/>
+                    <Border x:Name="GrainLayer" CornerRadius="6" IsHitTestVisible="False" Opacity="0"/>
                     <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click" Panel.ZIndex="3"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><Path x:Name="CloseGlyph" Data="M 5,5 L 13,13 M 13,5 L 5,13" Stroke="#b8b8b8" StrokeThickness="1.2" HorizontalAlignment="Center" VerticalAlignment="Center" Width="18" Height="18"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Stroke" Value="#ff2bbd"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
                   <Grid Margin="24,22,24,16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
