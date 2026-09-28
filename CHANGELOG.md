@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
+- Removed the extra ASP.NET Core runtime requirement from the Windows host.
 - Registered Claude Desktop through the configuration file used by Windows packaged installations.
 
 ## [0.3.2] - 2026-09-28
