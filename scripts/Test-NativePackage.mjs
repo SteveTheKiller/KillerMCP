@@ -46,7 +46,7 @@ function request(method, params = {}) {
 try {
   const initialized = await request('initialize', { protocolVersion: '2025-06-18' });
   assert.equal(initialized.serverInfo.name, 'KillerMCP');
-  assert.equal(initialized.serverInfo.version, '0.3.3');
+  assert.equal(initialized.serverInfo.version, '0.3.4');
   const listed = await request('tools/list');
   assert.ok(listed.tools.some(tool => tool.name === 'killermcp_update_status'));
   assert.ok(listed.tools.some(tool => tool.name === 'convert_case'));

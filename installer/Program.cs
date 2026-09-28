@@ -37,8 +37,16 @@ namespace KillerMCP.Setup
             bool silent = args.Any(value => value.Equals("/silent", StringComparison.OrdinalIgnoreCase));
             bool notify = args.Any(value => value.Equals("/notify", StringComparison.OrdinalIgnoreCase));
             bool uninstall = args.Any(value => value.Equals("/uninstall", StringComparison.OrdinalIgnoreCase));
+            bool checkUpdate = args.Any(value => value.Equals("/check-update", StringComparison.OrdinalIgnoreCase));
             try
             {
+                int waitIndex = Array.FindIndex(args, value => value.Equals("/wait-for", StringComparison.OrdinalIgnoreCase));
+                if (waitIndex >= 0 && waitIndex + 1 < args.Length && int.TryParse(args[waitIndex + 1], out int parentId))
+                {
+                    try { using (Process parent = Process.GetProcessById(parentId)) parent.WaitForExit(30000); }
+                    catch (ArgumentException) { }
+                }
+                if (checkUpdate) return UpdateBootstrap.Check(destination);
                 if (uninstall)
                 {
                     if (!silent && !SetupDialog.ConfirmUninstall()) return 0;
@@ -104,6 +112,7 @@ namespace KillerMCP.Setup
                 }
                 if (movedPrevious) DeleteVerifiedInstallation(backup, allowLegacy: true);
                 RegisterInstalledApp(destination);
+                UpdateBootstrap.Register(destination);
             }
             finally
             {
@@ -309,6 +318,7 @@ namespace KillerMCP.Setup
         private static void RemoveInstalledApp(string destination)
         {
             string setup = SetupCopyPath(destination);
+            UpdateBootstrap.Unregister(destination);
             Registry.CurrentUser.DeleteSubKeyTree(RegistryPath(destination), false);
             if (!File.Exists(setup)) return;
             if (!Path.GetFullPath(Assembly.GetExecutingAssembly().Location).Equals(Path.GetFullPath(setup), StringComparison.OrdinalIgnoreCase)) { File.Delete(setup); return; }
@@ -330,7 +340,7 @@ namespace KillerMCP.Setup
             using (var stream = File.OpenRead(path))
             using (var algorithm = SHA256.Create()) return BitConverter.ToString(algorithm.ComputeHash(stream)).Replace("-", string.Empty);
         }
-        private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
+        internal static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
 
         private sealed class Manifest { public Dictionary<string, ManifestFile>? files { get; set; } }
         private sealed class ManifestFile { public long bytes { get; set; } public string? sha256 { get; set; } }

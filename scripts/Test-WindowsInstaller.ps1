@@ -104,7 +104,7 @@ try {
         Start-Sleep -Milliseconds 500
         if ($runningHost.HasExited) { throw 'The installed MCP host exited before the active-process reinstall test.' }
         $reinstall = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
-        if ($reinstall.ExitCode -ne 0 -or -not $runningHost.HasExited) { throw 'Reinstall did not close and replace the active MCP host.' }
+        if ($reinstall.ExitCode -ne 0 -or -not $runningHost.HasExited) { throw "Reinstall did not close and replace the active MCP host (exit $($reinstall.ExitCode), host exited $($runningHost.HasExited))." }
     }
     finally {
         if (-not $runningHost.HasExited) { $runningHost.Kill() }
@@ -112,7 +112,10 @@ try {
     }
 
     $entry = Get-ItemProperty -LiteralPath $uninstallKey
-    if (-not (Test-Path -LiteralPath $setupCopy -PathType Leaf) -or $entry.DisplayVersion -ne '0.3.3' -or $entry.InstallLocation -ne $installed) { throw 'Installed Apps registration is incorrect.' }
+    if (-not (Test-Path -LiteralPath $setupCopy -PathType Leaf) -or $entry.DisplayVersion -ne '0.3.4' -or $entry.InstallLocation -ne $installed) { throw 'Installed Apps registration is incorrect.' }
+    $updateRunKey = 'HKCU:\Software\KillerMCP\InstallerTests\' + (Split-Path $scratch -Leaf) + '\Run'
+    $updateCommand = (Get-ItemProperty -LiteralPath $updateRunKey).'KillerMCP Update Check'
+    if ($updateCommand -ne ('"' + $setupCopy + '" /check-update')) { throw 'Independent update check was not registered.' }
     $codex = Get-Content -LiteralPath $codexState -Raw | ConvertFrom-Json
     if ($codex.transport.command -ne (Join-Path $installed 'KillerMCP.exe') -or $codex.transport.args.Count -ne 0) { throw 'Codex registration is incorrect.' }
     foreach ($name in $names) {
@@ -163,6 +166,7 @@ try {
 
     $uninstall = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
     if ($uninstall.ExitCode -ne 0 -or (Test-Path -LiteralPath $installed) -or (Test-Path -LiteralPath $setupCopy) -or (Test-Path -LiteralPath $uninstallKey) -or (Test-Path -LiteralPath $codexState)) { throw 'KillerMCP uninstall did not remove its files and registrations.' }
+    if ((Get-ItemProperty -LiteralPath $updateRunKey -ErrorAction SilentlyContinue).'KillerMCP Update Check') { throw 'KillerMCP uninstall kept its update check.' }
     foreach ($name in $names) {
         $configuration = Get-Content -LiteralPath ([Environment]::GetEnvironmentVariable("KILLERMCP_TEST_${name}_CONFIG")) -Raw | ConvertFrom-Json
         if ($configuration.preservedSetting -ne 'keep' -or $null -ne $configuration.mcpServers.killermcp) { throw "$name was not safely disconnected." }

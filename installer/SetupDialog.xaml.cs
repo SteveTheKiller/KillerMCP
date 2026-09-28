@@ -10,13 +10,13 @@ namespace KillerMCP.Setup
     {
         private bool _confirmed;
 
-        private SetupDialog(string heading, string detail, bool confirmation)
+        private SetupDialog(string heading, string detail, bool confirmation, string? confirmLabel = null)
         {
             InitializeComponent();
             HeadingText.Text = heading;
             DetailText.Text = detail;
             CancelButton.Visibility = confirmation ? Visibility.Visible : Visibility.Collapsed;
-            OkButton.Content = confirmation ? "Uninstall" : "OK";
+            OkButton.Content = confirmLabel ?? (confirmation ? "Uninstall" : "OK");
             NoticeGlyph.Text = confirmation ? "!" : "×";
             NoticeGlyph.Foreground = new SolidColorBrush(confirmation
                 ? Color.FromRgb(255, 190, 80)
@@ -37,6 +37,20 @@ namespace KillerMCP.Setup
             dialog.ShowDialog();
             bool result = dialog._confirmed;
             application?.Shutdown();
+            return result;
+        }
+
+        internal static bool ConfirmUpdate(string version)
+        {
+            var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            var dialog = new SetupDialog(
+                "KillerMCP " + version + " is ready",
+                "A signed update is available. Install it now to refresh the local MCP host and agent connections.",
+                confirmation: true,
+                confirmLabel: "Update");
+            dialog.ShowDialog();
+            bool result = dialog._confirmed;
+            application.Shutdown();
             return result;
         }
 
