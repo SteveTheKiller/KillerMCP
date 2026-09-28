@@ -43,7 +43,7 @@ namespace KillerMCP.Setup
         {
             bool ready = Program.HasRuntime10(_isolated);
             RuntimeStatus.Text = ready ? ".NET 10 runtime detected" : ".NET 10 runtime required before installation";
-            RuntimeStatus.Foreground = new SolidColorBrush(ready ? System.Windows.Media.Color.FromRgb(30, 165, 76) : System.Windows.Media.Color.FromRgb(255, 190, 80));
+            RuntimeStatus.Foreground = ready ? (Brush)FindResource("Accent") : new SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 190, 80));
             RuntimeLink.Visibility = ready ? Visibility.Collapsed : Visibility.Visible;
             InstallButton.IsEnabled = ready;
         }
@@ -74,7 +74,7 @@ namespace KillerMCP.Setup
                 _installed = true;
                 Heading.Text = "KillerMCP is ready";
                 Status.Text = "Installed and connected. Open a new agent chat to use the tools.";
-                Status.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(30, 165, 76));
+                Status.Foreground = (Brush)FindResource("Accent");
                 InstallButton.Content = "Done";
                 InstallButton.IsEnabled = true;
                 UninstallButton.Visibility = Visibility.Collapsed;
@@ -100,7 +100,7 @@ namespace KillerMCP.Setup
                 _installed = true;
                 Heading.Text = "KillerMCP was uninstalled";
                 Status.Text = "KillerMCP and its agent connections were removed.";
-                Status.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(30, 165, 76));
+                Status.Foreground = (Brush)FindResource("Accent");
                 InstallButton.Content = "Done";
                 InstallButton.IsEnabled = true;
                 UninstallButton.Visibility = Visibility.Collapsed;

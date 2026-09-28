@@ -4,7 +4,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="KillerMCP Setup" Width="650" Height="390" WindowStartupLocation="CenterScreen"
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
-        FontFamily="Segoe UI" Foreground="#e0e0e0" TextOptions.TextFormattingMode="Display"
+        FontFamily="Segoe UI" Foreground="#ffffff" TextOptions.TextFormattingMode="Display"
         TextOptions.TextRenderingMode="ClearType" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0" CornerRadius="7" GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
@@ -14,13 +14,13 @@
         <SolidColorBrush x:Key="Accent" Color="#ff2bbd"/>
         <Style x:Key="Button" TargetType="Button">
             <Setter Property="Height" Value="28"/><Setter Property="MinWidth" Value="68"/><Setter Property="Margin" Value="6,0,0,0"/>
-            <Setter Property="Padding" Value="12,2"/><Setter Property="Foreground" Value="#f4edf3"/><Setter Property="Background" Value="#171116"/>
-            <Setter Property="BorderBrush" Value="#5c4757"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Padding" Value="12,2"/><Setter Property="Foreground" Value="#ffffff"/><Setter Property="Background" Value="#0a0a0a"/>
+            <Setter Property="BorderBrush" Value="#2a2a2a"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
                 <Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#24101f"/><Setter TargetName="Face" Property="BorderBrush" Value="#ff2bbd"/></Trigger>
-                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#7a155f"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#333333"/><Setter TargetName="Face" Property="BorderBrush" Value="#aaaaaa"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#4a103a"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
                     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.35"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
@@ -30,19 +30,19 @@
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
                 <Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#ff2bbd"/><Setter Property="Foreground" Value="#13000d"/></Trigger>
-                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#7a155f"/><Setter Property="Foreground" Value="#ffffff"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#ff2bbd"/><Setter Property="Foreground" Value="#0a0a0a"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#4a103a"/><Setter Property="Foreground" Value="#ffffff"/></Trigger>
                     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.35"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
     </Window.Resources>
-    <Border Margin="8" Background="#121012" BorderBrush="#ff2bbd" BorderThickness="1" CornerRadius="7" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+    <Border Margin="8" Background="#000000" BorderBrush="#2a2a2a" BorderThickness="1" CornerRadius="7" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
         <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect>
         <Grid ClipToBounds="True">
             <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <Border x:Name="FrameGrain" Grid.ColumnSpan="2" CornerRadius="7" IsHitTestVisible="False" Opacity="0.40"/>
-            <Border Grid.Column="0" Background="#121012" CornerRadius="7,0,0,7">
+            <Border Grid.Column="0" Background="#000000" CornerRadius="7,0,0,7">
                 <Grid>
                     <Border x:Name="SidebarGrain" CornerRadius="7,0,0,7" IsHitTestVisible="False" Opacity="0.40"/>
                     <Grid Margin="22,20,18,16">
@@ -58,22 +58,22 @@
                 </Grid>
             </Border>
             <Grid Grid.Column="1" Margin="8">
-                <Border Background="#090709" CornerRadius="6"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect></Border>
-                <Border Background="#171116" BorderBrush="#5c4757" BorderThickness="1" CornerRadius="6">
+                <Border Background="#000000" CornerRadius="6"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect></Border>
+                <Border Background="#000000" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="6">
                   <Grid>
                     <Border x:Name="GrainLayer" CornerRadius="6" IsHitTestVisible="False" Opacity="0.52"/>
-                    <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click" Panel.ZIndex="3"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><Path x:Name="CloseGlyph" Data="M 5,5 L 13,13 M 13,5 L 5,13" Stroke="#b8b8b8" StrokeThickness="1.2" HorizontalAlignment="Center" VerticalAlignment="Center" Width="18" Height="18"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Stroke" Value="#e35d6a"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
+                    <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click" Panel.ZIndex="3"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><Path x:Name="CloseGlyph" Data="M 5,5 L 13,13 M 13,5 L 5,13" Stroke="#b8b8b8" StrokeThickness="1.2" HorizontalAlignment="Center" VerticalAlignment="Center" Width="18" Height="18"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Stroke" Value="#ff2bbd"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
                   <Grid Margin="24,22,24,16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <TextBlock x:Name="Heading" Text="Welcome to KillerMCP Setup" FontSize="18" FontWeight="SemiBold" Margin="0,0,28,0"/>
                     <TextBlock Grid.Row="1" Margin="0,6,25,14" Foreground="#b8b8b8" TextWrapping="Wrap" LineHeight="19" Text="Install the native KillerMCP host and connect compatible agent clients on this computer."/>
                     <StackPanel Grid.Row="2">
-                        <Border Background="#24101f" BorderBrush="#5c4757" BorderThickness="1" CornerRadius="3" Padding="11,9">
+                        <Border Background="#0a0a0a" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="3" Padding="11,9">
                             <StackPanel><TextBlock Text="Install location" FontSize="10" Foreground="#929292"/><TextBlock x:Name="InstallLocation" FontFamily="Consolas" FontSize="10.5" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel>
                         </Border>
                         <TextBlock x:Name="RuntimeStatus" Margin="1,13,0,0" FontFamily="Consolas" FontSize="10.5" TextWrapping="Wrap"/>
                         <TextBlock Margin="1,10,0,0" Foreground="#cfcfcf" TextWrapping="Wrap" Text="Setup installs the verified runtime, detects supported Killer apps, and registers one shared MCP connection."/>
-                        <TextBlock x:Name="RuntimeLink" Margin="1,12,0,0" Foreground="#ef6a6a" TextDecorations="Underline" Cursor="Hand" MouseLeftButtonDown="RuntimeLink_Click" Text="Download .NET 10 runtime"/>
+                        <TextBlock x:Name="RuntimeLink" Margin="1,12,0,0" Foreground="#ff52c9" TextDecorations="Underline" Cursor="Hand" MouseLeftButtonDown="RuntimeLink_Click" Text="Download .NET 10 runtime"/>
                     </StackPanel>
                     <TextBlock x:Name="Status" Grid.Row="3" Margin="0,8,0,10" FontFamily="Consolas" FontSize="10.5" Foreground="#aaaaaa" Text="Ready to install" TextWrapping="Wrap"/>
                     <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">

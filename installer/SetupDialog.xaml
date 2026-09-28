@@ -5,7 +5,7 @@
         Title="KillerMCP Setup" Width="390" SizeToContent="Height"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize"
         AllowsTransparency="True" Background="Transparent" ShowInTaskbar="False"
-        FontFamily="Segoe UI" Foreground="#e0e0e0" UseLayoutRounding="True" SnapsToDevicePixels="True">
+        FontFamily="Segoe UI" Foreground="#ffffff" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0" CornerRadius="7"
                             GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
@@ -16,7 +16,7 @@
         <Style x:Key="SurfaceButton" TargetType="Button">
             <Setter Property="Height" Value="28"/><Setter Property="MinWidth" Value="80"/>
             <Setter Property="Padding" Value="12,2"/><Setter Property="Foreground" Value="#e0e0e0"/>
-            <Setter Property="Background" Value="#171116"/><Setter Property="BorderBrush" Value="#5c4757"/>
+            <Setter Property="Background" Value="#0a0a0a"/><Setter Property="BorderBrush" Value="#2a2a2a"/>
             <Setter Property="BorderThickness" Value="1"/><Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
@@ -25,8 +25,8 @@
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#24101f"/><Setter TargetName="Face" Property="BorderBrush" Value="#ff2bbd"/></Trigger>
-                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#7a155f"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#333333"/><Setter TargetName="Face" Property="BorderBrush" Value="#aaaaaa"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#4a103a"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
@@ -38,13 +38,13 @@
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#ff2bbd"/><Setter Property="Foreground" Value="#13000d"/></Trigger>
-                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#7a155f"/><Setter Property="Foreground" Value="#ffffff"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#ff2bbd"/><Setter Property="Foreground" Value="#0a0a0a"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#4a103a"/><Setter Property="Foreground" Value="#ffffff"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
     </Window.Resources>
-    <Border Margin="10" Background="#121012" BorderBrush="#ff2bbd" BorderThickness="1" CornerRadius="7">
+    <Border Margin="10" Background="#000000" BorderBrush="#2a2a2a" BorderThickness="1" CornerRadius="7">
         <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="3" Direction="270" Opacity="0.72"/></Border.Effect>
         <Grid ClipToBounds="True">
             <Border x:Name="GrainLayer" CornerRadius="7" IsHitTestVisible="False" Opacity="0.46"/>
@@ -57,13 +57,13 @@
                             <TextBlock VerticalAlignment="Center" FontFamily="{StaticResource Wordmark}" FontSize="15"><Run Text="Killer"/><Run Text="MCP" FontSize="19.5" Foreground="{StaticResource Accent}"/></TextBlock>
                         </StackPanel>
                         <Button Width="28" Height="28" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click">
-                            <Button.Template><ControlTemplate TargetType="Button"><Border x:Name="Face" Background="Transparent" CornerRadius="3"><TextBlock Text="&#x2715;" Foreground="#b8b8b8" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#c42b1c"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template>
+                            <Button.Template><ControlTemplate TargetType="Button"><Border x:Name="Face" Background="Transparent" CornerRadius="3"><TextBlock Text="&#x2715;" Foreground="#b8b8b8" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#333333"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template>
                         </Button>
                     </Grid>
                 </Border>
                 <Grid Grid.Row="1" Margin="24,18,24,18">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Border x:Name="NoticeRing" Width="28" Height="28" CornerRadius="14" BorderThickness="2" Background="#24101f" HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <Border x:Name="NoticeRing" Width="28" Height="28" CornerRadius="14" BorderThickness="2" Background="#0a0a0a" HorizontalAlignment="Left" VerticalAlignment="Top">
                         <TextBlock x:Name="NoticeGlyph" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="17" FontWeight="SemiBold"/>
                     </Border>
                     <StackPanel Grid.Column="1">

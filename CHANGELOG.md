@@ -8,7 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
-- Matched the Windows installer and setup dialogs to KillerMCP's Black/Fuchsia theme.
+- Matched the Windows installer and setup dialogs to black surfaces with fuchsia accents.
 
 ## [0.3.0] - 2026-09-28
 
