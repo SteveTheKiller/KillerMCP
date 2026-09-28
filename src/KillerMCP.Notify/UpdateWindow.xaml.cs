@@ -12,7 +12,7 @@ namespace KillerMCP.Notify;
 public partial class UpdateWindow : Window
 {
     private readonly string _installedVersion;
-    private readonly string _latestVersion;
+    private readonly string? _latestVersion;
     private readonly string _installerUrl;
     private readonly string _releaseUrl;
     private readonly string _behavior;
@@ -25,24 +25,33 @@ public partial class UpdateWindow : Window
         InitializeComponent();
         GrainLayer.Background = CreateGrain();
         string[] args = Environment.GetCommandLineArgs();
-        _installedVersion = Value(args, "--installed") ?? "unknown";
-        _latestVersion = Value(args, "--latest") ?? Value(args, "--version") ?? "unknown";
+        _installedVersion = Value(args, "--installed") ?? InstalledVersion();
+        _latestVersion = Value(args, "--latest") ?? Value(args, "--version");
         _installerUrl = Value(args, "--installer") ?? "https://github.com/SteveTheKiller/KillerMCP/releases/latest/download/KillerMCP-Setup.exe";
         _releaseUrl = Value(args, "--release") ?? "https://github.com/SteveTheKiller/KillerMCP/releases/latest";
         _behavior = Value(args, "--behavior") ?? "check";
         _updated = Has(args, "--updated");
         SelectBehavior(ReadBehavior());
         _loadingPreferences = false;
-        VersionText.Text = $"v{_installedVersion}  →  v{_latestVersion}";
+        VersionText.Text = _latestVersion is null ? $"Installed: v{_installedVersion}" : $"v{_installedVersion}  →  v{_latestVersion}";
         StatusText.Text = "Signed Windows installer from GitHub Releases";
         if (_updated) ShowSuccess();
+        else if (_latestVersion is null)
+        {
+            HeadingText.Text = "KillerMCP updates";
+            BodyText.Text = "Open a new agent chat to check for a newer release.";
+            StatusText.Text = "No update has been selected";
+            UpdateButton.Visibility = Visibility.Collapsed;
+            LaterButton.Content = "Close";
+            LaterButton.Margin = new Thickness(0);
+        }
         else if (_behavior is "download" or "install") Visibility = Visibility.Hidden;
         Loaded += Window_Loaded;
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        if (_updated || _behavior == "check") return;
+        if (_updated || _latestVersion is null || _behavior == "check") return;
         try
         {
             _downloadedInstaller = await UpdateInstaller.DownloadAndVerifyAsync(_latestVersion, _installerUrl);
@@ -72,7 +81,7 @@ public partial class UpdateWindow : Window
 
     private async void Update_Click(object sender, RoutedEventArgs e)
     {
-        if (_updated) { Close(); return; }
+        if (_updated || _latestVersion is null) { Close(); return; }
         UpdateButton.IsEnabled = false;
         try
         {
@@ -153,6 +162,13 @@ public partial class UpdateWindow : Window
     }
 
     private static bool Has(string[] args, string name) => args.Any(value => value.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+    private static string InstalledVersion()
+    {
+        string hostPath = Path.Combine(AppContext.BaseDirectory, "KillerMCP.exe");
+        string path = File.Exists(hostPath) ? hostPath : Environment.ProcessPath!;
+        return FileVersionInfo.GetVersionInfo(path).ProductVersion?.Split('+')[0] ?? "0.0.0";
+    }
 
     private static string? Value(string[] args, string name)
     {
