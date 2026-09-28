@@ -19,9 +19,14 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1" || Environ
         Console.Write("Cisco Systems");
         return;
     }
-    if (arguments.Length > 0 && arguments[0] is "/scan" or "/probe")
+    if (arguments.Length > 0 && arguments[0] == "/scan")
     {
-        Console.Write("[{\"ip\":\"192.0.2.10\"}]");
+        Console.Write("[{\"IpAddress\":\"192.0.2.10\",\"Hostname\":\"workstation.example\",\"MacAddress\":\"00:11:22:33:44:55\",\"Vendor\":\"Example Devices\",\"DeviceType\":\"Computer\",\"OpenPortsDisplay\":\"80, 443\"},{\"IpAddress\":\"192.0.2.1\",\"Hostname\":\"gateway.example\",\"MacAddress\":\"00:11:22:33:44:01\",\"Vendor\":\"Example Networks\",\"DeviceType\":\"Router\",\"OpenPortsDisplay\":\"443\"}]");
+        return;
+    }
+    if (arguments.Length > 0 && arguments[0] == "/probe")
+    {
+        Console.Write("[{\"IpAddress\":\"192.0.2.20\",\"Hostname\":\"probe.example\"}]");
         return;
     }
     if (arguments.Length > 0 && arguments[0] is "/ping" or "/trace" or "/diagnose" or "/watch" or "/speedtest")
@@ -244,7 +249,7 @@ try
     var networkResult = await scanByName["killerscan_local_network"].CallAsync(empty.RootElement, CancellationToken.None);
     Equal("192.0.2.10", JsonDocument.Parse(networkResult.Text).RootElement.GetProperty("localIp").GetString());
     var scanResult = await scanByName["killerscan_scan_network"].CallAsync(empty.RootElement, CancellationToken.None);
-    Equal(1, JsonDocument.Parse(scanResult.Text).RootElement.GetArrayLength());
+    Equal(2, JsonDocument.Parse(scanResult.Text).RootElement.GetArrayLength());
     using var probe = JsonDocument.Parse("{\"target\":\"192.0.2.20\"}");
     Equal(false, (await scanByName["killerscan_probe_host"].CallAsync(probe.RootElement, CancellationToken.None)).IsError);
     using var vendor = JsonDocument.Parse("{\"mac\":\"00:00:0C:00:00:00\"}");

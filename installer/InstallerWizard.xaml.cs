@@ -72,8 +72,8 @@ namespace KillerMCP.Setup
                 Status.Text = "Verifying the native runtime and connecting compatible agent clients...";
                 await Task.WhenAll(Task.Run(() => Program.Install(_destination)), Task.Delay(700));
                 _installed = true;
-                Heading.Text = "KillerMCP is ready";
-                Status.Text = "Installed and connected. Open a new agent chat to use the tools.";
+                Heading.Text = "KillerMCP is installed";
+                Status.Text = "Installed. Restart your agent client, then start a new chat to load KillerMCP tools.";
                 Status.Foreground = (Brush)FindResource("Accent");
                 InstallButton.Content = "Done";
                 InstallButton.IsEnabled = true;

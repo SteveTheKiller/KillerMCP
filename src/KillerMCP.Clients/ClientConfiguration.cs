@@ -23,11 +23,11 @@ public static class ClientConfiguration
         {
             if (remove)
             {
-                if (ClientRegistration.RemoveJsonClient(client.Path, client.Name, executablePath, client.IncludeStdioType)) messages.Add($"KillerMCP was removed from {client.Name}.");
+                if (ClientRegistration.RemoveJsonClient(client.Path, client.Name, executablePath, client.IncludeStdioType, client.Name == "Claude Desktop" ? "KillerMCP" : "killermcp")) messages.Add($"KillerMCP was removed from {client.Name}.");
             }
             else
             {
-                messages.Add(ClientRegistration.RegisterJsonClient(client.Path, client.Name, executablePath, client.IncludeStdioType));
+                messages.Add(ClientRegistration.RegisterJsonClient(client.Path, client.Name, executablePath, client.IncludeStdioType, client.Name == "Claude Desktop" ? "KillerMCP" : "killermcp"));
             }
         }
         return messages;

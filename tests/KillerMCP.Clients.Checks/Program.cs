@@ -96,11 +96,13 @@ try
     {
         var path = environment[$"KILLERMCP_TEST_{name}_CONFIG"]!;
         Equal("keep", Read(path)["preservedSetting"]!.GetValue<string>());
-        Equal(executable, Read(path)["mcpServers"]!["killermcp"]!["command"]!.GetValue<string>());
+        var serverName = name == "CLAUDE_DESKTOP" ? "KillerMCP" : "killermcp";
+        Equal(executable, Read(path)["mcpServers"]![serverName]!["command"]!.GetValue<string>());
+        if (name == "CLAUDE_DESKTOP") Equal(false, Read(path)["mcpServers"]!.AsObject().ContainsKey("killermcp"));
     }
     Equal(7, ClientConfiguration.RemoveAll(executable, environment).Count);
     Equal(false, File.Exists(codexState));
-    foreach (var name in clientNames) Equal(false, Read(environment[$"KILLERMCP_TEST_{name}_CONFIG"]!)["mcpServers"]!.AsObject().ContainsKey("killermcp"));
+    foreach (var name in clientNames) Equal(false, Read(environment[$"KILLERMCP_TEST_{name}_CONFIG"]!)["mcpServers"]!.AsObject().ContainsKey(name == "CLAUDE_DESKTOP" ? "KillerMCP" : "killermcp"));
     Console.WriteLine("PASS native KillerMCP client registration");
 }
 finally

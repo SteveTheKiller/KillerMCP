@@ -17,7 +17,7 @@ let updateRequests = 0;
 const updateServer = createServer((request, response) => {
   updateRequests++;
   response.writeHead(200, { 'Content-Type': 'application/json' });
-  response.end(JSON.stringify({ tag_name: 'v0.3.2' }));
+  response.end(JSON.stringify({ tag_name: 'v0.3.3' }));
 });
 await new Promise(resolve => updateServer.listen(0, '127.0.0.1', resolve));
 const updateAddress = updateServer.address();
@@ -61,8 +61,8 @@ function request(method, params = {}) {
 
 const initialized = await request('initialize', { protocolVersion: '2025-06-18' });
 assert.equal(initialized.serverInfo.name, 'KillerMCP');
-assert.equal(initialized.serverInfo.version, '0.3.1');
-assert.match(initialized.instructions, /KillerMCP 0\.3\.2 is available/);
+assert.equal(initialized.serverInfo.version, '0.3.2');
+assert.match(initialized.instructions, /KillerMCP 0\.3\.3 is available/);
 const listed = await request('tools/list');
 assert.deepEqual(listed.tools.map(tool => tool.name), [
   'text_statistics', 'convert_case', 'encode_base64', 'decode_base64', 'text_to_ascii_binary',
@@ -300,7 +300,7 @@ assert.equal(JSON.parse(files.content[0].text).results.length, 1);
 const network = await request('tools/call', { name: 'killerscan_local_network', arguments: {} });
 assert.equal(JSON.parse(network.content[0].text).localIp, '192.0.2.10');
 const scan = await request('tools/call', { name: 'killerscan_scan_network', arguments: {} });
-assert.equal(JSON.parse(scan.content[0].text)[0].ip, '192.0.2.10');
+assert.equal(JSON.parse(scan.content[0].text)[0].IpAddress, '192.0.2.10');
 const preflight = await request('tools/call', { name: 'killerpdf_preflight', arguments: { path: pdfSourceOne, profile: 'print' } });
 assert.equal(JSON.parse(preflight.content[0].text).valid, true);
 const mergedPath = join(updateDirectory, 'merged.pdf');

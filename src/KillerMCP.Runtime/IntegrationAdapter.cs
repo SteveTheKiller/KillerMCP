@@ -15,7 +15,7 @@ public static class IntegrationAdapter
             Tool("killer_create_pdf", "Create a new PDF from HTML or plain text. Use this to turn agent output or data from a Killer app into a PDF.", ContentPdfSchema(), CreatePdf),
         };
         if (IsFile(notes)) tools.Add(Tool("killernotes_export_pdf", "Export one KillerNotes note directly to a new PDF.", IdOutputSchema(), (input, token) => NotePdf(notes!, input, token)));
-        if (IsFile(scan)) tools.Add(Tool("killerscan_export_report_pdf", "Scan a network and create a PDF report with a device table and topology diagram.", ScanOutputSchema(), (input, token) => ScanPdf(scan!, input, token)));
+        if (IsFile(scan)) tools.Add(Tool("killerscan_export_report_pdf", "Scan a network and create a PDF report with a device table.", ScanOutputSchema(), (input, token) => ScanPdf(scan!, input, token)));
         if (IsFile(scan) && IsFile(notes)) tools.Add(Tool("killerscan_save_report_note", "Scan a network and save the device report as a new KillerNotes note.", ScanNoteSchema(), (input, token) => ScanNote(scan!, notes!, input, token)));
         if (IsFile(calendar) && AppVersion.IsAtLeast(calendar!, new Version(1, 1, 4))) tools.Add(Tool("killendar_export_agenda_pdf", "Export a Killendar agenda to a new PDF.", AgendaOutputSchema(), (input, token) => AgendaPdf(calendar!, input, token)));
         if (IsFile(calendar) && AppVersion.IsAtLeast(calendar!, new Version(1, 1, 4)) && IsFile(notes)) tools.Add(Tool("killendar_save_agenda_note", "Save a Killendar agenda as a new KillerNotes note.", AgendaNoteSchema(), (input, token) => AgendaNote(calendar!, notes!, input, token)));
@@ -184,22 +184,29 @@ public static class IntegrationAdapter
     private static string ScanReport(JsonElement root, string? target)
     {
         var rows = Rows(root);
-        var shown = rows.Take(24).ToArray();
-        var svg = new StringBuilder("<h2>Topology</h2><svg viewBox=\"0 0 800 400\" role=\"img\" aria-label=\"Network topology\" style=\"width:100%;height:auto;border:1px solid #999\">");
-        svg.Append("<circle cx=\"400\" cy=\"200\" r=\"48\" fill=\"#111\"/><text x=\"400\" y=\"205\" text-anchor=\"middle\" fill=\"white\" font-size=\"12\">").Append(WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(target) ? "Local network" : target)).Append("</text>");
-        for (var index = 0; index < shown.Length; index++)
+        var scope = string.IsNullOrWhiteSpace(target) ? "Local network" : target;
+        return Document("KillerScan Network Report", $"<p>Scan target: {WebUtility.HtmlEncode(scope)}</p><p>{rows.Length} {(rows.Length == 1 ? "device" : "devices")} found.</p><h2>Devices</h2>{ScanTable(rows)}");
+    }
+
+    private static string ScanTable(JsonElement[] rows)
+    {
+        var columns = new (string Key, string Label)[]
         {
-            var angle = Math.PI * 2 * index / Math.Max(1, shown.Length);
-            var x = 400 + Math.Cos(angle) * 300;
-            var y = 200 + Math.Sin(angle) * 145;
-            var label = DeviceLabel(shown[index], index + 1);
-            svg.Append("<line x1=\"400\" y1=\"200\" x2=\"").Append(x.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)).Append("\" y2=\"").Append(y.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)).Append("\" stroke=\"#777\"/>");
-            svg.Append("<circle cx=\"").Append(x.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)).Append("\" cy=\"").Append(y.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)).Append("\" r=\"18\" fill=\"#b0007a\"/>");
-            svg.Append("<text x=\"").Append(x.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)).Append("\" y=\"").Append((y + 34).ToString("F1", System.Globalization.CultureInfo.InvariantCulture)).Append("\" text-anchor=\"middle\" font-size=\"10\">").Append(WebUtility.HtmlEncode(label)).Append("</text>");
+            ("IpAddress", "IP address"), ("Hostname", "Hostname"), ("MacAddress", "MAC address"),
+            ("Vendor", "Vendor"), ("DeviceType", "Type"), ("OpenPortsDisplay", "Open ports")
+        };
+        var table = new StringBuilder("<table><thead><tr>");
+        foreach (var column in columns) table.Append("<th>").Append(column.Label).Append("</th>");
+        table.Append("</tr></thead><tbody>");
+        foreach (var row in rows)
+        {
+            table.Append("<tr>");
+            foreach (var column in columns)
+                table.Append("<td>").Append(WebUtility.HtmlEncode(row.ValueKind == JsonValueKind.Object && row.TryGetProperty(column.Key, out var value) ? Display(value) : string.Empty)).Append("</td>");
+            table.Append("</tr>");
         }
-        svg.Append("</svg>");
-        if (rows.Length > shown.Length) svg.Append("<p>Topology shows the first ").Append(shown.Length).Append(" devices. The table includes all results.</p>");
-        return Document("KillerScan Network Report", $"<p>{rows.Length} device(s)</p>{svg}<h2>Devices</h2>{JsonTable(rows)}");
+        table.Append("</tbody></table>");
+        return table.ToString();
     }
 
     private static string JsonTable(JsonElement[] rows)
@@ -219,7 +226,6 @@ public static class IntegrationAdapter
     }
 
     private static JsonElement[] Rows(JsonElement root) => root.ValueKind == JsonValueKind.Array ? root.EnumerateArray().ToArray() : root.TryGetProperty("entries", out var entries) && entries.ValueKind == JsonValueKind.Array ? entries.EnumerateArray().ToArray() : [root];
-    private static string DeviceLabel(JsonElement row, int fallback) { if (row.ValueKind == JsonValueKind.Object) foreach (var name in new[] { "ip", "ipAddress", "hostname", "hostName", "name" }) if (row.TryGetProperty(name, out var value)) return Display(value); return "Device " + fallback; }
 
     private static string MarkdownReport(JsonElement root)
     {

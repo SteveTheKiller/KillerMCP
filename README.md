@@ -11,6 +11,8 @@ KillerMCP is a native .NET 10 host. It detects supported Killer apps, exposes th
 
 [Download the signed KillerMCP installer](https://github.com/SteveTheKiller/KillerMCP/releases/latest/download/KillerMCP-Setup.exe), run setup, then open a new agent chat. Setup checks for the .NET 10 runtime and registers KillerMCP with Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when those clients are found.
 
+Fully quit and reopen an agent client after setup or upgrade, then start a new chat. In Claude Desktop, KillerMCP appears under Settings > Developer as a running local server and under Connectors as a desktop connector. Cowork can use that local connection without a separate plugin.
+
 Once connected, ask naturally:
 
 - `killer domain search example.com`

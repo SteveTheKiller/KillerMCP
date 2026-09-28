@@ -9,29 +9,40 @@ public static class ClientRegistration
     private const string ServerName = "killermcp";
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
-    public static string RegisterJsonClient(string configurationPath, string clientName, string executablePath, bool includeStdioType = false)
+    public static string RegisterJsonClient(string configurationPath, string clientName, string executablePath, bool includeStdioType = false, string serverName = ServerName)
     {
         ValidateArguments(configurationPath, clientName, executablePath);
         var root = ReadRoot(configurationPath, clientName);
         var servers = ReadServers(root, clientName);
-        if (servers.TryGetPropertyValue(ServerName, out var existing))
+        if (serverName != ServerName && servers.TryGetPropertyValue(ServerName, out var oldEntry))
+        {
+            if (!Matches(oldEntry, executablePath, includeStdioType) && !MatchesLegacy(oldEntry, executablePath, includeStdioType))
+                throw new InvalidOperationException($"{clientName} has a different {ServerName} connection. Its settings were left unchanged.");
+            if (servers.ContainsKey(serverName) && !Matches(servers[serverName], executablePath, includeStdioType))
+                throw new InvalidOperationException($"{clientName} has a different {serverName} connection. Its settings were left unchanged.");
+            servers.Remove(ServerName);
+            servers[serverName] = Registration(executablePath, includeStdioType);
+            Write(configurationPath, root);
+            return $"KillerMCP was renamed in {clientName}.";
+        }
+        if (servers.TryGetPropertyValue(serverName, out var existing))
         {
             if (Matches(existing, executablePath, includeStdioType))
             {
                 return $"{clientName} already has the correct KillerMCP connection.";
             }
             if (!MatchesLegacy(existing, executablePath, includeStdioType)) throw new InvalidOperationException($"{clientName} already has a different killermcp connection. Its settings were left unchanged.");
-            servers[ServerName] = Registration(executablePath, includeStdioType);
+            servers[serverName] = Registration(executablePath, includeStdioType);
             Write(configurationPath, root);
             return $"KillerMCP was upgraded in {clientName}.";
         }
 
-        servers[ServerName] = Registration(executablePath, includeStdioType);
+        servers[serverName] = Registration(executablePath, includeStdioType);
         Write(configurationPath, root);
         return $"KillerMCP was added to {clientName}.";
     }
 
-    public static bool RemoveJsonClient(string configurationPath, string clientName, string executablePath, bool includeStdioType = false)
+    public static bool RemoveJsonClient(string configurationPath, string clientName, string executablePath, bool includeStdioType = false, string serverName = ServerName)
     {
         ValidateArguments(configurationPath, clientName, executablePath);
         if (!File.Exists(configurationPath))
@@ -41,7 +52,7 @@ public static class ClientRegistration
 
         var root = ReadRoot(configurationPath, clientName);
         var servers = ReadServers(root, clientName);
-        if (!servers.TryGetPropertyValue(ServerName, out var existing))
+        if (!servers.TryGetPropertyValue(serverName, out var existing))
         {
             return false;
         }
@@ -51,7 +62,7 @@ public static class ClientRegistration
             throw new InvalidOperationException($"{clientName} has a different killermcp connection. It was left unchanged.");
         }
 
-        servers.Remove(ServerName);
+        servers.Remove(serverName);
         Write(configurationPath, root);
         return true;
     }
