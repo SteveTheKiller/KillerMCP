@@ -18,6 +18,25 @@ The agent chooses a matching available tool from the request and context. `kille
 
 The installed native .NET 10 host includes all 81 KillerTools website utilities from the pinned KillerTools engine, plus tools supplied by supported Killer apps found on the computer. It runs as one local stdio MCP connection.
 
+### Tool permissions and visibility
+
+KillerMCP exposes each action as a separate MCP tool with its own name, description, and JSON input schema. The schema tells a client which arguments the action accepts. It does not, by itself, say whether the action only reads data or can have side effects. KillerMCP does not currently provide machine-readable MCP permission annotations such as `readOnlyHint` or `destructiveHint`. Clients must use the tool descriptions and their own approval controls to decide when to call a tool.
+
+The 81 KillerTools utilities include calculations, lookups, and generated output. Some lookups contact public services, and local utilities can read files or private values. App tools add other effects:
+
+- KillerShell tools inspect local files and Windows information. They cannot run commands or modify the system.
+- KillerScan probes the local network. Its speed test can transfer substantial data.
+- KillerPDF tools can create new files and send pages to a printer. They refuse to overwrite existing output paths.
+- KillerNotes tools can create and change notes and export files.
+- Killendar can create an appointment in the open, unlocked app.
+- Cross app workflows can create PDFs, notes, or page images.
+
+Tool availability depends on the supported apps installed on the computer. Review a client's proposed tool call, especially its arguments, before approving access to sensitive data, network targets, printers, or local output paths.
+
+### Tool call history
+
+KillerMCP does not currently write a separate audit log of tool invocations on Windows. A client may display calls in its conversation history, but that depends on the client and is not a KillerMCP audit trail. The server's update cache and notification state are not tool call logs.
+
 ## KillerTools utilities
 
 ### Network, Windows, email, and technician references

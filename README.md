@@ -38,6 +38,8 @@ Cross app workflows can export a KillerNotes note, KillerScan network report, Ki
 
 See [What KillerMCP can do](docs/CAPABILITIES.md) for the complete tool guide, examples, limits, and data handling details.
 
+For tool permissions and invocation logging, see [Tool permissions and visibility](docs/CAPABILITIES.md#tool-permissions-and-visibility) and [Tool call history](docs/CAPABILITIES.md#tool-call-history).
+
 ## Build from source
 
 Clone this repository with its pinned KillerTools engine source:
