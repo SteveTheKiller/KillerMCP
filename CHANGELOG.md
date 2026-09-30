@@ -10,6 +10,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 - Labeled tool effects for MCP clients and recorded local tool call history without arguments or results.
 
+### Fixed
+
+- Allowed upgrades when a trusted prior setup file is newer than its stale uninstall entry.
+
 ## [0.3.4] - 2026-09-28
 
 ### Fixed

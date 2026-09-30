@@ -112,7 +112,7 @@ namespace KillerMCP.Setup
             return client;
         }
 
-        private static bool HasTrustedSignature(string path)
+        internal static bool HasTrustedSignature(string path)
         {
             var file = new WinTrustFileInfo(path);
             IntPtr filePointer = Marshal.AllocHGlobal(Marshal.SizeOf<WinTrustFileInfo>());

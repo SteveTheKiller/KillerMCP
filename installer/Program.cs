@@ -7,6 +7,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Web.Script.Serialization;
 
@@ -304,15 +305,27 @@ namespace KillerMCP.Setup
                 if (!string.Equals(information.ProductName, "KillerMCP-Setup", StringComparison.Ordinal)) return false;
                 if (key == null) return legacy;
                 return Path.GetFullPath(key.GetValue("InstallLocation") as string ?? string.Empty).Equals(Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(key.GetValue("UninstallString") as string, Quote(setup) + " /uninstall", StringComparison.OrdinalIgnoreCase)
                     && Version.TryParse(key.GetValue("DisplayVersion") as string, out Version? registeredVersion)
                     && Version.TryParse(CurrentVersion, out Version? currentVersion)
                     && registeredVersion < currentVersion
                     && Version.TryParse(information.FileVersion, out Version? setupVersion)
                     && setupVersion.Major == currentVersion.Major
                     && setupVersion.Minor == currentVersion.Minor
-                    && setupVersion.Build == currentVersion.Build;
+                    && setupVersion.Revision == 0
+                    && setupVersion.Build >= registeredVersion.Build
+                    && setupVersion.Build <= currentVersion.Build
+                    && (setupVersion.Build == currentVersion.Build || IsTrustedPreviousSetup(setup));
             }
             catch { return false; }
+        }
+
+        private static bool IsTrustedPreviousSetup(string setup)
+        {
+            if (!UpdateBootstrap.HasTrustedSignature(setup)) return false;
+            using (var certificate = new X509Certificate2(X509Certificate.CreateFromSignedFile(setup)))
+                return string.Equals(certificate.GetNameInfo(X509NameType.SimpleName, false),
+                    "Open Source Developer Stephen Riley", StringComparison.Ordinal);
         }
 
         private static void RemoveInstalledApp(string destination)

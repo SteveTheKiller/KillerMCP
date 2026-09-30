@@ -1,4 +1,4 @@
-param([string]$Installer = '')
+param([string]$Installer = '', [string]$PreviousSignedSetup = '', [string]$PreviousSignedInstall = '')
 
 $ErrorActionPreference = 'Stop'
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) { throw 'The KillerMCP Windows installer test requires Windows.' }
@@ -171,6 +171,29 @@ try {
     foreach ($name in $names) {
         $configuration = Get-Content -LiteralPath ([Environment]::GetEnvironmentVariable("KILLERMCP_TEST_${name}_CONFIG")) -Raw | ConvertFrom-Json
         if ($configuration.preservedSetting -ne 'keep' -or $null -ne $configuration.mcpServers.killermcp) { throw "$name was not safely disconnected." }
+    }
+    if ($PreviousSignedSetup -and $PreviousSignedInstall) {
+        if ((Get-AuthenticodeSignature -LiteralPath $PreviousSignedSetup).Status -ne 'Valid') { throw 'The previous setup fixture is not signed and trusted.' }
+        New-Item -ItemType Directory -Path $installed -Force | Out-Null
+        Copy-Item -Path (Join-Path $PreviousSignedInstall '*') -Destination $installed -Recurse
+        Copy-Item -LiteralPath $PreviousSignedSetup -Destination $setupCopy
+        New-Item -Path $uninstallKey -Force | Out-Null
+        New-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value '0.3.1' -PropertyType String -Force | Out-Null
+        New-ItemProperty -Path $uninstallKey -Name InstallLocation -Value $installed -PropertyType String -Force | Out-Null
+        New-ItemProperty -Path $uninstallKey -Name UninstallString -Value ('"' + $setupCopy + '" /uninstall') -PropertyType String -Force | Out-Null
+        New-ItemProperty -Path $uninstallKey -Name SetupSha256 -Value 'STALE' -PropertyType String -Force | Out-Null
+        $previousSetupBytes = [IO.File]::ReadAllBytes($setupCopy)
+        try {
+            [IO.File]::AppendAllText($setupCopy, 'modified')
+            $blocked = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+            if ($blocked.ExitCode -eq 0) { throw 'Upgrade accepted a modified signed previous setup.' }
+        }
+        finally { [IO.File]::WriteAllBytes($setupCopy, $previousSetupBytes) }
+        $upgrade = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        if ($upgrade.ExitCode -ne 0 -or (Get-ItemProperty -LiteralPath $uninstallKey).DisplayVersion -ne '0.3.5') { throw 'Upgrade from a signed previous setup with a stale uninstall entry failed.' }
+        $uninstall = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+        if ($uninstall.ExitCode -ne 0 -or (Test-Path -LiteralPath $installed) -or (Test-Path -LiteralPath $setupCopy)) { throw 'Previous setup upgrade fixture did not uninstall cleanly.' }
+        Write-Output 'Signed previous setup and stale uninstall entry upgrade passed.'
     }
     $success = $true
     Write-Output 'KillerMCP runtime prerequisite, legacy migration, install, reinstall, seven client registrations, MCP calls, and uninstall passed.'
