@@ -23,13 +23,14 @@ $installed = Join-Path $scratch 'Installed'
 $codexState = Join-Path $scratch 'codex-state.json'
 $previous = @{}
 $names = @('CLAUDE', 'CURSOR', 'COPILOT', 'GEMINI', 'WINDSURF', 'CLAUDE_DESKTOP')
-$variables = @('KILLERMCP_TEST_INSTALL_ROOT', 'KILLERMCP_TEST_RUNTIME', 'KILLERMCP_FAKE_CODEX_STATE', 'CODEX_CLI_PATH') + ($names | ForEach-Object { "KILLERMCP_TEST_${_}_CONFIG" })
+$variables = @('KILLERMCP_TEST_INSTALL_ROOT', 'KILLERMCP_TEST_RUNTIME', 'KILLERMCP_FAKE_CODEX_STATE', 'KILLERMCP_TOOL_CALL_LOG', 'CODEX_CLI_PATH') + ($names | ForEach-Object { "KILLERMCP_TEST_${_}_CONFIG" })
 foreach ($name in $variables) { $previous[$name] = [Environment]::GetEnvironmentVariable($name) }
 $success = $false
 
 try {
     New-Item -ItemType Directory -Path $scratch -Force | Out-Null
     $env:KILLERMCP_TEST_INSTALL_ROOT = $installed
+    $env:KILLERMCP_TOOL_CALL_LOG = Join-Path $scratch 'tool-calls.jsonl'
     $env:KILLERMCP_FAKE_CODEX_STATE = $codexState
     $env:CODEX_CLI_PATH = $fakeCodex
     foreach ($name in $names) {
@@ -112,7 +113,7 @@ try {
     }
 
     $entry = Get-ItemProperty -LiteralPath $uninstallKey
-    if (-not (Test-Path -LiteralPath $setupCopy -PathType Leaf) -or $entry.DisplayVersion -ne '0.3.4' -or $entry.InstallLocation -ne $installed) { throw 'Installed Apps registration is incorrect.' }
+    if (-not (Test-Path -LiteralPath $setupCopy -PathType Leaf) -or $entry.DisplayVersion -ne '0.3.5' -or $entry.InstallLocation -ne $installed) { throw 'Installed Apps registration is incorrect.' }
     $updateRunKey = 'HKCU:\Software\KillerMCP\InstallerTests\' + (Split-Path $scratch -Leaf) + '\Run'
     $updateCommand = (Get-ItemProperty -LiteralPath $updateRunKey).'KillerMCP Update Check'
     if ($updateCommand -ne ('"' + $setupCopy + '" /check-update')) { throw 'Independent update check was not registered.' }

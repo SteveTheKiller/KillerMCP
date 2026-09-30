@@ -20,7 +20,7 @@ The installed native .NET 10 host includes all 81 KillerTools website utilities 
 
 ### Tool permissions and visibility
 
-KillerMCP exposes each action as a separate MCP tool with its own name, description, and JSON input schema. The schema tells a client which arguments the action accepts. It does not, by itself, say whether the action only reads data or can have side effects. KillerMCP does not currently provide machine-readable MCP permission annotations such as `readOnlyHint` or `destructiveHint`. Clients must use the tool descriptions and their own approval controls to decide when to call a tool.
+KillerMCP exposes each action as a separate MCP tool with its own name, description, and JSON input schema. The schema tells a client which arguments the action accepts. Each tool also includes `readOnlyHint`, `destructiveHint`, and `openWorldHint` annotations so clients can distinguish reads, changes, and external interaction. These are advisory metadata. Client approval behavior still depends on the client, and users should review the tool arguments before approving a call.
 
 The 81 KillerTools utilities include calculations, lookups, and generated output. Some lookups contact public services, and local utilities can read files or private values. App tools add other effects:
 
@@ -35,7 +35,7 @@ Tool availability depends on the supported apps installed on the computer. Revie
 
 ### Tool call history
 
-KillerMCP does not currently write a separate audit log of tool invocations on Windows. A client may display calls in its conversation history, but that depends on the client and is not a KillerMCP audit trail. The server's update cache and notification state are not tool call logs.
+On Windows, KillerMCP writes a local JSON Lines log at `%LOCALAPPDATA%\KillerMCP\tool-calls.jsonl`. Each entry records the UTC time, tool name, and whether the call started, completed, or returned an error. Arguments and results are not logged, so passwords, note content, and other tool data are not copied into this file. A call interrupted by a crash may have only a `started` entry. The file is stored under the current user's profile. KillerMCP does not upload it or delete it automatically.
 
 ## KillerTools utilities
 

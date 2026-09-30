@@ -17,7 +17,7 @@ let updateRequests = 0;
 const updateServer = createServer((request, response) => {
   updateRequests++;
   response.writeHead(200, { 'Content-Type': 'application/json' });
-  response.end(JSON.stringify({ tag_name: 'v0.3.5' }));
+  response.end(JSON.stringify({ tag_name: 'v0.3.6' }));
 });
 await new Promise(resolve => updateServer.listen(0, '127.0.0.1', resolve));
 const updateAddress = updateServer.address();
@@ -25,6 +25,7 @@ const environment = {
   ...process.env,
   KILLERMCP_UPDATE_API: `http://127.0.0.1:${updateAddress.port}/latest`,
   KILLERMCP_UPDATE_CACHE: join(updateDirectory, 'status.json'),
+  KILLERMCP_TOOL_CALL_LOG: join(updateDirectory, 'tool-calls.jsonl'),
   KILLERNOTES_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
   KILLERMCP_FAKE_NOTES: '1',
   KILLERMCP_FAKE_KILLENDAR: '1',
@@ -61,9 +62,21 @@ function request(method, params = {}) {
 
 const initialized = await request('initialize', { protocolVersion: '2025-06-18' });
 assert.equal(initialized.serverInfo.name, 'KillerMCP');
-assert.equal(initialized.serverInfo.version, '0.3.4');
-assert.match(initialized.instructions, /KillerMCP 0\.3\.5 is available/);
+assert.equal(initialized.serverInfo.version, '0.3.5');
+assert.match(initialized.instructions, /KillerMCP 0\.3\.6 is available/);
 const listed = await request('tools/list');
+for (const tool of listed.tools) {
+  assert.equal(typeof tool.annotations.readOnlyHint, 'boolean', tool.name);
+  assert.equal(typeof tool.annotations.destructiveHint, 'boolean', tool.name);
+  assert.equal(typeof tool.annotations.openWorldHint, 'boolean', tool.name);
+}
+const safety = name => listed.tools.find(tool => tool.name === name).annotations;
+assert.equal(safety('killershell_read_event_log').readOnlyHint, true);
+assert.equal(safety('killerscan_scan_network').readOnlyHint, false);
+assert.equal(safety('killerscan_scan_network').openWorldHint, true);
+assert.equal(safety('killernotes_update').destructiveHint, true);
+assert.equal(safety('killendar_create_appointment').destructiveHint, false);
+assert.equal(safety('killerpdf_print').destructiveHint, true);
 assert.deepEqual(listed.tools.map(tool => tool.name), [
   'text_statistics', 'convert_case', 'encode_base64', 'decode_base64', 'text_to_ascii_binary',
   'ascii_binary_to_text', 'draw_ascii_text', 'search_emoji', 'arabic_to_roman', 'roman_to_arabic', 'text_to_nato_alphabet',
@@ -307,6 +320,11 @@ const mergedPath = join(updateDirectory, 'merged.pdf');
 const merged = await request('tools/call', { name: 'killerpdf_merge', arguments: { inputs: [pdfSourceOne, pdfSourceTwo], output: mergedPath } });
 assert.equal(JSON.parse(merged.content[0].text).inputCount, 2);
 assert.equal((await readFile(mergedPath, 'utf8')), 'fixture pdf');
+const calls = (await readFile(environment.KILLERMCP_TOOL_CALL_LOG, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+assert.ok(calls.some(call => call.tool === 'text_statistics' && call.outcome === 'ok'));
+assert.ok(calls.some(call => call.tool === 'killermcp_update_status' && call.outcome === 'error'));
+assert.ok(calls.some(call => call.tool === 'killendar_create_appointment' && call.outcome === 'ok'));
+assert.ok(calls.every(call => !JSON.stringify(call).includes('Secret123!')));
 child.stdin.end();
 updateServer.close();
 await rm(updateDirectory, { recursive: true, force: true });

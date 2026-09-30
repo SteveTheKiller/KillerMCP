@@ -173,11 +173,15 @@ static class ToolRegistry
         Tool("killermcp_update_status", "Check the installed KillerMCP version and whether a newer signed Windows installer is available.", new { }, []),
     ];
 
+    private static readonly HashSet<string> CoreToolNames = new(CoreTools.Select(tool =>
+        (string)tool.GetType().GetProperty("name")!.GetValue(tool)!), StringComparer.Ordinal);
+
     public static object[] Tools => CoreTools.Concat(Adapters.Values.Select(adapter => new
     {
         name = adapter.Tool.Name,
         description = adapter.Tool.Description,
         inputSchema = adapter.Tool.InputSchema,
+        annotations = ToolSafety.For(adapter.Tool.Name),
     })).ToArray<object>();
 
     public static void SetAdapters(IEnumerable<AppAdapter> adapters) => Adapters = adapters.ToDictionary(adapter => adapter.Tool.Name, StringComparer.Ordinal);
@@ -186,11 +190,15 @@ static class ToolRegistry
     {
         var name = parameters.GetProperty("name").GetString();
         var arguments = parameters.GetProperty("arguments");
+        var loggedName = name is not null && (CoreToolNames.Contains(name) || Adapters.ContainsKey(name))
+            ? name : "(unknown)";
+        ToolCallLog.Record(loggedName, "started");
         try
         {
             if (name is not null && Adapters.TryGetValue(name, out var adapter))
             {
                 var adapterResult = adapter.CallAsync(arguments, CancellationToken.None).GetAwaiter().GetResult();
+                ToolCallLog.Record(loggedName, adapterResult.IsError ? "error" : "ok");
                 return adapterResult.IsError
                     ? new { content = new[] { new { type = "text", text = adapterResult.Text } }, isError = true }
                     : new { content = new[] { new { type = "text", text = adapterResult.Text } }, isError = false };
@@ -295,16 +303,18 @@ static class ToolRegistry
             "killermcp_update_status" => UpdateStatus(arguments),
             _ => throw new InvalidOperationException($"Unknown tool: {name}"),
             };
+            ToolCallLog.Record(loggedName, "ok");
             return new { content = new[] { new { type = "text", text = JsonSerializer.Serialize(value, json) } } };
         }
         catch (ToolCallException exception)
         {
+            ToolCallLog.Record(loggedName, "error");
             return new { content = new[] { new { type = "text", text = exception.Message } }, isError = true };
         }
     }
 
     private static object Tool(string name, string description, object properties, string[] required) =>
-        new { name, description, inputSchema = new { type = "object", properties, required, additionalProperties = false } };
+        new { name, description, inputSchema = new { type = "object", properties, required, additionalProperties = false }, annotations = ToolSafety.For(name) };
     private static object LookupTool(string name, string description) =>
         Tool(name, description, new { query = StringSchema(), limit = new { type = "integer", minimum = 1, maximum = 20, @default = 10 }, locale = EnumSchema("en", "bn", "cs", "de", "es", "fr", "hu", "it", "ja", "kk", "no", "pl", "pt", "ru", "tr", "uk", "vi", "zh", "zh-TW") }, ["query"]);
     private static object StringSchema() => new { type = "string", maxLength = 4096 };
