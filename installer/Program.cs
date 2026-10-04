@@ -50,6 +50,7 @@ namespace KillerMCP.Setup
                 if (checkUpdate) return UpdateBootstrap.Check(destination);
                 if (uninstall)
                 {
+                    TaskbarIdentity.UseUninstall();
                     if (!silent && !SetupDialog.ConfirmUninstall()) return 0;
                     Uninstall(destination, removeRegistration: true);
                     RemoveInstalledApp(destination);
@@ -62,6 +63,7 @@ namespace KillerMCP.Setup
                     if (notify) NotifySuccess(destination);
                     return 0;
                 }
+                TaskbarIdentity.UseInstaller();
                 return InstallerWizard.Run(destination, isolated);
             }
             catch (Exception exception)

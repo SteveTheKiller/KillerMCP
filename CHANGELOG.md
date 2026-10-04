@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 ### Fixed
 
 - Restored the textured finish on the setup sidebar, setup frame and uninstall and error dialogs.
+- The installer and uninstaller have their own taskbar buttons, labeled "KillerMCP Installer" and "Uninstall KillerMCP", with the app icon.
 
 ## [0.3.5] - 2026-09-30
 

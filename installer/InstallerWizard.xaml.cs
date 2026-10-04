@@ -20,6 +20,7 @@ namespace KillerMCP.Setup
             _destination = destination;
             _isolated = isolated;
             InitializeComponent();
+            TaskbarIdentity.Track(this);
             VersionLabel.Text = "SETUP " + Program.CurrentVersion;
             InstallLocation.Text = destination;
             ImageBrush grain = CreateGrain();

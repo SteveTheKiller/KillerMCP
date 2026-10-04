@@ -13,6 +13,7 @@ namespace KillerMCP.Setup
         private SetupDialog(string heading, string detail, bool confirmation, string? confirmLabel = null)
         {
             InitializeComponent();
+            TaskbarIdentity.Track(this);
             HeadingText.Text = heading;
             DetailText.Text = detail;
             CancelButton.Visibility = confirmation ? Visibility.Visible : Visibility.Collapsed;
