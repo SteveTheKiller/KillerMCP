@@ -62,7 +62,7 @@ function request(method, params = {}) {
 
 const initialized = await request('initialize', { protocolVersion: '2025-06-18' });
 assert.equal(initialized.serverInfo.name, 'KillerMCP');
-assert.equal(initialized.serverInfo.version, '0.3.5');
+assert.equal(initialized.serverInfo.version, '0.3.6');
 assert.match(initialized.instructions, /KillerMCP 0\.3\.6 is available/);
 const listed = await request('tools/list');
 for (const tool of listed.tools) {
