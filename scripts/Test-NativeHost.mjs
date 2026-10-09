@@ -39,6 +39,7 @@ const environment = {
   KILLERBENCH_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
   KILLERMCP_FAKE_BENCH: '1',
   KILLERMCP_STATE_DIR: join(updateDirectory, 'state'),
+  KILLERBENCH_STATE_DIR: join(updateDirectory, 'bench-state'),
 };
 const child = spawn('dotnet', ['run', '--project', 'src/KillerMCP/KillerMCP.csproj', '-c', 'Release', '--no-build'], { stdio: ['pipe', 'pipe', 'inherit'], env: environment });
 let buffer = '';

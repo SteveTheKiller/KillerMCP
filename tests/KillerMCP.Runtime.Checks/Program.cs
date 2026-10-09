@@ -370,6 +370,7 @@ try
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", "1");
     var stateDir = Path.Combine(root, "state");
     Environment.SetEnvironmentVariable("KILLERMCP_STATE_DIR", stateDir);
+    Environment.SetEnvironmentVariable("KILLERBENCH_STATE_DIR", Path.Combine(root, "bench-state"));
     var clock = DateTimeOffset.UtcNow;
     var confirmations = new List<KillerBenchConfirmation>();
     var approve = false;
@@ -457,6 +458,8 @@ try
     Equal("Uncertain", Finished(await Bench("killerbench_repair_execute", new { token = failing.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_EXIT", null);
     Equal("dns_cache_flush", KillerBenchSettings.ReadLock()!.Action);
+    Equal("Flush one hostname from the DNS cache", KillerBenchSettings.ReadLock()!.Title);
+    Equal(true, File.Exists(Path.Combine(root, "bench-state", "agent-repair-lock.json")));
     Equal(false, Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } })).GetProperty("canExecute").GetBoolean());
     Equal("Recovered", Finished(await Bench("killerbench_repair_recover", new { action = "dns_cache_flush", options = new { host = "missing.example" } })).GetProperty("data").GetProperty("outcome").GetString());
     Equal(true, KillerBenchSettings.ClearLock());
@@ -482,6 +485,7 @@ try
     Equal(42, JsonDocument.Parse((await slowAdapters["killerbench_save_scan_note"].CallAsync(note.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("id").GetInt32());
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW", null);
     Environment.SetEnvironmentVariable("KILLERMCP_STATE_DIR", null);
+    Environment.SetEnvironmentVariable("KILLERBENCH_STATE_DIR", null);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", null);
     Console.WriteLine("PASS native KillerBench adapters and repair guardrails");
 }

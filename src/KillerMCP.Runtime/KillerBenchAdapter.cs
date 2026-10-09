@@ -86,7 +86,7 @@ public static partial class KillerBenchAdapter
                 Tool("killerbench_check", "Run one read-only KillerBench check on this PC and return its JSON evidence. Nothing is changed. dns needs host, tcp needs host and port, volume_capacity and storage need drive, printer_queue needs queues. Long checks return a jobId to poll with killerbench_job.", CheckSchema(), Check),
                 Tool("killerbench_scan", "Run a read-only KillerBench diagnosis of this PC, either every area or the selected scopes from killerbench_diagnostic_scopes. Nothing is repaired. A full scan takes minutes, so this usually returns a jobId to poll with killerbench_job.", Schema(new JsonObject { ["scopes"] = new JsonObject { ["type"] = "array", ["items"] = Text(64), ["maxItems"] = 16 } }), Scan),
                 Tool("killerbench_job", "Get the status or finished result of a KillerBench job started by another killerbench tool.", Schema(new JsonObject { ["jobId"] = Text(32) }, "jobId"), JobStatus),
-                Tool("killerbench_repair_actions", "List the KillerBench repairs KillerMCP can request, their safety tier and options, the repair level the user chose in KillerMCP.Configure, and any repair lock. Repairs are off until the user turns them on.", Schema(new JsonObject()), Actions),
+                Tool("killerbench_repair_actions", "List the KillerBench repairs KillerMCP can request, their safety tier and options, the repair level the user chose in the KillerMCP section of the KillerBench About window, and any repair lock. Repairs are off until the user turns them on there.", Schema(new JsonObject()), Actions),
                 Tool("killerbench_repair_preview", "Preview one KillerBench repair without changing anything. When repairs are allowed and KillerBench finds something to fix, the result includes a single-use token that expires in 10 minutes. Show the preview to the user before executing.", Schema(new JsonObject { ["action"] = Text(40), ["options"] = new JsonObject { ["type"] = "object" } }, "action"), Preview),
                 Tool("killerbench_repair_execute", "Execute one previewed KillerBench repair by its token. Changes this PC. Only one repair runs at a time, Windows asks for administrator approval, and disruptive repairs also need a person to approve them in a KillerMCP window on the desktop. An uncertain outcome locks further repairs until the user clears the lock.", Schema(new JsonObject { ["token"] = Text(64) }, "token"), Execute),
                 Tool("killerbench_repair_recover", "Reconcile an interrupted or uncertain KillerBench repair without repeating it. Read-only. Use the same action and options as the original preview.", Schema(new JsonObject { ["action"] = Text(40), ["options"] = new JsonObject { ["type"] = "object" } }, "action"), Recover),
@@ -221,7 +221,7 @@ public static partial class KillerBenchAdapter
             {
                 ["repairLevel"] = KillerBenchSettings.Name(level),
                 ["allowedTiers"] = level switch { KillerBenchRepairLevel.All => "safe and disruptive", KillerBenchRepairLevel.Safe => "safe only", _ => "none" },
-                ["changeLevel"] = "The user turns repairs on or off by running KillerMCP.Configure bench-repairs off, safe or all. An MCP client cannot change it.",
+                ["changeLevel"] = "The user turns agent repairs on or off with the checkboxes in the KillerMCP section of the KillerBench About window. An MCP client cannot change it.",
                 ["lock"] = KillerBenchSettings.ReadLock() is { } repairLock ? JsonSerializer.SerializeToNode(repairLock) : null,
                 ["actions"] = catalog,
                 ["neverThroughMcp"] = new JsonArray(KillerBenchRepairs.NeverThroughMcp.Select(item => (JsonNode)JsonValue.Create(item)!).ToArray()),
@@ -350,7 +350,7 @@ public static partial class KillerBenchAdapter
             {
                 Lock(plan, "The repair did not report a result: " + exception.Message, null);
                 result["outcome"] = "Uncertain";
-                result["detail"] = "KillerBench did not report a result. Repairs are locked until the user checks this PC with killerbench_repair_recover and runs KillerMCP.Configure bench-repairs clear-lock.";
+                result["detail"] = "KillerBench did not report a result. Repairs are locked until the user checks this PC with killerbench_repair_recover and clears the lock in the KillerMCP section of the KillerBench About window.";
                 return result;
             }
 
@@ -372,7 +372,7 @@ public static partial class KillerBenchAdapter
             {
                 Lock(plan, "KillerBench exited with code " + run.ExitCode + (outcome is null ? string.Empty : " and outcome " + outcome), run.ExitCode);
                 result["outcome"] = "Uncertain";
-                result["detail"] = "KillerBench could not verify the result. Repairs are locked until the user checks this PC with killerbench_repair_recover and runs KillerMCP.Configure bench-repairs clear-lock.";
+                result["detail"] = "KillerBench could not verify the result. Repairs are locked until the user checks this PC with killerbench_repair_recover and clears the lock in the KillerMCP section of the KillerBench About window.";
             }
             return result;
         }
@@ -416,9 +416,9 @@ public static partial class KillerBenchAdapter
 
         private static string? Permission(KillerBenchRepairPlan plan, KillerBenchRepairLevel level)
         {
-            if (level == KillerBenchRepairLevel.Off) return "KillerBench repairs are off. The user can turn them on by running KillerMCP.Configure bench-repairs safe or all.";
-            if (plan.Tier == KillerBenchTier.B && level != KillerBenchRepairLevel.All) return "This is a disruptive repair. The user allowed safe repairs only. Running KillerMCP.Configure bench-repairs all allows disruptive repairs with desktop approval.";
-            if (KillerBenchSettings.ReadLock() is { } repairLock) return $"Repairs are locked because {repairLock.Action} ended with an uncertain result ({repairLock.Reason}). Check it with killerbench_repair_recover, then the user runs KillerMCP.Configure bench-repairs clear-lock.";
+            if (level == KillerBenchRepairLevel.Off) return "KillerBench repairs through KillerMCP are off. The user can turn them on in the KillerMCP section of the KillerBench About window.";
+            if (plan.Tier == KillerBenchTier.B && level != KillerBenchRepairLevel.All) return "This is a disruptive repair. The user allowed safe repairs only. Disruptive repairs also need the second checkbox in the KillerMCP section of the KillerBench About window, and each one is approved on the desktop.";
+            if (KillerBenchSettings.ReadLock() is { } repairLock) return $"Repairs are locked because {repairLock.Title ?? repairLock.Action} ended with an uncertain result ({repairLock.Reason}). Check it with killerbench_repair_recover, then the user clears the lock in the KillerMCP section of the KillerBench About window.";
             return null;
         }
 
@@ -486,7 +486,7 @@ public static partial class KillerBenchAdapter
 
         private static void Lock(KillerBenchRepairPlan plan, string reason, int? exitCode)
         {
-            KillerBenchSettings.WriteLock(new RepairLock(plan.Action, reason, DateTimeOffset.UtcNow, exitCode));
+            KillerBenchSettings.WriteLock(new RepairLock(plan.Action, reason, DateTimeOffset.UtcNow, exitCode, plan.Title));
             Audit(plan, "uncertain", exitCode);
         }
     }

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace KillerMCP.Runtime;
 
@@ -12,27 +11,34 @@ public enum KillerBenchRepairLevel
 }
 
 /// <summary>
-/// Local KillerMCP settings and repair state for KillerBench. Both files live beside the other
-/// KillerMCP state in %LOCALAPPDATA%\KillerMCP and are only changed by the user through
-/// KillerMCP.Configure or by the repair lock that an uncertain outcome sets.
+/// KillerBench repair settings that KillerMCP honors. KillerBench owns the user's choice: it writes
+/// %LOCALAPPDATA%\KillerBench\agent-repairs.json from the KillerMCP section of its About window, and
+/// KillerMCP only reads it. KillerMCP writes the lock after an uncertain result, and the user clears
+/// it from the same About section. The action log stays with the other KillerMCP state.
 /// </summary>
 public static class KillerBenchSettings
 {
-    public const string SettingName = "killerBenchRepairs";
+    private const int FileLimit = 16_384;
 
     public static string Folder => Environment.GetEnvironmentVariable("KILLERMCP_STATE_DIR")
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerMCP");
 
-    public static string SettingsPath => Path.Combine(Folder, "settings.json");
-    public static string LockPath => Path.Combine(Folder, "killerbench-repair-lock.json");
+    public static string BenchFolder => Environment.GetEnvironmentVariable("KILLERBENCH_STATE_DIR")
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerBench");
+
+    public static string SettingsPath => Path.Combine(BenchFolder, "agent-repairs.json");
+    public static string LockPath => Path.Combine(BenchFolder, "agent-repair-lock.json");
     public static string AuditPath => Path.Combine(Folder, "killerbench-actions.jsonl");
 
     public static KillerBenchRepairLevel ReadLevel()
     {
         try
         {
-            using var document = JsonDocument.Parse(File.ReadAllText(SettingsPath));
-            if (document.RootElement.TryGetProperty(SettingName, out var value) && value.ValueKind == JsonValueKind.String)
+            var file = new FileInfo(SettingsPath);
+            if (!file.Exists || file.Length > FileLimit) return KillerBenchRepairLevel.Off;
+            using var document = JsonDocument.Parse(File.ReadAllText(file.FullName));
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("level", out var value) && value.ValueKind == JsonValueKind.String)
             {
                 return Parse(value.GetString()) ?? KillerBenchRepairLevel.Off;
             }
@@ -58,22 +64,12 @@ public static class KillerBenchSettings
         _ => "off",
     };
 
-    /// <summary>Writes the level and preserves every other setting already in the file.</summary>
+    /// <summary>Writes the same file KillerBench writes. KillerMCP itself never calls this; checks use it.</summary>
     public static void WriteLevel(KillerBenchRepairLevel level)
     {
-        Directory.CreateDirectory(Folder);
-        JsonObject root;
-        try
-        {
-            root = JsonNode.Parse(File.ReadAllText(SettingsPath)) as JsonObject ?? new JsonObject();
-        }
-        catch (Exception exception) when (exception is IOException or JsonException)
-        {
-            root = new JsonObject();
-        }
-        root[SettingName] = Name(level);
+        Directory.CreateDirectory(BenchFolder);
         var temporary = SettingsPath + ".tmp";
-        File.WriteAllText(temporary, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+        File.WriteAllText(temporary, JsonSerializer.Serialize(new { level = Name(level) }) + Environment.NewLine);
         File.Move(temporary, SettingsPath, true);
     }
 
@@ -91,7 +87,7 @@ public static class KillerBenchSettings
 
     public static void WriteLock(RepairLock repairLock)
     {
-        Directory.CreateDirectory(Folder);
+        Directory.CreateDirectory(BenchFolder);
         File.WriteAllText(LockPath, JsonSerializer.Serialize(repairLock) + Environment.NewLine);
     }
 
@@ -123,4 +119,4 @@ public static class KillerBenchSettings
     }
 }
 
-public sealed record RepairLock(string Action, string Reason, DateTimeOffset LockedAtUtc, int? ExitCode);
+public sealed record RepairLock(string Action, string Reason, DateTimeOffset LockedAtUtc, int? ExitCode, string? Title = null);

@@ -245,15 +245,10 @@ Read-only tools:
 - Run a full diagnostic scan or a scan limited to selected scopes. Nothing is repaired.
 - Return long checks and scans as a job ID. Poll it with `killerbench_job` and save the finished result as a note.
 
-Repairs are off by default. The user chooses the level by running `KillerMCP.Configure bench-repairs` from the KillerMCP install folder. An MCP client cannot change it.
+Repairs are off by default. The user turns them on in the KillerMCP section of the KillerBench About window, which saves the choice immediately. An MCP client cannot change it.
 
-| Command | Effect |
-| --- | --- |
-| `bench-repairs off` | Read-only tools only. This is the default. |
-| `bench-repairs safe` | Allows safe repairs. |
-| `bench-repairs all` | Also allows disruptive repairs, each approved on the desktop. |
-| `bench-repairs status` | Shows the level and any repair lock. |
-| `bench-repairs clear-lock` | Clears the lock after the user has checked the PC. |
+- **Allow KillerMCP to run safe repairs** allows the safe repairs below.
+- **Also allow disruptive repairs** adds the disruptive repairs, and each one still needs approval on the desktop. It is available only when safe repairs are allowed.
 
 Safe repairs renew missing or expired DHCP leases, flush the DNS cache for one failing hostname, resume paused printer queues and clear offline mode, cancel one stuck print job, repair a missing default printer, create a System Restore point, change or undo one privacy setting for the current account, and run service, Delivery Optimization, DHCP, DNS, print queue, Windows Time and Defender signature recipes.
 
@@ -267,7 +262,7 @@ Every repair follows the same steps:
 4. Windows asks for administrator approval. Privacy changes run as the current user instead, so they apply to the right account.
 5. KillerBench checks the PC again before it changes anything and verifies the result.
 
-Only one repair runs at a time. When a repair fails to verify, times out or stops, KillerMCP locks further repairs. `killerbench_repair_recover` reconciles the interrupted repair without repeating it. The user clears the lock with `bench-repairs clear-lock`.
+Only one repair runs at a time. When a repair fails to verify, times out or stops, KillerMCP locks further repairs. `killerbench_repair_recover` reconciles the interrupted repair without repeating it. The KillerBench About window shows which repair caused the lock, and the user clears it there with **Clear lock**.
 
 KillerMCP never offers BitLocker changes, previous Windows removal, offline drive repair, profile or app package removal, Outlook reset, Microsoft 365 app removal, decluttering, power plan or hibernation changes, or computer rename. Use the KillerBench app for those.
 
