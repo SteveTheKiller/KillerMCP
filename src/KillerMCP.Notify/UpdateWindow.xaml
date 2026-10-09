@@ -1,6 +1,7 @@
 <Window x:Class="KillerMCP.Notify.UpdateWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="clr-namespace:KillerMCP.Notify"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="KillerMCP Update" Width="520" Height="350"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize"
@@ -145,10 +146,10 @@
                 </Border>
                 <Grid Grid.Row="1" Margin="24,18,26,10">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="112"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Image Source="Assets/mcp.png" Width="96" Height="96" HorizontalAlignment="Left" VerticalAlignment="Top"
-                           RenderOptions.BitmapScalingMode="HighQuality">
-                        <Image.Effect><DropShadowEffect Color="#ff2bbd" BlurRadius="13" ShadowDepth="0" Opacity="0.58"/></Image.Effect>
-                    </Image>
+                    <icons:AppIcon Source="Assets/mcp.png" Width="96" Height="96" HorizontalAlignment="Left" VerticalAlignment="Top"
+                           RenderOptions.BitmapScalingMode="NearestNeighbor">
+                        <icons:AppIcon.Effect><DropShadowEffect Color="#ff2bbd" BlurRadius="13" ShadowDepth="0" Opacity="0.58"/></icons:AppIcon.Effect>
+                    </icons:AppIcon>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock x:Name="HeadingText" FontFamily="{StaticResource Wordmark}" TextOptions.TextHintingMode="Animated" FontSize="21" Foreground="#ffffff"><Run Text="A new Killer"/><Run Text="MCP" Foreground="{StaticResource Fuchsia}"/><Run Text=" is ready"/></TextBlock>
                         <TextBlock x:Name="VersionText" Margin="0,8,0,0" FontFamily="Consolas" FontSize="12.5" Foreground="#ff52c9"/>

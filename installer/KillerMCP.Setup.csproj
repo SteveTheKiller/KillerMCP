@@ -23,6 +23,7 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Assets\mcp.png" />
+    <Resource Include="..\assets\KillerMCP.ico" Link="Assets\app-icon.ico" />
     <Resource Include="Assets\Typewriter-A602.ttf" />
   </ItemGroup>
   <Target Name="RequirePayload" BeforeTargets="CoreCompile">
