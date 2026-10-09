@@ -36,6 +36,9 @@ const environment = {
   KILLERSCAN_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
   KILLERSHELL_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
   KILLENDAR_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
+  KILLERBENCH_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
+  KILLERMCP_FAKE_BENCH: '1',
+  KILLERMCP_STATE_DIR: join(updateDirectory, 'state'),
 };
 const child = spawn('dotnet', ['run', '--project', 'src/KillerMCP/KillerMCP.csproj', '-c', 'Release', '--no-build'], { stdio: ['pipe', 'pipe', 'inherit'], env: environment });
 let buffer = '';
@@ -77,6 +80,11 @@ assert.equal(safety('killerscan_scan_network').openWorldHint, true);
 assert.equal(safety('killernotes_update').destructiveHint, true);
 assert.equal(safety('killendar_create_appointment').destructiveHint, false);
 assert.equal(safety('killerpdf_print').destructiveHint, true);
+assert.equal(safety('killerbench_check').readOnlyHint, true);
+assert.equal(safety('killerbench_check').openWorldHint, true);
+assert.equal(safety('killerbench_repair_preview').readOnlyHint, true);
+assert.equal(safety('killerbench_repair_execute').destructiveHint, true);
+assert.equal(safety('killerbench_save_scan_note').destructiveHint, false);
 assert.deepEqual(listed.tools.map(tool => tool.name), [
   'text_statistics', 'convert_case', 'encode_base64', 'decode_base64', 'text_to_ascii_binary',
   'ascii_binary_to_text', 'draw_ascii_text', 'search_emoji', 'arabic_to_roman', 'roman_to_arabic', 'text_to_nato_alphabet',
@@ -123,6 +131,9 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killerpdf_delete_pages', 'killerpdf_move_pages', 'killerpdf_insert_blank_page',
   'killerpdf_duplicate_page', 'killerpdf_document_info', 'killerpdf_search_text',
   'killerpdf_preflight', 'killerpdf_accessibility',
+  'killerbench_code_lookup', 'killerbench_diagnostic_scopes', 'killerbench_check', 'killerbench_scan',
+  'killerbench_job', 'killerbench_repair_actions', 'killerbench_repair_preview', 'killerbench_repair_execute',
+  'killerbench_repair_recover', 'killerbench_save_scan_note',
   'killer_create_pdf', 'killernotes_export_pdf', 'killerscan_export_report_pdf',
   'killerscan_save_report_note', 'killendar_export_agenda_pdf', 'killendar_save_agenda_note',
   'killershell_export_directory_pdf', 'killershell_save_directory_note', 'killerpdf_save_pages_as_notes',
@@ -310,6 +321,10 @@ const appointment = await request('tools/call', { name: 'killendar_create_appoin
 assert.equal(JSON.parse(appointment.content[0].text).title, 'Field visit');
 const files = await request('tools/call', { name: 'killershell_search_files', arguments: { root: resolve('.'), name: '*.txt', limit: 2 } });
 assert.equal(JSON.parse(files.content[0].text).results.length, 1);
+const benchVitals = await request('tools/call', { name: 'killerbench_check', arguments: { check: 'vitals' } });
+assert.equal(JSON.parse(benchVitals.content[0].text).result.data.state, 'Clear');
+const benchRepairs = await request('tools/call', { name: 'killerbench_repair_actions', arguments: {} });
+assert.equal(JSON.parse(benchRepairs.content[0].text).repairLevel, 'off');
 const network = await request('tools/call', { name: 'killerscan_local_network', arguments: {} });
 assert.equal(JSON.parse(network.content[0].text).localIp, '192.0.2.10');
 const scan = await request('tools/call', { name: 'killerscan_scan_network', arguments: {} });

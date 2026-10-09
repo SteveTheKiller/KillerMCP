@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\KillerMCP.Clients\KillerMCP.Clients.csproj" />
+    <ProjectReference Include="..\KillerMCP.Runtime\KillerMCP.Runtime.csproj" />
   </ItemGroup>
 </Project>

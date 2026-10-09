@@ -176,7 +176,7 @@ public partial class UpdateWindow : Window
         return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
     }
 
-    private static ImageBrush CreateGrain()
+    internal static ImageBrush CreateGrain()
     {
         const int size = 128;
         byte[] pixels = new byte[size * size * 4];

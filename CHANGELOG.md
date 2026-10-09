@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ## [0.3.6] - Unreleased
 
+### Added
+
+- Added KillerBench tools for offline code lookups, read-only checks and full diagnostic scans, with long scans returned as jobs to poll and save as notes.
+- Added guarded KillerBench repairs that stay off until the user turns them on with `KillerMCP.Configure bench-repairs safe` or `all`.
+- Required a fresh preview token, Windows administrator approval and, for disruptive repairs, a desktop approval window before any repair runs.
+- Ran one repair at a time, recorded each request in a local action log, and locked further repairs after an uncertain result until the user clears the lock.
+
 ### Fixed
 
 - Restored the textured finish on the setup sidebar, setup frame and uninstall and error dialogs.

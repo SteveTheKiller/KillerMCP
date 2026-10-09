@@ -1,7 +1,45 @@
 using KillerMCP.Runtime;
 using System.Text.Json;
 
-if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1")
+if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH") == "1")
+{
+    var bench = Environment.GetCommandLineArgs().Skip(1).ToArray();
+    var execute = bench.Contains("--execute");
+    if (bench.SequenceEqual(["help"])) { Console.WriteLine("killerbench-cli full-scan [--recipes ID[,ID]] [--json]"); return; }
+    if (bench.SequenceEqual(["vitals-check"])) { Console.Write(JsonSerializer.Serialize(new { name = "Vitals", state = "Clear" })); return; }
+    if (bench.Length == 2 && bench[0] == "update-code") { Console.Write(JsonSerializer.Serialize(new { code = bench[1], meaning = "Fixture" })); return; }
+    if (bench.SequenceEqual(["recipes"]))
+    {
+        Console.Write(JsonSerializer.Serialize(new object[]
+        {
+            new { id = "printing.spooler", title = "Print Spooler availability", dependencies = Array.Empty<string>(), canAutoExecute = true, requiresExplicitOptions = false, diagnosticOnly = false, recoveryContract = "ExactServiceState", effects = "Starts the spooler." },
+            new { id = "windows.component-store", title = "Windows component store", dependencies = Array.Empty<string>(), canAutoExecute = true, requiresExplicitOptions = false, diagnosticOnly = false, recoveryContract = "ServicingHealth", effects = "DISM may replace content." },
+        }));
+        return;
+    }
+    if (bench.Length > 0 && bench[0] == "full-scan")
+    {
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW") == "1") Thread.Sleep(1500);
+        Console.Write(JsonSerializer.Serialize(new { outcome = execute || bench.Contains("--auto-repair") ? "Completed" : "Preview", results = new[] { new { title = "Print Spooler availability", state = "Attention", detail = "Fixture finding." } } }));
+        return;
+    }
+    if (bench.Length > 0 && bench[0] == "dhcp-renew") { Console.WriteLine("Preview only."); Console.Write(JsonSerializer.Serialize(new { name = "DHCP leases", state = "Clear" })); return; }
+    if (bench.Length > 0 && bench[0] is "dns-cache" or "repair" or "privacy-setting")
+    {
+        Console.WriteLine("Fixture preamble line.");
+        if (execute && int.TryParse(Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH_EXIT"), out var exit) && exit != 0)
+        {
+            Console.Write(JsonSerializer.Serialize(new { outcome = "Failed" }));
+            Environment.ExitCode = exit;
+            return;
+        }
+        Console.Write(JsonSerializer.Serialize(new { outcome = execute ? "Completed" : "Preview", args = bench }));
+        return;
+    }
+    if (bench.SequenceEqual(["dns-cache-recover"])) { Console.Write(JsonSerializer.Serialize(new { outcome = "Recovered" })); return; }
+}
+
+if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN") == "1" || Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1")
 {
     var arguments = Environment.GetCommandLineArgs().Skip(1).ToArray();
     if (arguments.SequenceEqual(["/help"]) && Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN") == "1")
@@ -151,6 +189,7 @@ try
         ["killershell"] = Path.Combine(local, "Programs", "KillerShell", "KillerShell.exe"),
         ["killernotes"] = Path.Combine(machine, "KillerNotes", "KillerNotes.exe"),
         ["killendar"] = Path.Combine(local, "Programs", "Killendar", "Killendar.exe"),
+        ["killerbench"] = Path.Combine(local, "Programs", "KillerBench", "killerbench-cli.exe"),
     };
     foreach (var path in expected.Values)
     {
@@ -327,6 +366,124 @@ try
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", null);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", null);
     Console.WriteLine("PASS cross-app integration adapters");
+
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", "1");
+    var stateDir = Path.Combine(root, "state");
+    Environment.SetEnvironmentVariable("KILLERMCP_STATE_DIR", stateDir);
+    var clock = DateTimeOffset.UtcNow;
+    var confirmations = new List<KillerBenchConfirmation>();
+    var approve = false;
+    var elevated = new List<string>();
+    var benchOptions = new KillerBenchOptions
+    {
+        Now = () => clock,
+        Wait = TimeSpan.FromSeconds(20),
+        Confirm = (request, _) => { confirmations.Add(request); return Task.FromResult(approve); },
+        RunElevated = async (exe, args, timeout, token) =>
+        {
+            elevated.Add(string.Join(" ", args));
+            var info = new System.Diagnostics.ProcessStartInfo(exe) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            foreach (var argument in args) info.ArgumentList.Add(argument);
+            using var process = System.Diagnostics.Process.Start(info)!;
+            var stdout = await process.StandardOutput.ReadToEndAsync(token);
+            var stderr = await process.StandardError.ReadToEndAsync(token);
+            await process.WaitForExitAsync(token);
+            return new KillerBenchRun(process.ExitCode, stdout, stderr, false);
+        },
+    };
+    var benchAdapters = await KillerBenchAdapter.CreateAsync(Environment.ProcessPath, Environment.ProcessPath, benchOptions);
+    Equal(10, benchAdapters.Count);
+    var benchByName = benchAdapters.ToDictionary(item => item.Tool.Name);
+    async Task<JsonElement> Bench(string name, object arguments, bool expectError = false)
+    {
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(arguments));
+        var response = await benchByName[name].CallAsync(document.RootElement, CancellationToken.None);
+        Equal(expectError, response.IsError);
+        return expectError ? default : JsonDocument.Parse(response.Text).RootElement.Clone();
+    }
+    JsonElement Finished(JsonElement job) { Equal("completed", job.GetProperty("status").GetString()); return job.GetProperty("result"); }
+
+    Equal("Clear", Finished(await Bench("killerbench_check", new { check = "vitals" })).GetProperty("data").GetProperty("state").GetString());
+    await Bench("killerbench_check", new { check = "format_disk" }, true);
+    await Bench("killerbench_check", new { check = "dns" }, true);
+    Equal("Fixture", (await Bench("killerbench_code_lookup", new { kind = "update", code = "0x80070005" })).GetProperty("data").GetProperty("meaning").GetString());
+    await Bench("killerbench_code_lookup", new { kind = "update", code = "0x8007&calc" }, true);
+
+    Equal("off", (await Bench("killerbench_repair_actions", new { })).GetProperty("repairLevel").GetString());
+    var offPreview = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
+    Equal(false, offPreview.GetProperty("canExecute").GetBoolean());
+    Equal(false, offPreview.TryGetProperty("token", out _));
+    Equal("Fixture preamble line.", offPreview.GetProperty("preview").GetProperty("notes").GetString());
+    await Bench("killerbench_repair_preview", new { action = "bitlocker_decrypt" }, true);
+    await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "bad host;" } }, true);
+    await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "ok.example", extra = 1 } }, true);
+
+    KillerBenchSettings.WriteLevel(KillerBenchRepairLevel.Safe);
+    Equal(KillerBenchRepairLevel.Safe, KillerBenchSettings.ReadLevel());
+    Equal(false, Finished(await Bench("killerbench_repair_preview", new { action = "dhcp_renew" })).GetProperty("canExecute").GetBoolean());
+    var safePreview = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
+    var safeToken = safePreview.GetProperty("token").GetString()!;
+    var safeRun = Finished(await Bench("killerbench_repair_execute", new { token = safeToken }));
+    Equal("Completed", safeRun.GetProperty("outcome").GetString());
+    Equal("dns-cache missing.example --execute", elevated.Single());
+    Equal(0, confirmations.Count);
+    await Bench("killerbench_repair_execute", new { token = safeToken }, true);
+
+    var privacy = Finished(await Bench("killerbench_repair_preview", new { action = "privacy_setting", options = new { key = "camera-access", state = "off" } }));
+    Equal("Completed", Finished(await Bench("killerbench_repair_execute", new { token = privacy.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
+    Equal(1, elevated.Count);
+
+    var expiring = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
+    clock = clock.AddMinutes(11);
+    await Bench("killerbench_repair_execute", new { token = expiring.GetProperty("token").GetString() }, true);
+
+    Equal(false, Finished(await Bench("killerbench_repair_preview", new { action = "system_image_repair", options = new { tool = "dism" } })).GetProperty("canExecute").GetBoolean());
+    Equal("safe", Finished(await Bench("killerbench_repair_preview", new { action = "recipe_repair", options = new { recipes = new[] { "printing.spooler" } } })).GetProperty("tier").GetString());
+    Equal("disruptive", Finished(await Bench("killerbench_repair_preview", new { action = "recipe_repair", options = new { recipes = new[] { "windows.component-store" } } })).GetProperty("tier").GetString());
+    await Bench("killerbench_repair_preview", new { action = "recipe_repair", options = new { recipes = new[] { "unknown.recipe" } } }, true);
+
+    KillerBenchSettings.WriteLevel(KillerBenchRepairLevel.All);
+    var dism = Finished(await Bench("killerbench_repair_preview", new { action = "system_image_repair", options = new { tool = "dism" } }));
+    Equal("NotApproved", Finished(await Bench("killerbench_repair_execute", new { token = dism.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
+    Equal(1, confirmations.Count);
+    Equal(1, elevated.Count);
+    approve = true;
+    dism = Finished(await Bench("killerbench_repair_preview", new { action = "system_image_repair", options = new { tool = "dism" } }));
+    Equal("Completed", Finished(await Bench("killerbench_repair_execute", new { token = dism.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
+    Equal("repair dism --execute", elevated[^1]);
+
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_EXIT", "3");
+    var failing = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
+    Equal("Uncertain", Finished(await Bench("killerbench_repair_execute", new { token = failing.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_EXIT", null);
+    Equal("dns_cache_flush", KillerBenchSettings.ReadLock()!.Action);
+    Equal(false, Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } })).GetProperty("canExecute").GetBoolean());
+    Equal("Recovered", Finished(await Bench("killerbench_repair_recover", new { action = "dns_cache_flush", options = new { host = "missing.example" } })).GetProperty("data").GetProperty("outcome").GetString());
+    Equal(true, KillerBenchSettings.ClearLock());
+    Equal(3, File.ReadAllLines(KillerBenchSettings.AuditPath).Count(line => line.Contains("\"completed\"")));
+
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW", "1");
+    var slowAdapters = (await KillerBenchAdapter.CreateAsync(Environment.ProcessPath, Environment.ProcessPath, new KillerBenchOptions { Wait = TimeSpan.FromMilliseconds(100) })).ToDictionary(item => item.Tool.Name);
+    using var scopes = JsonDocument.Parse("{\"scopes\":[\"PrintingReadiness\"]}");
+    var started = JsonDocument.Parse((await slowAdapters["killerbench_scan"].CallAsync(scopes.RootElement, CancellationToken.None)).Text).RootElement.Clone();
+    Equal("running", started.GetProperty("status").GetString());
+    var jobId = started.GetProperty("jobId").GetString()!;
+    using var poll = JsonDocument.Parse(JsonSerializer.Serialize(new { jobId }));
+    using var note = JsonDocument.Parse(JsonSerializer.Serialize(new { jobId, group = "Bench" }));
+    Equal(true, (await slowAdapters["killerbench_save_scan_note"].CallAsync(note.RootElement, CancellationToken.None)).IsError);
+    JsonElement polled = default;
+    for (var attempt = 0; attempt < 50; attempt++)
+    {
+        polled = JsonDocument.Parse((await slowAdapters["killerbench_job"].CallAsync(poll.RootElement, CancellationToken.None)).Text).RootElement.Clone();
+        if (polled.GetProperty("status").GetString() == "completed") break;
+        await Task.Delay(100);
+    }
+    Equal("completed", polled.GetProperty("status").GetString());
+    Equal(42, JsonDocument.Parse((await slowAdapters["killerbench_save_scan_note"].CallAsync(note.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("id").GetInt32());
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_STATE_DIR", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", null);
+    Console.WriteLine("PASS native KillerBench adapters and repair guardrails");
 }
 finally
 {

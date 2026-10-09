@@ -22,7 +22,7 @@ internal static class ToolSafety
     private static readonly HashSet<string> DestructiveTools = new(StringComparer.Ordinal)
     {
         "killernotes_update", "killernotes_set_group_color", "killernotes_set_title_color",
-        "killerpdf_print",
+        "killerpdf_print", "killerbench_repair_execute",
     };
 
     private static readonly HashSet<string> NetworkTools = new(StringComparer.Ordinal)
@@ -37,6 +37,7 @@ internal static class ToolSafety
         bool openWorld = name.StartsWith("killerscan_", StringComparison.Ordinal)
             && name is not ("killerscan_local_network" or "killerscan_mac_vendor")
             || name is "open_browser_companion_local" or "killerpdf_print" or "killerpdf_ocr"
+            or "killerbench_check" or "killerbench_scan" or "killerbench_repair_preview" or "killerbench_repair_execute"
             || NetworkTools.Contains(name);
         return new
         {
@@ -50,6 +51,8 @@ internal static class ToolSafety
     {
         if (name.StartsWith("killershell_", StringComparison.Ordinal))
             return ReadOnlyShellTools.Contains(name);
+        if (name.StartsWith("killerbench_", StringComparison.Ordinal))
+            return name is not ("killerbench_repair_execute" or "killerbench_save_scan_note");
         if (name.StartsWith("killernotes_", StringComparison.Ordinal)
             || name.StartsWith("killendar_", StringComparison.Ordinal)
             || name.StartsWith("killerscan_", StringComparison.Ordinal)
@@ -64,7 +67,7 @@ internal static class ToolSafety
         or "killernotes_create" or "killernotes_create_group" or "killernotes_import_image"
         or "killernotes_export" or "killernotes_export_pdf" or "killendar_export_agenda_pdf"
         or "killendar_save_agenda_note" or "killerscan_export_report_pdf"
-        or "killerscan_save_report_note" or "killershell_export_directory_pdf"
+        or "killerscan_save_report_note" or "killerbench_save_scan_note" or "killershell_export_directory_pdf"
         or "killershell_save_directory_note" or "killerpdf_save_pages_as_notes"
         or "killerpdf_merge" or "killerpdf_extract_pages" or "killerpdf_split"
         or "killerpdf_decrypt" or "killerpdf_render_pages" or "killerpdf_flatten"

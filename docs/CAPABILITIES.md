@@ -29,6 +29,7 @@ The 81 KillerTools utilities include calculations, lookups, and generated output
 - KillerPDF tools can create new files and send pages to a printer. They refuse to overwrite existing output paths.
 - KillerNotes tools can create and change notes and export files.
 - Killendar can create an appointment in the open, unlocked app.
+- KillerBench checks and scans read Windows state without changing it. KillerBench repairs change Windows and stay off until the user turns them on.
 - Cross app workflows can create PDFs, notes, or page images.
 
 Tool availability depends on the supported apps installed on the computer. Review a client's proposed tool call, especially its arguments, before approving access to sensitive data, network targets, printers, or local output paths.
@@ -157,6 +158,7 @@ App tools appear only when KillerMCP finds a supported installed version that ad
 - Export a Killendar agenda to PDF or save it as a note.
 - Export a KillerShell directory listing to PDF or save it as a note.
 - Render selected KillerPDF pages and save each page image as a new rich note.
+- Save a finished KillerBench scan or check as a KillerNotes note.
 
 PDF creation uses the installed Microsoft Edge print engine. Output paths must be absolute, their parent folder must already exist, and existing files are never overwritten.
 
@@ -232,6 +234,44 @@ Encrypted notes databases cannot currently be unlocked through MCP.
 - Create a single timed or all-day appointment in the open, unlocked Killendar. The app saves it and updates the visible calendar.
 
 Agenda lookup cannot currently unlock a password-protected calendar. Appointment creation uses the running app after it has been unlocked. Editing, deleting, and creating recurring appointments remain in the app interface.
+
+### KillerBench
+
+Read-only tools:
+
+- Look up Device Manager problem codes, Win32 errors, Windows Update results and Windows Setup results offline.
+- List the diagnostic scopes and recipes that KillerBench supports.
+- Run one read-only check: vitals, pending restart, DHCP leases, printers, print jobs, selected printer queues, DNS resolution, a TCP connection, volume capacity, an NTFS volume check, crash review, update history, update search, servicing logs, Microsoft Defender, firewall alignment, hardware security, services, Windows Time or background transfers.
+- Run a full diagnostic scan or a scan limited to selected scopes. Nothing is repaired.
+- Return long checks and scans as a job ID. Poll it with `killerbench_job` and save the finished result as a note.
+
+Repairs are off by default. The user chooses the level by running `KillerMCP.Configure bench-repairs` from the KillerMCP install folder. An MCP client cannot change it.
+
+| Command | Effect |
+| --- | --- |
+| `bench-repairs off` | Read-only tools only. This is the default. |
+| `bench-repairs safe` | Allows safe repairs. |
+| `bench-repairs all` | Also allows disruptive repairs, each approved on the desktop. |
+| `bench-repairs status` | Shows the level and any repair lock. |
+| `bench-repairs clear-lock` | Clears the lock after the user has checked the PC. |
+
+Safe repairs renew missing or expired DHCP leases, flush the DNS cache for one failing hostname, resume paused printer queues and clear offline mode, cancel one stuck print job, repair a missing default printer, create a System Restore point, change or undo one privacy setting for the current account, and run service, Delivery Optimization, DHCP, DNS, print queue, Windows Time and Defender signature recipes.
+
+Disruptive repairs run DISM or SFC, install selected Windows updates, reset the Windows Update data store, optimize one volume, rebuild the Windows Search index, turn on firewall profiles, run a Defender scan, retry one background transfer, change the Windows Time source, permanently remove selected temporary files and caches, and run servicing, component cleanup, WMI, recovery environment and print spool directory recipes.
+
+Every repair follows the same steps:
+
+1. `killerbench_repair_preview` runs KillerBench's own preview. Nothing changes. When repairs are allowed and KillerBench finds something to fix, the result includes a token that works once and expires after 10 minutes.
+2. `killerbench_repair_execute` takes only that token, so the client cannot change the command after the preview.
+3. Disruptive repairs open a KillerMCP approval window on the desktop. Deny is the default, and the request is denied automatically after four and a half minutes.
+4. Windows asks for administrator approval. Privacy changes run as the current user instead, so they apply to the right account.
+5. KillerBench checks the PC again before it changes anything and verifies the result.
+
+Only one repair runs at a time. When a repair fails to verify, times out or stops, KillerMCP locks further repairs. `killerbench_repair_recover` reconciles the interrupted repair without repeating it. The user clears the lock with `bench-repairs clear-lock`.
+
+KillerMCP never offers BitLocker changes, previous Windows removal, offline drive repair, profile or app package removal, Outlook reset, Microsoft 365 app removal, decluttering, power plan or hibernation changes, or computer rename. Use the KillerBench app for those.
+
+Each repair request, approval, denial and outcome is recorded at `%LOCALAPPDATA%\KillerMCP\killerbench-actions.jsonl`. The log records the action, tier, target and exit code, not the command output.
 
 ## Where data goes
 

@@ -27,6 +27,7 @@ var killendarPath = AppDiscovery.Discover("killendar");
 var killerShellPath = AppDiscovery.Discover("killershell");
 var killerScanPath = AppDiscovery.Discover("killerscan");
 var killerPdfPath = AppDiscovery.Discover("killerpdf");
+var killerBenchPath = AppDiscovery.Discover("killerbench");
 appAdapters.AddRange(await KillerNotesAdapter.CreateAsync(killerNotesPath));
 var killendar = await KillendarAdapter.CreateAsync(killendarPath);
 if (killendar is not null)
@@ -38,6 +39,7 @@ if (killendarCreate is not null) appAdapters.Add(killendarCreate);
 appAdapters.AddRange(await KillerShellAdapter.CreateAsync(killerShellPath));
 appAdapters.AddRange(await KillerScanAdapter.CreateAsync(killerScanPath));
 appAdapters.AddRange(await KillerPdfAdapter.CreateAsync(killerPdfPath));
+appAdapters.AddRange(await KillerBenchAdapter.CreateAsync(killerBenchPath, killerNotesPath));
 appAdapters.AddRange(IntegrationAdapter.Create(killerNotesPath, killendarPath, killerShellPath, killerScanPath, killerPdfPath));
 ToolRegistry.SetAdapters(appAdapters);
 string? line;
