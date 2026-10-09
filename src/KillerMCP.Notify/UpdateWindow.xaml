@@ -5,7 +5,8 @@
         Title="KillerMCP Update" Width="520" Height="350"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize"
         AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True"
-        FontFamily="Segoe UI" Foreground="#f4edf3" UseLayoutRounding="True" SnapsToDevicePixels="True">
+        FontFamily="Segoe UI" Foreground="#f4edf3" UseLayoutRounding="True" SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="Grayscale">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0" CornerRadius="8"
                             GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
@@ -136,7 +137,7 @@
                         MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                     <Grid Margin="15,0,8,0">
                         <TextBlock VerticalAlignment="Center" FontFamily="{StaticResource Wordmark}" FontSize="16">
-                            <Run Text="Killer"/><Run Text="MCP" FontSize="21" Foreground="{StaticResource Fuchsia}"/>
+                            <Run Text="Killer"/><Run Text="MCP" FontSize="21" Foreground="{StaticResource Fuchsia}"/><Run x:Name="TitleVersion" Text=""/>
                         </TextBlock>
                         <Button Width="30" Height="30" HorizontalAlignment="Right" Style="{StaticResource CloseButton}"
                                 FontSize="12" Content="✕" Cursor="Hand" Click="Later_Click"/>
@@ -149,7 +150,7 @@
                         <Image.Effect><DropShadowEffect Color="#ff2bbd" BlurRadius="13" ShadowDepth="0" Opacity="0.58"/></Image.Effect>
                     </Image>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock x:Name="HeadingText" Text="A new KillerMCP is ready" FontFamily="{StaticResource Wordmark}" FontSize="21" Foreground="#ffffff"/>
+                        <TextBlock x:Name="HeadingText" FontFamily="{StaticResource Wordmark}" TextOptions.TextHintingMode="Animated" FontSize="21" Foreground="#ffffff"><Run Text="A new Killer"/><Run Text="MCP" Foreground="{StaticResource Fuchsia}"/><Run Text=" is ready"/></TextBlock>
                         <TextBlock x:Name="VersionText" Margin="0,8,0,0" FontFamily="Consolas" FontSize="12.5" Foreground="#ff52c9"/>
                         <TextBlock x:Name="BodyText" Margin="0,9,0,0" FontSize="12.5" LineHeight="19" Foreground="#d3c7cf" TextWrapping="Wrap"
                                    Text="Update the local host, reconnect supported agent clients, and pick up the newest Killer tools."/>

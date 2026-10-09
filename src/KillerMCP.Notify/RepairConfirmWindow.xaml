@@ -5,7 +5,8 @@
         Title="KillerMCP Repair Approval" Width="560" SizeToContent="Height"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize" Topmost="True"
         AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True"
-        FontFamily="Segoe UI" Foreground="#f4edf3" UseLayoutRounding="True" SnapsToDevicePixels="True">
+        FontFamily="Segoe UI" Foreground="#f4edf3" UseLayoutRounding="True" SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="Grayscale">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0" CornerRadius="8"
                             GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
@@ -68,7 +69,7 @@
                         <Image.Effect><DropShadowEffect Color="#ff2bbd" BlurRadius="13" ShadowDepth="0" Opacity="0.58"/></Image.Effect>
                     </Image>
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="An agent wants to repair this PC" FontFamily="{StaticResource Wordmark}" FontSize="20" Foreground="#ffffff" TextWrapping="Wrap"/>
+                        <TextBlock Text="An agent wants to repair this PC" FontFamily="{StaticResource Wordmark}" TextOptions.TextHintingMode="Animated" FontSize="20" Foreground="#ffffff" TextWrapping="Wrap"/>
                         <TextBlock x:Name="TitleText" Margin="0,10,0,0" FontSize="14" FontWeight="SemiBold" Foreground="#ff52c9" TextWrapping="Wrap"/>
                         <TextBlock x:Name="TargetText" Margin="0,4,0,0" FontFamily="Consolas" FontSize="12" Foreground="#d3c7cf" TextWrapping="Wrap"/>
                         <TextBlock x:Name="EffectsText" Margin="0,10,0,0" FontSize="12.5" LineHeight="19" Foreground="#d3c7cf" TextWrapping="Wrap"/>

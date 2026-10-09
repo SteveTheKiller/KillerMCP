@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -33,12 +34,13 @@ public partial class UpdateWindow : Window
         _updated = Has(args, "--updated");
         SelectBehavior(ReadBehavior());
         _loadingPreferences = false;
+        if (_latestVersion is not null && !_updated) TitleVersion.Text = $" v{_latestVersion} Installer";
         VersionText.Text = _latestVersion is null ? $"Installed: v{_installedVersion}" : $"v{_installedVersion}  →  v{_latestVersion}";
         StatusText.Text = "Signed Windows installer from GitHub Releases";
         if (_updated) ShowSuccess();
         else if (_latestVersion is null)
         {
-            HeadingText.Text = "KillerMCP updates";
+            SetHeading("Update KillerMCP");
             BodyText.Text = "Open a new agent chat to check for a newer release.";
             StatusText.Text = "No update has been selected";
             UpdateButton.Visibility = Visibility.Collapsed;
@@ -61,7 +63,7 @@ public partial class UpdateWindow : Window
                 Close();
                 return;
             }
-            HeadingText.Text = "Your update is ready";
+            SetHeading("Your update is ready");
             BodyText.Text = "The signed installer has been downloaded and verified. Install it when you are ready.";
             StatusText.Text = "SHA256 and Windows signature verified";
             UpdateButton.Content = "Install now";
@@ -70,7 +72,7 @@ public partial class UpdateWindow : Window
         }
         catch (Exception exception)
         {
-            HeadingText.Text = "The update needs your attention";
+            SetHeading("The update needs your attention");
             BodyText.Text = "KillerMCP could not download and verify the update automatically.";
             StatusText.Text = exception.Message;
             UpdateButton.Content = "Open release";
@@ -105,13 +107,28 @@ public partial class UpdateWindow : Window
 
     private void ShowSuccess()
     {
-        HeadingText.Text = "KillerMCP is up to date";
+        SetHeading("KillerMCP is up to date");
         VersionText.Text = $"Updated to v{_latestVersion}";
         BodyText.Text = "The update finished successfully. Open a new agent chat to use the newest Killer tools.";
         StatusText.Text = "Update installed and client connections refreshed";
         UpdateButton.Visibility = Visibility.Collapsed;
         LaterButton.Content = "Close";
         LaterButton.Margin = new Thickness(0);
+    }
+
+    private void SetHeading(string text)
+    {
+        HeadingText.Inlines.Clear();
+        string[] parts = text.Split("KillerMCP");
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (i > 0)
+            {
+                HeadingText.Inlines.Add(new Run("Killer"));
+                HeadingText.Inlines.Add(new Run("MCP") { Foreground = (Brush)FindResource("Fuchsia") });
+            }
+            if (parts[i].Length > 0) HeadingText.Inlines.Add(new Run(parts[i]));
+        }
     }
 
     private void BehaviorBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
