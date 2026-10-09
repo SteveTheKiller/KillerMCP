@@ -17,7 +17,7 @@ let updateRequests = 0;
 const updateServer = createServer((request, response) => {
   updateRequests++;
   response.writeHead(200, { 'Content-Type': 'application/json' });
-  response.end(JSON.stringify({ tag_name: 'v0.4.1' }));
+  response.end(JSON.stringify({ tag_name: 'v99.0.0' }));
 });
 await new Promise(resolve => updateServer.listen(0, '127.0.0.1', resolve));
 const updateAddress = updateServer.address();
@@ -66,7 +66,7 @@ function request(method, params = {}) {
 const initialized = await request('initialize', { protocolVersion: '2025-06-18' });
 assert.equal(initialized.serverInfo.name, 'KillerMCP');
 assert.equal(initialized.serverInfo.version, '0.4.0');
-assert.match(initialized.instructions, /KillerMCP 0\.4\.1 is available/);
+assert.match(initialized.instructions, /KillerMCP 99\.0\.0 is available/);
 const listed = await request('tools/list');
 for (const tool of listed.tools) {
   assert.equal(typeof tool.annotations.readOnlyHint, 'boolean', tool.name);
