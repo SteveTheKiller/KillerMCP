@@ -125,7 +125,12 @@ public partial class UpdateWindow : Window
             if (i > 0)
             {
                 HeadingText.Inlines.Add(new Run("Killer"));
-                HeadingText.Inlines.Add(new Run("MCP") { Foreground = (Brush)FindResource("Fuchsia") });
+                HeadingText.Inlines.Add(new Run("MCP")
+                {
+                    Foreground = (Brush)FindResource("Fuchsia"),
+                    FontFamily = (FontFamily)FindResource("WordmarkAccent"),
+                    FontSize = HeadingText.FontSize * 1.409,
+                });
             }
             if (parts[i].Length > 0) HeadingText.Inlines.Add(new Run(parts[i]));
         }
