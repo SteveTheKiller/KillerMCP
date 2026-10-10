@@ -17,7 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - Kept app icons sharp at fractional display DPI and app zoom by caching exact pixel sizes from a covering source and aligning the final draw to device pixels.
 
 - Restored the textured finish on the setup sidebar, setup frame and uninstall and error dialogs.
-- Moved the wordmarks and window headings to Iceland and Freckle Face, replacing the typewriter font.
+- Moved the wordmarks and window headings to Killer Sans and Freckle Face, replacing the typewriter font.
 - Smoothed the wordmark text in the update window, colored its MCP fuchsia, titled it "Update KillerMCP" when no update is selected and showed the new version in its title bar.
 - The installer and uninstaller have their own taskbar buttons, labeled "KillerMCP Installer" and "Uninstall KillerMCP", with the app icon.
 

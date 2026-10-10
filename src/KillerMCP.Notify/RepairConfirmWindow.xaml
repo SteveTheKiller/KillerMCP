@@ -13,7 +13,7 @@
                             GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
-        <FontFamily x:Key="Wordmark">./Assets/#Iceland</FontFamily>
+        <FontFamily x:Key="Wordmark">./Assets/#Killer Sans</FontFamily>
         <FontFamily x:Key="WordmarkAccent">./Assets/#Freckle Face</FontFamily>
         <SolidColorBrush x:Key="Fuchsia" Color="#ff2bbd"/>
         <Style x:Key="ApproveButton" TargetType="Button">

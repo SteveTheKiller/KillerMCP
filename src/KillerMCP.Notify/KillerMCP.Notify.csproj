@@ -11,7 +11,7 @@
   <ItemGroup>
     <Resource Include="Assets\mcp.png" />
     <Resource Include="..\..\assets\KillerMCP.ico" Link="Assets\app-icon.ico" />
-    <Resource Include="Assets\Iceland-Regular.ttf" />
+    <Resource Include="Assets\KillerSans-Regular.ttf" />
     <Resource Include="Assets\FreckleFace-Regular.ttf" />
   </ItemGroup>
 </Project>
