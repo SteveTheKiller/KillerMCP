@@ -22,10 +22,10 @@
             <Setter Property="BorderThickness" Value="1"/><Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-                <Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                <Grid><Border x:Name="FaceRing" IsHitTestVisible="False" CornerRadius="{Binding CornerRadius, ElementName=Face}" BorderThickness="{Binding BorderThickness, ElementName=Face}" BorderBrush="{Binding Background, ElementName=Face}" Margin="{Binding Margin, ElementName=Face}" Visibility="{Binding Visibility, ElementName=Face}" Opacity="{Binding Opacity, ElementName=Face}"/><Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                         BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
+                </Border></Grid>
                 <ControlTemplate.Triggers>
                     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#333333"/><Setter TargetName="Face" Property="BorderBrush" Value="#aaaaaa"/></Trigger>
                     <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#4a103a"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
@@ -35,10 +35,10 @@
         <Style x:Key="OutlineButton" TargetType="Button" BasedOn="{StaticResource SurfaceButton}">
             <Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="{StaticResource Accent}"/><Setter Property="Foreground" Value="#ff52c9"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-                <Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                <Grid><Border x:Name="FaceRing" IsHitTestVisible="False" CornerRadius="{Binding CornerRadius, ElementName=Face}" BorderThickness="{Binding BorderThickness, ElementName=Face}" BorderBrush="{Binding Background, ElementName=Face}" Margin="{Binding Margin, ElementName=Face}" Visibility="{Binding Visibility, ElementName=Face}" Opacity="{Binding Opacity, ElementName=Face}"/><Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                         BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}">
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
+                </Border></Grid>
                 <ControlTemplate.Triggers>
                     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#ff2bbd"/><Setter Property="Foreground" Value="#0a0a0a"/></Trigger>
                     <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#4a103a"/><Setter Property="Foreground" Value="#ffffff"/></Trigger>
