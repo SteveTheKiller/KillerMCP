@@ -13,8 +13,9 @@
                             GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
-        <FontFamily x:Key="Wordmark">./Assets/#Killer Sans</FontFamily>
-        <FontFamily x:Key="WordmarkAccent">./Assets/#Freckle Face</FontFamily>
+        <FontFamily x:Key="Wordmark">./Assets/#Punktype</FontFamily>
+        <FontFamily x:Key="WordmarkAccent">./Assets/#Lacquer</FontFamily>
+        <FontFamily x:Key="BrandSans">./Assets/#Killer Sans</FontFamily>
         <SolidColorBrush x:Key="Fuchsia" Color="#ff2bbd"/>
         <Style x:Key="ApproveButton" TargetType="Button">
             <Setter Property="Height" Value="34"/>
@@ -60,8 +61,8 @@
             <Grid>
                 <Grid.RowDefinitions><RowDefinition Height="44"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Border Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
-                    <TextBlock Margin="15,0,8,0" VerticalAlignment="Center" FontFamily="{StaticResource Wordmark}" FontSize="17.6">
-                        <Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="19.22" Foreground="{StaticResource Fuchsia}"/>
+                    <TextBlock Margin="15,0,8,0" VerticalAlignment="Center" FontFamily="{StaticResource Wordmark}" FontSize="12.52">
+                        <Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="18.8" Foreground="{StaticResource Fuchsia}"/>
                     </TextBlock>
                 </Border>
                 <Grid Grid.Row="1" Margin="24,14,26,10">
@@ -71,7 +72,7 @@
                         <icons:AppIcon.Effect><DropShadowEffect Color="#ff2bbd" BlurRadius="13" ShadowDepth="0" Opacity="0.58"/></icons:AppIcon.Effect>
                     </icons:AppIcon>
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="An agent wants to repair this PC" FontFamily="{StaticResource Wordmark}" TextOptions.TextHintingMode="Animated" FontSize="22" Foreground="#ffffff" TextWrapping="Wrap"/>
+                        <TextBlock Text="An agent wants to repair this PC" FontFamily="{StaticResource BrandSans}" TextOptions.TextHintingMode="Animated" FontSize="22" Foreground="#ffffff" TextWrapping="Wrap"/>
                         <TextBlock x:Name="TitleText" Margin="0,10,0,0" FontSize="14" FontWeight="SemiBold" Foreground="#ff52c9" TextWrapping="Wrap"/>
                         <TextBlock x:Name="TargetText" Margin="0,4,0,0" FontFamily="Consolas" FontSize="12" Foreground="#d3c7cf" TextWrapping="Wrap"/>
                         <TextBlock x:Name="EffectsText" Margin="0,10,0,0" FontSize="12.5" LineHeight="19" Foreground="#d3c7cf" TextWrapping="Wrap"/>

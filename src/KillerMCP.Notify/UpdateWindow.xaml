@@ -13,8 +13,9 @@
                             GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
-        <FontFamily x:Key="Wordmark">./Assets/#Killer Sans</FontFamily>
-        <FontFamily x:Key="WordmarkAccent">./Assets/#Freckle Face</FontFamily>
+        <FontFamily x:Key="Wordmark">./Assets/#Punktype</FontFamily>
+        <FontFamily x:Key="WordmarkAccent">./Assets/#Lacquer</FontFamily>
+        <FontFamily x:Key="BrandSans">./Assets/#Killer Sans</FontFamily>
         <SolidColorBrush x:Key="Fuchsia" Color="#ff2bbd"/>
         <Style x:Key="UpdateButton" TargetType="Button">
             <Setter Property="Height" Value="34"/>
@@ -138,8 +139,8 @@
                 <Border Background="Transparent" BorderThickness="0" CornerRadius="8,8,0,0"
                         MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                     <Grid Margin="15,0,8,0">
-                        <TextBlock VerticalAlignment="Center" FontFamily="{StaticResource Wordmark}" FontSize="17.6">
-                            <Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="19.22" Foreground="{StaticResource Fuchsia}"/><Run x:Name="TitleVersion" Text=""/>
+                        <TextBlock VerticalAlignment="Center" FontFamily="{StaticResource Wordmark}" FontSize="12.52">
+                            <Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="18.8" Foreground="{StaticResource Fuchsia}"/><Run FontSize="17.6" FontFamily="{StaticResource BrandSans}" x:Name="TitleVersion" Text=""/>
                         </TextBlock>
                         <Button Width="30" Height="30" HorizontalAlignment="Right" Style="{StaticResource CloseButton}"
                                 FontSize="12" Content="✕" Cursor="Hand" Click="Later_Click"/>
@@ -152,7 +153,7 @@
                         <icons:AppIcon.Effect><DropShadowEffect Color="#ff2bbd" BlurRadius="13" ShadowDepth="0" Opacity="0.58"/></icons:AppIcon.Effect>
                     </icons:AppIcon>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock x:Name="HeadingText" FontFamily="{StaticResource Wordmark}" TextOptions.TextHintingMode="Animated" FontSize="23.1" Foreground="#ffffff"><Run Text="A new Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="25.19" Foreground="{StaticResource Fuchsia}"/><Run Text=" is ready"/></TextBlock>
+                        <TextBlock x:Name="HeadingText" FontFamily="{StaticResource BrandSans}" TextOptions.TextHintingMode="Animated" FontSize="23.1" Foreground="#ffffff"><Run Text="A new "/><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="16.43"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="24.64" Foreground="{StaticResource Fuchsia}"/><Run Text=" is ready"/></TextBlock>
                         <TextBlock x:Name="VersionText" Margin="0,8,0,0" FontFamily="Consolas" FontSize="12.5" Foreground="#ff52c9"/>
                         <TextBlock x:Name="BodyText" Margin="0,9,0,0" FontSize="12.5" LineHeight="19" Foreground="#d3c7cf" TextWrapping="Wrap"
                                    Text="Update the local host, reconnect supported agent clients, and pick up the newest Killer tools."/>

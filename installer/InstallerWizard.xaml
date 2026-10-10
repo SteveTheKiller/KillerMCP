@@ -11,8 +11,9 @@
         <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0" CornerRadius="7" GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
-        <FontFamily x:Key="Wordmark">./Assets/#Killer Sans</FontFamily>
-        <FontFamily x:Key="WordmarkAccent">./Assets/#Freckle Face</FontFamily>
+        <FontFamily x:Key="Wordmark">./Assets/#Punktype</FontFamily>
+        <FontFamily x:Key="WordmarkAccent">./Assets/#Lacquer</FontFamily>
+        <FontFamily x:Key="BrandSans">./Assets/#Killer Sans</FontFamily>
         <SolidColorBrush x:Key="Accent" Color="#ff2bbd"/>
         <Style x:Key="Button" TargetType="Button">
             <Setter Property="Height" Value="28"/><Setter Property="MinWidth" Value="68"/><Setter Property="Margin" Value="6,0,0,0"/>
@@ -51,7 +52,7 @@
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <icons:AppIcon Source="Assets/mcp.png" Width="72" Height="72" HorizontalAlignment="Left" RenderOptions.BitmapScalingMode="NearestNeighbor"><icons:AppIcon.Effect><DropShadowEffect Color="Black" BlurRadius="5" ShadowDepth="2" Opacity="0.9"/></icons:AppIcon.Effect></icons:AppIcon>
                     <StackPanel Grid.Row="1" Margin="0,12,0,0">
-                        <TextBlock><TextBlock.Effect><DropShadowEffect Color="Black" BlurRadius="3" ShadowDepth="1" Direction="270" Opacity="0.65"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="27.5"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="30.03" Foreground="{StaticResource Accent}"/></TextBlock>
+                        <TextBlock><TextBlock.Effect><DropShadowEffect Color="Black" BlurRadius="3" ShadowDepth="1" Direction="270" Opacity="0.65"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37" Foreground="{StaticResource Accent}"/></TextBlock>
                         <TextBlock x:Name="VersionLabel" FontFamily="Consolas" FontSize="9.5" Foreground="#a0a0a0" Margin="1,2,0,0"/>
                     </StackPanel>
                     <StackPanel Grid.Row="2" Margin="1,22,5,0">

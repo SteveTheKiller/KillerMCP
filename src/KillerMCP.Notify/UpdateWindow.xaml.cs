@@ -124,12 +124,18 @@ public partial class UpdateWindow : Window
         {
             if (i > 0)
             {
-                HeadingText.Inlines.Add(new Run("Killer"));
+                // The heading reads in Killer Sans; the product name inside it is the wordmark,
+                // Punktype and Lacquer scaled to the same capital heights as the title bar.
+                HeadingText.Inlines.Add(new Run("Killer")
+                {
+                    FontFamily = (FontFamily)FindResource("Wordmark"),
+                    FontSize = HeadingText.FontSize * 0.7112,
+                });
                 HeadingText.Inlines.Add(new Run("MCP")
                 {
                     Foreground = (Brush)FindResource("Fuchsia"),
                     FontFamily = (FontFamily)FindResource("WordmarkAccent"),
-                    FontSize = HeadingText.FontSize * 1.092,
+                    FontSize = HeadingText.FontSize * 1.068,
                 });
             }
             if (parts[i].Length > 0) HeadingText.Inlines.Add(new Run(parts[i]));
