@@ -51,7 +51,7 @@
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <icons:AppIcon Source="Assets/mcp.png" Width="72" Height="72" HorizontalAlignment="Left" RenderOptions.BitmapScalingMode="NearestNeighbor"><icons:AppIcon.Effect><DropShadowEffect Color="Black" BlurRadius="5" ShadowDepth="2" Opacity="0.9"/></icons:AppIcon.Effect></icons:AppIcon>
                     <StackPanel Grid.Row="1" Margin="0,12,0,0">
-                        <TextBlock><TextBlock.Effect><DropShadowEffect Color="Black" BlurRadius="3" ShadowDepth="1" Direction="270" Opacity="0.65"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="27.5"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="38.75" Foreground="{StaticResource Accent}"/></TextBlock>
+                        <TextBlock><TextBlock.Effect><DropShadowEffect Color="Black" BlurRadius="3" ShadowDepth="1" Direction="270" Opacity="0.65"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="27.5"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="30.03" Foreground="{StaticResource Accent}"/></TextBlock>
                         <TextBlock x:Name="VersionLabel" FontFamily="Consolas" FontSize="9.5" Foreground="#a0a0a0" Margin="1,2,0,0"/>
                     </StackPanel>
                     <StackPanel Grid.Row="2" Margin="1,22,5,0">

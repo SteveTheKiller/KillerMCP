@@ -61,7 +61,7 @@
                 <Grid.RowDefinitions><RowDefinition Height="44"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Border Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                     <TextBlock Margin="15,0,8,0" VerticalAlignment="Center" FontFamily="{StaticResource Wordmark}" FontSize="17.6">
-                        <Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="24.8" Foreground="{StaticResource Fuchsia}"/>
+                        <Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="19.22" Foreground="{StaticResource Fuchsia}"/>
                     </TextBlock>
                 </Border>
                 <Grid Grid.Row="1" Margin="24,14,26,10">

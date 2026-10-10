@@ -139,7 +139,7 @@
                         MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                     <Grid Margin="15,0,8,0">
                         <TextBlock VerticalAlignment="Center" FontFamily="{StaticResource Wordmark}" FontSize="17.6">
-                            <Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="24.8" Foreground="{StaticResource Fuchsia}"/><Run x:Name="TitleVersion" Text=""/>
+                            <Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="19.22" Foreground="{StaticResource Fuchsia}"/><Run x:Name="TitleVersion" Text=""/>
                         </TextBlock>
                         <Button Width="30" Height="30" HorizontalAlignment="Right" Style="{StaticResource CloseButton}"
                                 FontSize="12" Content="✕" Cursor="Hand" Click="Later_Click"/>
@@ -152,7 +152,7 @@
                         <icons:AppIcon.Effect><DropShadowEffect Color="#ff2bbd" BlurRadius="13" ShadowDepth="0" Opacity="0.58"/></icons:AppIcon.Effect>
                     </icons:AppIcon>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock x:Name="HeadingText" FontFamily="{StaticResource Wordmark}" TextOptions.TextHintingMode="Animated" FontSize="23.1" Foreground="#ffffff"><Run Text="A new Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="32.5" Foreground="{StaticResource Fuchsia}"/><Run Text=" is ready"/></TextBlock>
+                        <TextBlock x:Name="HeadingText" FontFamily="{StaticResource Wordmark}" TextOptions.TextHintingMode="Animated" FontSize="23.1" Foreground="#ffffff"><Run Text="A new Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="25.19" Foreground="{StaticResource Fuchsia}"/><Run Text=" is ready"/></TextBlock>
                         <TextBlock x:Name="VersionText" Margin="0,8,0,0" FontFamily="Consolas" FontSize="12.5" Foreground="#ff52c9"/>
                         <TextBlock x:Name="BodyText" Margin="0,9,0,0" FontSize="12.5" LineHeight="19" Foreground="#d3c7cf" TextWrapping="Wrap"
                                    Text="Update the local host, reconnect supported agent clients, and pick up the newest Killer tools."/>

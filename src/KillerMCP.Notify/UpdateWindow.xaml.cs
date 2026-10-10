@@ -129,7 +129,7 @@ public partial class UpdateWindow : Window
                 {
                     Foreground = (Brush)FindResource("Fuchsia"),
                     FontFamily = (FontFamily)FindResource("WordmarkAccent"),
-                    FontSize = HeadingText.FontSize * 1.409,
+                    FontSize = HeadingText.FontSize * 1.092,
                 });
             }
             if (parts[i].Length > 0) HeadingText.Inlines.Add(new Run(parts[i]));
