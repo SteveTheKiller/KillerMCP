@@ -5,7 +5,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="KillerMCP Setup" Width="650" Height="390" WindowStartupLocation="CenterScreen"
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
-        FontFamily="Segoe UI" Foreground="#ffffff" TextOptions.TextFormattingMode="Display"
+        FontFamily="./Assets/#Killer Sans UI, Segoe UI" Foreground="#ffffff" TextOptions.TextFormattingMode="Display"
         TextOptions.TextRenderingMode="ClearType" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0" CornerRadius="7" GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
@@ -14,6 +14,7 @@
         <FontFamily x:Key="Wordmark">./Assets/#Punktype</FontFamily>
         <FontFamily x:Key="WordmarkAccent">./Assets/#Lacquer</FontFamily>
         <FontFamily x:Key="BrandSans">./Assets/#Killer Sans</FontFamily>
+        <FontFamily x:Key="UiFont">./Assets/#Killer Sans UI, Segoe UI</FontFamily>
         <SolidColorBrush x:Key="Accent" Color="#ff2bbd"/>
         <Style x:Key="Button" TargetType="Button">
             <Setter Property="Height" Value="28"/><Setter Property="MinWidth" Value="68"/><Setter Property="Margin" Value="6,0,0,0"/>
@@ -44,16 +45,16 @@
         <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect>
         <Grid ClipToBounds="True">
             <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-            <Border x:Name="FrameGrain" Grid.ColumnSpan="2" CornerRadius="7" IsHitTestVisible="False" Opacity="0.40"/>
+            <Border x:Name="FrameGrain" Grid.ColumnSpan="2" CornerRadius="7" IsHitTestVisible="False" Opacity="0.24"/>
             <Border Grid.Column="0" Background="#000000" CornerRadius="7,0,0,7">
                 <Grid>
-                    <Border x:Name="SidebarGrain" CornerRadius="7,0,0,7" IsHitTestVisible="False" Opacity="0.40"/>
+                    <Border x:Name="SidebarGrain" CornerRadius="7,0,0,7" IsHitTestVisible="False" Opacity="0.24"/>
                     <Grid Margin="22,20,18,16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <icons:AppIcon Source="Assets/mcp.png" Width="72" Height="72" HorizontalAlignment="Left" RenderOptions.BitmapScalingMode="NearestNeighbor"><icons:AppIcon.Effect><DropShadowEffect Color="Black" BlurRadius="5" ShadowDepth="2" Opacity="0.9"/></icons:AppIcon.Effect></icons:AppIcon>
                     <StackPanel Grid.Row="1" Margin="0,12,0,0">
                         <TextBlock><TextBlock.Effect><DropShadowEffect Color="Black" BlurRadius="3" ShadowDepth="1" Direction="270" Opacity="0.65"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37" Foreground="{StaticResource Accent}"/></TextBlock>
-                        <TextBlock x:Name="VersionLabel" FontFamily="Consolas" FontSize="9.5" Foreground="#a0a0a0" Margin="1,2,0,0"/>
+                        <TextBlock x:Name="VersionLabel" FontFamily="{StaticResource UiFont}" FontSize="9.5" Foreground="#a0a0a0" Margin="1,2,0,0"/>
                     </StackPanel>
                     <StackPanel Grid.Row="2" Margin="1,22,5,0">
                         <TextBlock TextWrapping="Wrap" Foreground="#d0d0d0" LineHeight="17" Text="One connection for KillerTools and every supported Killer app:"/>
@@ -65,7 +66,7 @@
                             <TextBlock><Run Text="The " Foreground="#ffffff"/><Run Text="Killendar" Foreground="#ff5555"/></TextBlock>
                         </StackPanel>
                     </StackPanel>
-                    <TextBlock Grid.Row="3" FontFamily="Consolas" FontSize="10" Foreground="#a0a0a0" Text="© 2026 Steve the Killer"/>
+                    <TextBlock Grid.Row="3" FontFamily="{StaticResource BrandSans}" FontSize="14" TextOptions.TextFormattingMode="Ideal" Foreground="#a0a0a0" Text="© 2026 Steve the Killer"/>
                     </Grid>
                 </Grid>
             </Border>
@@ -73,21 +74,21 @@
                 <Border Background="#000000" CornerRadius="6"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect></Border>
                 <Border Background="#0a0a0a" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="6">
                   <Grid>
-                    <Border x:Name="GrainLayer" CornerRadius="6" IsHitTestVisible="False" Opacity="0.4"/>
-                    <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click" Panel.ZIndex="3"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><Path x:Name="CloseGlyph" Data="M 5,5 L 13,13 M 13,5 L 5,13" Stroke="#b8b8b8" StrokeThickness="1.2" HorizontalAlignment="Center" VerticalAlignment="Center" Width="18" Height="18"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Stroke" Value="#ff2bbd"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
+                    <Border x:Name="GrainLayer" CornerRadius="6" IsHitTestVisible="False" Opacity="0.24"/>
+                    <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click" Panel.ZIndex="3"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><TextBlock x:Name="CloseGlyph" Text="&#x2715;" FontSize="11" Foreground="#b8b8b8" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Foreground" Value="#e04444"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
                   <Grid Margin="24,22,24,16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <TextBlock x:Name="Heading" Text="Welcome to KillerMCP Setup" FontSize="18" FontWeight="SemiBold" Margin="0,0,28,0"/>
+                    <TextBlock x:Name="Heading" Text="Welcome to KillerMCP Setup" FontFamily="{StaticResource BrandSans}" FontSize="20" TextOptions.TextFormattingMode="Ideal" Margin="0,0,28,0"/>
                     <TextBlock Grid.Row="1" Margin="0,6,25,14" Foreground="#b8b8b8" TextWrapping="Wrap" LineHeight="19" Text="Install the native KillerMCP host and connect compatible agent clients on this computer."/>
                     <StackPanel Grid.Row="2">
                         <Border Background="#0a0a0a" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="3" Padding="11,9">
-                            <StackPanel><TextBlock Text="Install location" FontSize="10" Foreground="#929292"/><TextBlock x:Name="InstallLocation" FontFamily="Consolas" FontSize="10.5" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel>
+                            <StackPanel><TextBlock Text="Install location" FontSize="10" Foreground="#929292"/><TextBlock x:Name="InstallLocation" FontFamily="{StaticResource UiFont}" FontSize="10.5" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel>
                         </Border>
-                        <TextBlock x:Name="RuntimeStatus" Margin="1,13,0,0" FontFamily="Consolas" FontSize="10.5" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="RuntimeStatus" Margin="1,13,0,0" FontFamily="{StaticResource UiFont}" FontSize="10.5" TextWrapping="Wrap"/>
                         <TextBlock Margin="1,10,0,0" Foreground="#cfcfcf" TextWrapping="Wrap" Text="Setup installs the verified runtime, detects supported Killer apps, and registers one shared MCP connection."/>
                         <TextBlock x:Name="RuntimeLink" Margin="1,12,0,0" Foreground="#ff52c9" TextDecorations="Underline" Cursor="Hand" MouseLeftButtonDown="RuntimeLink_Click" Text="Download .NET 10 runtime"/>
                     </StackPanel>
-                    <TextBlock x:Name="Status" Grid.Row="3" Margin="0,8,0,10" FontFamily="Consolas" FontSize="10.5" Foreground="#aaaaaa" Text="Ready to install" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="Status" Grid.Row="3" Margin="0,8,0,10" FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="#aaaaaa" Text="Ready to install" TextWrapping="Wrap"/>
                     <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Content="Cancel" Style="{StaticResource Button}" Click="Cancel_Click"/>
                         <Button x:Name="UninstallButton" Content="Uninstall" Style="{StaticResource Button}" Click="Uninstall_Click" Visibility="Collapsed"/>
