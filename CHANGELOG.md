@@ -8,10 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Changed
 
+- Capped the tool call log at 5 MB with one rolled-over file, and recorded how long each call took.
 - Added KillerBench to the installer's supported app list.
 
 ### Fixed
 
+- Kept KillerMCP running when a tool fails unexpectedly or an unknown tool is called.
 - Matched the setup dialog's title icon placement, caption height and padding to the current family dialogs.
 - Hovered action buttons in the installer and the update and repair prompts fill with the accent gradient, and the Later and Deny buttons stay neutral on hover.
 

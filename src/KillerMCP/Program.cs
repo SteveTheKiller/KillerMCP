@@ -195,12 +195,13 @@ static class ToolRegistry
         var loggedName = name is not null && (CoreToolNames.Contains(name) || Adapters.ContainsKey(name))
             ? name : "(unknown)";
         ToolCallLog.Record(loggedName, "started");
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             if (name is not null && Adapters.TryGetValue(name, out var adapter))
             {
                 var adapterResult = adapter.CallAsync(arguments, CancellationToken.None).GetAwaiter().GetResult();
-                ToolCallLog.Record(loggedName, adapterResult.IsError ? "error" : "ok");
+                ToolCallLog.Record(loggedName, adapterResult.IsError ? "error" : "ok", stopwatch.ElapsedMilliseconds);
                 return adapterResult.IsError
                     ? new { content = new[] { new { type = "text", text = adapterResult.Text } }, isError = true }
                     : new { content = new[] { new { type = "text", text = adapterResult.Text } }, isError = false };
@@ -305,13 +306,19 @@ static class ToolRegistry
             "killermcp_update_status" => UpdateStatus(arguments),
             _ => throw new InvalidOperationException($"Unknown tool: {name}"),
             };
-            ToolCallLog.Record(loggedName, "ok");
+            ToolCallLog.Record(loggedName, "ok", stopwatch.ElapsedMilliseconds);
             return new { content = new[] { new { type = "text", text = JsonSerializer.Serialize(value, json) } } };
         }
         catch (ToolCallException exception)
         {
-            ToolCallLog.Record(loggedName, "error");
+            ToolCallLog.Record(loggedName, "error", stopwatch.ElapsedMilliseconds);
             return new { content = new[] { new { type = "text", text = exception.Message } }, isError = true };
+        }
+        catch (Exception exception)
+        {
+            ToolCallLog.Record(loggedName, "error", stopwatch.ElapsedMilliseconds);
+            var message = exception.Message.Length <= 1024 ? exception.Message : exception.Message[..1024];
+            return new { content = new[] { new { type = "text", text = "The tool failed: " + message } }, isError = true };
         }
     }
 

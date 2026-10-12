@@ -36,7 +36,7 @@ Tool availability depends on the supported apps installed on the computer. Revie
 
 ### Tool call history
 
-On Windows, KillerMCP writes a local JSON Lines log at `%LOCALAPPDATA%\KillerMCP\tool-calls.jsonl`. Each entry records the UTC time, tool name, and whether the call started, completed, or returned an error. Arguments and results are not logged, so passwords, note content, and other tool data are not copied into this file. A call interrupted by a crash may have only a `started` entry. The file is stored under the current user's profile. KillerMCP does not upload it or delete it automatically.
+On Windows, KillerMCP writes a local JSON Lines log at `%LOCALAPPDATA%\KillerMCP\tool-calls.jsonl`. Each entry records the UTC time, tool name, whether the call started, completed, or returned an error, and how long a finished call took. Arguments and results are not logged, so passwords, note content, and other tool data are not copied into this file. A call interrupted by a crash may have only a `started` entry. The file is stored under the current user's profile. KillerMCP does not upload it. When the log reaches 5 MB, it is renamed to `tool-calls.1.jsonl`, replacing any earlier copy, and a new log begins.
 
 ## KillerTools utilities
 
