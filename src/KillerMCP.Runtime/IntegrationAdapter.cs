@@ -168,7 +168,8 @@ public static class IntegrationAdapter
             Directory.CreateDirectory(temp);
             var source = Path.Combine(temp, "report.html");
             await File.WriteAllTextAsync(source, html, new UTF8Encoding(false), token).ConfigureAwait(false);
-            var result = await ProcessRunner.RunAsync(edge, ["--headless", "--disable-gpu", "--no-pdf-header-footer", "--print-to-pdf=" + output, new Uri(source).AbsoluteUri], TimeSpan.FromSeconds(90), 32768, token).ConfigureAwait(false);
+            // A private profile keeps browser data separate, and the resolver rule fails every host name lookup.
+            var result = await ProcessRunner.RunAsync(edge, ["--headless", "--disable-gpu", "--no-pdf-header-footer", "--user-data-dir=" + Path.Combine(temp, "profile"), "--host-resolver-rules=MAP * ~NOTFOUND", "--print-to-pdf=" + output, new Uri(source).AbsoluteUri], TimeSpan.FromSeconds(90), 32768, token).ConfigureAwait(false);
             return result.ExitCode == 0 && File.Exists(output) ? Ok(JsonSerializer.Serialize(new { output })) : ProcessError("PDF creation", result);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or TimeoutException or InvalidOperationException) { return Error(Limit(ex.Message)); }
@@ -235,7 +236,7 @@ public static class IntegrationAdapter
         return text.ToString();
     }
 
-    private static string Document(string title, string body) => "<!doctype html><html><head><meta charset=\"utf-8\"><title>" + WebUtility.HtmlEncode(title) + "</title><style>@page{margin:18mm}body{font:14px Arial,sans-serif;color:#111}h1{font-size:24px}table{border-collapse:collapse;width:100%;font-size:11px}th,td{border:1px solid #999;padding:5px;text-align:left;vertical-align:top}th{background:#eee}pre{white-space:pre-wrap;word-break:break-word}</style></head><body><h1>" + WebUtility.HtmlEncode(title) + "</h1>" + body + "</body></html>";
+    private static string Document(string title, string body) => "<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:\"><title>" + WebUtility.HtmlEncode(title) + "</title><style>@page{margin:18mm}body{font:14px Arial,sans-serif;color:#111}h1{font-size:24px}table{border-collapse:collapse;width:100%;font-size:11px}th,td{border:1px solid #999;padding:5px;text-align:left;vertical-align:top}th{background:#eee}pre{white-space:pre-wrap;word-break:break-word}</style></head><body><h1>" + WebUtility.HtmlEncode(title) + "</h1>" + body + "</body></html>";
     private static string Display(JsonElement value) => value.ValueKind == JsonValueKind.String ? value.GetString() ?? string.Empty : value.GetRawText();
 
     private static Task<ProcessResult> RunApp(string path, IEnumerable<string> arguments, int seconds, CancellationToken token)

@@ -160,7 +160,7 @@ App tools appear only when KillerMCP finds a supported installed version that ad
 - Render selected KillerPDF pages and save each page image as a new rich note.
 - Save a finished KillerBench scan or check as a KillerNotes note.
 
-PDF creation uses the installed Microsoft Edge print engine. Output paths must be absolute, their parent folder must already exist, and existing files are never overwritten.
+PDF creation uses the installed Microsoft Edge print engine in a private session that cannot resolve host names. Agent-generated HTML cannot run scripts or load remote images, fonts, or pages; embed images as data URLs instead. Output paths must be absolute, their parent folder must already exist, and existing files are never overwritten.
 
 ### KillerPDF
 
