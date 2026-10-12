@@ -18,6 +18,7 @@
         <FontFamily x:Key="BrandSans">./Assets/#Killer Sans</FontFamily>
         <FontFamily x:Key="UiFont">./Assets/#Killer Sans UI, Segoe UI</FontFamily>
         <SolidColorBrush x:Key="Fuchsia" Color="#ff2bbd"/>
+        <LinearGradientBrush x:Key="AccentFill" StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#ff2bbd" Offset="0"/><GradientStop Color="#d6249f" Offset="1"/></LinearGradientBrush>
         <Style x:Key="ApproveButton" TargetType="Button">
             <Setter Property="Height" Value="28"/>
             <Setter Property="MinWidth" Value="68"/>
@@ -37,7 +38,8 @@
                         </Border></Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Face" Property="Background" Value="#ff2bbd"/>
+                                <Setter TargetName="Face" Property="Background" Value="{StaticResource AccentFill}"/>
+                                <Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource AccentFill}"/>
                                 <Setter Property="Foreground" Value="#13000d"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
@@ -50,9 +52,30 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <Style x:Key="DenyButton" TargetType="Button" BasedOn="{StaticResource ApproveButton}">
-            <Setter Property="Foreground" Value="#d3c7cf"/>
-            <Setter Property="BorderBrush" Value="#5c4757"/>
+        <Style x:Key="DenyButton" TargetType="Button">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="MinWidth" Value="68"/>
+            <Setter Property="Padding" Value="12,2"/>
+            <Setter Property="Foreground" Value="#e0e0e0"/>
+            <Setter Property="Background" Value="#0a0a0a"/>
+            <Setter Property="BorderBrush" Value="#2a2a2a"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid><Border x:Name="FaceRing" IsHitTestVisible="False" CornerRadius="{Binding CornerRadius, ElementName=Face}" BorderThickness="{Binding BorderThickness, ElementName=Face}" BorderBrush="{Binding Background, ElementName=Face}" Margin="{Binding Margin, ElementName=Face}" Visibility="{Binding Visibility, ElementName=Face}" Opacity="{Binding Opacity, ElementName=Face}"/><Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border></Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#333333"/><Setter TargetName="Face" Property="BorderBrush" Value="#aaaaaa"/></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#4a103a"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Fuchsia}"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
     <Border Margin="8" Background="#000000" BorderBrush="#2a2a2a" BorderThickness="1" CornerRadius="7" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">

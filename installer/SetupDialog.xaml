@@ -16,6 +16,7 @@
         <FontFamily x:Key="WordmarkAccent">./Assets/#Lacquer</FontFamily>
         <FontFamily x:Key="BrandSans">./Assets/#Killer Sans</FontFamily>
         <SolidColorBrush x:Key="Accent" Color="#ff2bbd"/>
+        <LinearGradientBrush x:Key="AccentFill" StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#ff2bbd" Offset="0"/><GradientStop Color="#d6249f" Offset="1"/></LinearGradientBrush>
         <Style x:Key="SurfaceButton" TargetType="Button">
             <Setter Property="Height" Value="28"/><Setter Property="MinWidth" Value="80"/>
             <Setter Property="Padding" Value="12,2"/><Setter Property="Foreground" Value="#e0e0e0"/>
@@ -41,7 +42,7 @@
                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border></Grid>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#ff2bbd"/><Setter Property="Foreground" Value="#0a0a0a"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="{StaticResource AccentFill}"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource AccentFill}"/><Setter Property="Foreground" Value="#0a0a0a"/></Trigger>
                     <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#4a103a"/><Setter Property="Foreground" Value="#ffffff"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
