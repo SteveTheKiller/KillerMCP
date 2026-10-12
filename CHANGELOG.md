@@ -4,7 +4,7 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.1] - Unreleased
+## [0.4.1] - 2026-10-12
 
 ### Changed
 
@@ -14,8 +14,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
-- Kept KillerMCP running when a tool fails unexpectedly or an unknown tool is called.
 - Blocked scripts and remote content in agent-generated PDFs.
+- Kept KillerMCP running when a tool fails unexpectedly or an unknown tool is called.
 - Limited KillerNotes content to 30,000 characters and returned a clear error for requests too large to pass to an app.
 - Matched the setup dialog's title icon placement, caption height and padding to the current family dialogs.
 - Hovered action buttons in the installer and the update and repair prompts fill with the accent gradient, and the Later and Deny buttons stay neutral on hover.
