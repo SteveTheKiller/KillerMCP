@@ -121,14 +121,18 @@ namespace KillerMCP.Setup
 
         private static ImageBrush CreateGrain()
         {
-            const int size = 128;
+            // The family film grain from KillerUI GrainTexture: about a third of the pixels carry a speck,
+            // half bright and half dark, so black surfaces stay black instead of lifting toward gray.
+            const int size = 256;
             var pixels = new byte[size * size * 4];
-            var random = new Random(1979);
+            var random = new Random(1337);
             for (int i = 0; i < pixels.Length; i += 4)
             {
-                byte value = (byte)random.Next(82, 174);
+                if (random.Next(3) != 0) continue;
+                bool bright = random.Next(2) == 0;
+                byte value = bright ? (byte)random.Next(190, 255) : (byte)random.Next(0, 50);
                 pixels[i] = pixels[i + 1] = pixels[i + 2] = value;
-                pixels[i + 3] = (byte)random.Next(34, 92);
+                pixels[i + 3] = (byte)random.Next(35, 95);
             }
             var bitmap = BitmapSource.Create(size, size, 96, 96, PixelFormats.Bgra32, null, pixels, size * 4);
             bitmap.Freeze();
