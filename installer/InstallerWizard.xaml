@@ -51,8 +51,8 @@
                     <Border x:Name="SidebarGrain" CornerRadius="7,0,0,7" IsHitTestVisible="False" Opacity="0.24"/>
                     <Grid Margin="22,16,14,16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <icons:AppIcon Source="Assets/mcp.png" Width="96" Height="96" Margin="6,0,0,0" HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="NearestNeighbor"><icons:AppIcon.Effect><DropShadowEffect Color="Black" BlurRadius="5" ShadowDepth="2" Opacity="0.9"/></icons:AppIcon.Effect></icons:AppIcon>
-                    <StackPanel Grid.Row="1" Margin="0,8,0,0">
+                    <icons:AppIcon Source="Assets/mcp.png" Width="96" Height="96" Margin="6,-3,0,-3" HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="NearestNeighbor"><icons:AppIcon.Effect><DropShadowEffect Color="Black" BlurRadius="5" ShadowDepth="2" Opacity="0.9"/></icons:AppIcon.Effect></icons:AppIcon>
+                    <StackPanel Grid.Row="1" Margin="0,6,0,0">
                         <Grid HorizontalAlignment="Left"><TextBlock Foreground="#D8000000" Opacity="0.45" Margin="1,2,-1,-2" IsHitTestVisible="False"><TextBlock.Effect><BlurEffect Radius="3"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37"/></TextBlock><TextBlock><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37" Foreground="{StaticResource Accent}"/></TextBlock></Grid>
                         <TextBlock x:Name="VersionLabel" FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="#a0a0a0" Margin="1,2,0,0"/>
                     </StackPanel>
