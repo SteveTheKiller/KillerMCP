@@ -7,6 +7,23 @@ internal sealed record ProcessResult(int ExitCode, string StandardOutput, string
 
 internal static class ProcessRunner
 {
+    // CreateProcess rejects command lines longer than 32,767 characters.
+    private const int MaximumCommandLineLength = 32_000;
+
+    private static int EstimatedLength(string argument)
+    {
+        var length = argument.Length + 3;
+        foreach (var character in argument)
+        {
+            if (character is '"' or '\\')
+            {
+                length++;
+            }
+        }
+
+        return length;
+    }
+
     public static async Task<ProcessResult> RunAsync(string executable, IEnumerable<string> arguments, TimeSpan timeout, int maximumCharacters, CancellationToken cancellationToken = default)
     {
         using var process = new Process
@@ -20,12 +37,26 @@ internal static class ProcessRunner
                 RedirectStandardError = true,
             },
         };
+        var commandLineLength = executable.Length + 3;
         foreach (var argument in arguments)
         {
             process.StartInfo.ArgumentList.Add(argument);
+            commandLineLength += EstimatedLength(argument);
         }
 
-        if (!process.Start())
+        if (commandLineLength > MaximumCommandLineLength)
+        {
+            throw new InvalidOperationException("The request is too large to pass to the application.");
+        }
+
+        try
+        {
+            if (!process.Start())
+            {
+                throw new InvalidOperationException("The application command did not start.");
+            }
+        }
+        catch (System.ComponentModel.Win32Exception)
         {
             throw new InvalidOperationException("The application command did not start.");
         }

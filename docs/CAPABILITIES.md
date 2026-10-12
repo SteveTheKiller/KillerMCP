@@ -218,7 +218,7 @@ All KillerShell MCP tools are read-only. They cannot run terminal commands, star
 
 - Search note titles, tags, and Markdown content.
 - List notes by group or tag, read a note by ID, and inspect groups, tags, backlinks, outgoing links, history, and vault statistics.
-- Create Markdown notes and update their title, content, group, tags, or title color.
+- Create Markdown notes of up to 30,000 characters and update their title, content, group, tags, or title color.
 - Create nested groups and set or clear group and note title colors.
 - Save a local image as a new rich note.
 - Export a note to a new TXT, Markdown, HTML, or KNOTE file. The resulting path can be passed to another installed Killer app.

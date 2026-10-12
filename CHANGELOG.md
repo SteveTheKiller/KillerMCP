@@ -16,6 +16,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 - Kept KillerMCP running when a tool fails unexpectedly or an unknown tool is called.
 - Blocked scripts and remote content in agent-generated PDFs.
+- Limited KillerNotes content to 30,000 characters and returned a clear error for requests too large to pass to an app.
 - Matched the setup dialog's title icon placement, caption height and padding to the current family dialogs.
 - Hovered action buttons in the installer and the update and repair prompts fill with the accent gradient, and the Later and Deny buttons stay neutral on hover.
 
