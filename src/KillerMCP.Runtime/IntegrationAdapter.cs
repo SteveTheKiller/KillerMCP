@@ -57,7 +57,9 @@ public static class IntegrationAdapter
         if (!ScanInput(input, true, out var target, out var full, out var limit, out var output, out _)) return Error("Provide valid scan options and a new absolute PDF output path");
         var json = await Scan(scan, target, full, limit, token).ConfigureAwait(false);
         if (json.Error is not null) return json.Error;
-        return await RenderPdf(ScanReport(json.Root, target), output!, token).ConfigureAwait(false);
+        var rendered = await RenderPdf(ScanReport(json.Root, target), output!, token).ConfigureAwait(false);
+        if (rendered.IsError) return rendered;
+        return Ok(JsonSerializer.Serialize(new { output, target = ScanScope(target), devices = Rows(json.Root).Length }));
     }
 
     private static async Task<AppCallResult> ScanNote(string scan, string notes, JsonElement input, CancellationToken token)
@@ -65,7 +67,7 @@ public static class IntegrationAdapter
         if (!ScanInput(input, false, out var target, out var full, out var limit, out _, out var group)) return Error("Provide valid scan options");
         var json = await Scan(scan, target, full, limit, token).ConfigureAwait(false);
         if (json.Error is not null) return json.Error;
-        return await CreateNote(notes, "KillerScan network report", MarkdownReport(json.Root), group, token).ConfigureAwait(false);
+        return await CreateNote(notes, "KillerScan network report", MarkdownScanReport(json.Root, target), group, token).ConfigureAwait(false);
     }
 
     private static async Task<AppCallResult> AgendaPdf(string calendar, JsonElement input, CancellationToken token)
@@ -182,20 +184,48 @@ public static class IntegrationAdapter
         return Document(title, $"<p>{rows.Length} result(s)</p>{JsonTable(rows)}");
     }
 
+    private static readonly (string Key, string Label)[] ScanColumns =
+    [
+        ("IpAddress", "IP address"), ("Hostname", "Hostname"), ("MacAddress", "MAC address"),
+        ("Vendor", "Vendor"), ("DeviceType", "Type"), ("OpenPortsDisplay", "Open ports")
+    ];
+
+    private static string ScanScope(string? target) => string.IsNullOrWhiteSpace(target) ? "Local network" : target!;
+    private static string DeviceCount(int count) => $"{count} {(count == 1 ? "device" : "devices")} found.";
+
     private static string ScanReport(JsonElement root, string? target)
     {
         var rows = Rows(root);
-        var scope = string.IsNullOrWhiteSpace(target) ? "Local network" : target;
-        return Document("KillerScan Network Report", $"<p>Scan target: {WebUtility.HtmlEncode(scope)}</p><p>{rows.Length} {(rows.Length == 1 ? "device" : "devices")} found.</p><h2>Devices</h2>{ScanTable(rows)}");
+        return Document("KillerScan Network Report", $"<p>Scan target: {WebUtility.HtmlEncode(ScanScope(target))}</p><p>{DeviceCount(rows.Length)}</p><h2>Devices</h2>{ScanTable(rows)}");
     }
+
+    private static string MarkdownScanReport(JsonElement root, string? target)
+    {
+        var rows = Rows(root);
+        var text = new StringBuilder();
+        text.Append("Scan target: ").AppendLine(MarkdownCell(ScanScope(target))).AppendLine();
+        text.AppendLine(DeviceCount(rows.Length)).AppendLine();
+        text.Append('|');
+        foreach (var column in ScanColumns) text.Append(' ').Append(column.Label).Append(" |");
+        text.AppendLine();
+        text.Append('|');
+        foreach (var _ in ScanColumns) text.Append(" --- |");
+        text.AppendLine();
+        foreach (var row in rows)
+        {
+            text.Append('|');
+            foreach (var column in ScanColumns)
+                text.Append(' ').Append(MarkdownCell(row.ValueKind == JsonValueKind.Object && row.TryGetProperty(column.Key, out var value) ? Display(value) : string.Empty)).Append(" |");
+            text.AppendLine();
+        }
+        return text.ToString();
+    }
+
+    private static string MarkdownCell(string value) => value.Replace("\\", "\\\\").Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
 
     private static string ScanTable(JsonElement[] rows)
     {
-        var columns = new (string Key, string Label)[]
-        {
-            ("IpAddress", "IP address"), ("Hostname", "Hostname"), ("MacAddress", "MAC address"),
-            ("Vendor", "Vendor"), ("DeviceType", "Type"), ("OpenPortsDisplay", "Open ports")
-        };
+        var columns = ScanColumns;
         var table = new StringBuilder("<table><thead><tr>");
         foreach (var column in columns) table.Append("<th>").Append(column.Label).Append("</th>");
         table.Append("</tr></thead><tbody>");

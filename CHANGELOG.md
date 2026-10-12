@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Changed
 
+- Network report PDFs now return the scan target and device count, and network report notes use the same device table as the PDF.
 - Capped the tool call log at 5 MB with one rolled-over file, and recorded how long each call took.
 - Added KillerBench to the installer's supported app list.
 
