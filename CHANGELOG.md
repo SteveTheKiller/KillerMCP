@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ## [0.5.0] - 2026-10-12
 
+0.5.0 brings KillerMCP to WinGet and Chocolatey and hardens the host against failed tools and untrusted PDF content.
+
+### Added
+
+- Added WinGet and Chocolatey packages, submitted automatically when a release is published.
+
 ### Changed
 
 - Network report PDFs now return the scan target and device count, and network report notes use the same device table as the PDF.

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>killermcp</id>
+    <version>REPLACE_VERSION</version>
+    <packageSourceUrl>https://github.com/SteveTheKiller/KillerMCP</packageSourceUrl>
+    <owners>SteveTheKiller</owners>
+    <title>KillerMCP</title>
+    <authors>Steve the Killer</authors>
+    <copyright>Copyright (c) 2026 Steve the Killer</copyright>
+    <projectUrl>https://killertools.net/mcp</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/SteveTheKiller/KillerMCP/main/assets/KillerMCP.ico</iconUrl>
+    <licenseUrl>https://github.com/SteveTheKiller/KillerMCP/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/SteveTheKiller/KillerMCP</projectSourceUrl>
+    <docsUrl>https://github.com/SteveTheKiller/KillerMCP/blob/main/docs/CAPABILITIES.md</docsUrl>
+    <bugTrackerUrl>https://github.com/SteveTheKiller/KillerMCP/issues</bugTrackerUrl>
+    <tags>mcp ai agent claude codex killertools pdf network notes cli</tags>
+    <summary>One local MCP connection for KillerTools and the Killer app family.</summary>
+    <description>KillerMCP gives MCP compatible agents one local connection to the KillerTools utilities and the Killer apps installed on the computer.
+
+**Features:**
+
+- All 81 KillerTools website utilities from the native KillerTools engine
+- Automatic tool discovery for supported versions of KillerPDF, KillerScan, KillerNotes, KillerShell, Killendar, and KillerBench
+- Registers itself with Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when they are found
+- Labeled tool effects and a local tool call log that never records arguments or results
+- Signed updates that must match the published SHA256 and pass Windows signature verification
+- Installs for the current user and requires the .NET 10 Desktop Runtime
+- GPLv3, local-only, no account, no telemetry
+    </description>
+    <releaseNotes>https://github.com/SteveTheKiller/KillerMCP/releases/tag/vREPLACE_VERSION</releaseNotes>
+    <dependencies>
+      <dependency id="dotnet-10.0-desktopruntime" version="[10.0.0,11.0.0)" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
