@@ -1,12 +1,13 @@
 # KillerMCP native release workflow.
-# Builds, signs with Certum SimplySign, verifies, tests, and optionally publishes.
+# Builds, signs with Certum SimplySign, verifies, tests, and publishes a GitHub release.
+# Use -DryRun to stop before tagging and publishing, or -SkipSign for an unsigned local test build.
 
 [CmdletBinding()]
 param(
+    [switch]$DryRun,
     [string]$CertThumbprint = '',
     [string]$CertName = 'Open Source Developer Stephen Riley',
-    [switch]$SkipSign,
-    [switch]$Publish
+    [switch]$SkipSign
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,8 +32,8 @@ function Invoke-Checked {
     if ($LASTEXITCODE -ne 0) { Fail $Failure }
 }
 
-if ($Publish -and $SkipSign) {
-    Fail 'An unsigned KillerMCP installer cannot be published.'
+if ($SkipSign) {
+    $DryRun = $true
 }
 
 [xml]$project = Get-Content -LiteralPath 'src\KillerMCP\KillerMCP.csproj' -Raw
@@ -61,7 +62,7 @@ if ($dashMatches.Count) {
 }
 
 $changelog = Get-Content -LiteralPath $changelogFile -Raw
-if ($Publish) {
+if (-not $DryRun) {
     if ($changelog -match "(?m)^## \[$([regex]::Escape($Version))\] - Unreleased$") {
         Fail "CHANGELOG.md section [$Version] is still marked Unreleased."
     }
@@ -150,7 +151,7 @@ if ($notes.Count -eq 0) { Fail "Could not extract [$Version] notes from CHANGELO
 $notesFile = Join-Path $env:TEMP "KillerMCP-$Version-notes.md"
 [IO.File]::WriteAllText($notesFile, ($notes -join "`r`n"), [Text.UTF8Encoding]::new($false))
 
-if ($Publish) {
+if (-not $DryRun) {
     Step "Publishing KillerMCP $Tag"
     git tag -a $Tag -m "KillerMCP $Tag"
     if ($LASTEXITCODE -ne 0) { Fail "Could not create tag $Tag." }
@@ -161,5 +162,5 @@ if ($Publish) {
     gh release view $Tag --json url --jq '.url'
 } else {
     Write-Host ''
-    Write-Host 'Release artifacts are verified. Nothing was published.' -ForegroundColor Green
+    Write-Host 'DryRun: release artifacts are verified. Nothing was published.' -ForegroundColor Green
 }

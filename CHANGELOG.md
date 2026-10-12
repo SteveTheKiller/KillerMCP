@@ -19,6 +19,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
+- Made the release script publish by default, with `-DryRun` for local verification.
 - Kept app icons sharp at fractional display DPI and app zoom.
 - Restored the textured finish on the setup sidebar, setup frame and uninstall and error dialogs.
 - Drew rounded button outlines without nicks at the corners.
