@@ -56,7 +56,7 @@
                 <Border Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown" Panel.ZIndex="1">
                     <Grid Margin="6,0,6,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <icons:AppIcon Source="Assets/mcp.png" Width="25" Height="25" Margin="0,0,7,0" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                            <icons:AppIcon Source="Assets/mcp.png" Width="27" Height="27" Margin="0,0,7,0" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                             <Grid VerticalAlignment="Center" Margin="0,-18,0,-22"><Grid.RenderTransform><TranslateTransform Y="-5"/></Grid.RenderTransform><TextBlock Foreground="#D8000000" Opacity="0.45" Margin="1,2,-1,-2" IsHitTestVisible="False" FontFamily="{StaticResource Wordmark}" FontSize="15"><TextBlock.Effect><BlurEffect Radius="3"/></TextBlock.Effect><Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="22.52"/></TextBlock><TextBlock FontFamily="{StaticResource Wordmark}" FontSize="15"><Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="22.52" Foreground="{StaticResource Accent}"/></TextBlock></Grid>
                         </StackPanel>
                         <Button Width="28" Height="28" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click">
