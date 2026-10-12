@@ -4,7 +4,7 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - Unreleased
+## [0.4.0] - 2026-10-11
 
 ### Added
 
@@ -13,13 +13,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - Required a fresh preview token, Windows administrator approval and, for disruptive repairs, a desktop approval window before any repair runs.
 - Ran one repair at a time, recorded each request in a local action log, and locked further repairs after an uncertain result until the user clears the lock.
 
-### Fixed
-- Kept app icons sharp at fractional display DPI and app zoom by caching exact pixel sizes from a covering source and aligning the final draw to device pixels.
+### Changed
 
+- Set the wordmark in Punktype and Lacquer and the window headings, footer and setup text in Killer Sans, with the family title bar wordmark, grain and close button in setup.
+
+### Fixed
+
+- Kept app icons sharp at fractional display DPI and app zoom.
 - Restored the textured finish on the setup sidebar, setup frame and uninstall and error dialogs.
-- Moved the wordmarks and window headings to Killer Sans and Freckle Face, replacing the typewriter font.
+- Drew rounded button outlines without nicks at the corners.
 - Smoothed the wordmark text in the update window, colored its MCP fuchsia, titled it "Update KillerMCP" when no update is selected and showed the new version in its title bar.
-- The installer and uninstaller have their own taskbar buttons, labeled "KillerMCP Installer" and "Uninstall KillerMCP", with the app icon.
+- Gave the installer and uninstaller their own taskbar buttons, labeled "KillerMCP Installer" and "Uninstall KillerMCP", with the app icon.
 
 ## [0.3.5] - 2026-09-30
 
