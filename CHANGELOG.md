@@ -12,7 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
-- Matched the setup dialog title bar padding and height to the family dialogs.
+- Matched the setup dialog's title icon placement, caption height and padding to the current family dialogs.
 
 ## [0.4.0] - 2026-10-11
 
