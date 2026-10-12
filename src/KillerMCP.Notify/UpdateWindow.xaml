@@ -3,24 +3,25 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="clr-namespace:KillerMCP.Notify"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="KillerMCP Update" Width="520" Height="350"
+        Title="KillerMCP Update" Width="650" Height="390"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize"
         AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True"
-        FontFamily="Segoe UI" Foreground="#f4edf3" UseLayoutRounding="True" SnapsToDevicePixels="True"
-        TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="Grayscale">
+        FontFamily="./Assets/#Killer Sans UI, Segoe UI" Foreground="#ffffff" UseLayoutRounding="True" SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType">
     <shell:WindowChrome.WindowChrome>
-        <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0" CornerRadius="8"
+        <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0" CornerRadius="7"
                             GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
         <FontFamily x:Key="Wordmark">./Assets/#Punktype</FontFamily>
         <FontFamily x:Key="WordmarkAccent">./Assets/#Lacquer</FontFamily>
         <FontFamily x:Key="BrandSans">./Assets/#Killer Sans</FontFamily>
+        <FontFamily x:Key="UiFont">./Assets/#Killer Sans UI, Segoe UI</FontFamily>
         <SolidColorBrush x:Key="Fuchsia" Color="#ff2bbd"/>
         <Style x:Key="UpdateButton" TargetType="Button">
-            <Setter Property="Height" Value="34"/>
-            <Setter Property="MinWidth" Value="104"/>
-            <Setter Property="Padding" Value="16,4"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="MinWidth" Value="68"/>
+            <Setter Property="Padding" Value="12,2"/>
             <Setter Property="Foreground" Value="#ff52c9"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="{StaticResource Fuchsia}"/>
@@ -130,51 +131,51 @@
             </Setter>
         </Style>
     </Window.Resources>
-    <Border Margin="12" Background="#121012" BorderBrush="#ff2bbd" BorderThickness="1" CornerRadius="8">
-        <Border.Effect><DropShadowEffect Color="#ff168f" BlurRadius="24" ShadowDepth="0" Opacity="0.48"/></Border.Effect>
+    <Border Margin="8" Background="#000000" BorderBrush="#2a2a2a" BorderThickness="1" CornerRadius="7" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+        <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect>
         <Grid ClipToBounds="True">
-            <Border x:Name="GrainLayer" IsHitTestVisible="False" Opacity="0.42" CornerRadius="8"/>
-            <Grid>
-                <Grid.RowDefinitions><RowDefinition Height="44"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <Border Background="Transparent" BorderThickness="0" CornerRadius="8,8,0,0"
-                        MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
-                    <Grid Margin="15,0,8,0">
-                        <TextBlock VerticalAlignment="Center" FontFamily="{StaticResource Wordmark}" FontSize="12.52">
-                            <Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="18.8" Foreground="{StaticResource Fuchsia}"/><Run FontSize="17.6" FontFamily="{StaticResource BrandSans}" x:Name="TitleVersion" Text=""/>
-                        </TextBlock>
-                        <Button Width="30" Height="30" HorizontalAlignment="Right" Style="{StaticResource CloseButton}"
-                                FontSize="12" Content="✕" Cursor="Hand" Click="Later_Click"/>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="152"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border x:Name="GrainLayer" Grid.ColumnSpan="2" CornerRadius="7" IsHitTestVisible="False" Opacity="0.24"/>
+            <Grid Grid.Column="0" Margin="22,16,14,16">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <icons:AppIcon Source="Assets/mcp.png" Width="96" Height="96" Margin="6,0,0,0" HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="NearestNeighbor"><icons:AppIcon.Effect><DropShadowEffect Color="Black" BlurRadius="5" ShadowDepth="2" Opacity="0.9"/></icons:AppIcon.Effect></icons:AppIcon>
+                <StackPanel Grid.Row="1" Margin="0,8,0,0">
+                    <Grid HorizontalAlignment="Left"><TextBlock Foreground="#D8000000" Opacity="0.45" Margin="1,2,-1,-2" IsHitTestVisible="False"><TextBlock.Effect><BlurEffect Radius="3"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37"/></TextBlock><TextBlock><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37" Foreground="{StaticResource Fuchsia}"/></TextBlock></Grid>
+                    <TextBlock x:Name="SidebarLabel" FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="#a0a0a0" Margin="1,2,0,0" Text="UPDATE"/>
+                </StackPanel>
+                <StackPanel Grid.Row="2" Margin="1,14,0,0">
+                    <TextBlock x:Name="VersionText" FontFamily="{StaticResource UiFont}" FontSize="12" Foreground="#d0d0d0" TextWrapping="Wrap" LineHeight="17"/>
+                </StackPanel>
+                <TextBlock Grid.Row="3" Margin="0,12,0,0" FontFamily="{StaticResource BrandSans}" FontSize="14" TextOptions.TextFormattingMode="Ideal" Foreground="#a0a0a0" Text="&#x00A9; 2026 Steve the Killer"/>
+            </Grid>
+            <Grid Grid.Column="1" Margin="8">
+                <Border Background="#000000" CornerRadius="6"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect></Border>
+                <Border Background="#0a0a0a" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="6">
+                    <Grid>
+                        <Border x:Name="PaneGrain" CornerRadius="6" IsHitTestVisible="False" Opacity="0.24"/>
+                        <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Later_Click" Panel.ZIndex="3" ToolTip="Close"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><TextBlock x:Name="CloseGlyph" Text="&#x2715;" FontSize="11" Foreground="#b8b8b8" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Foreground" Value="#e04444"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
+                        <Grid Margin="24,22,24,16">
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <TextBlock x:Name="HeadingText" FontFamily="{StaticResource BrandSans}" FontSize="20" TextOptions.TextFormattingMode="Ideal" Margin="0,0,28,0" TextWrapping="Wrap"><Run Text="A new "/><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="14.22"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="21.36" Foreground="{StaticResource Fuchsia}"/><Run Text=" is ready"/></TextBlock>
+                            <TextBlock x:Name="BodyText" Grid.Row="1" Margin="0,6,25,14" Foreground="#b8b8b8" TextWrapping="Wrap" LineHeight="19"
+                                       Text="Update the local host, reconnect supported agent clients, and pick up the newest Killer tools."/>
+                            <StackPanel Grid.Row="2">
+                                <TextBlock Text="Future updates" FontSize="10" Foreground="#929292" Margin="1,0,0,4"/>
+                                <ComboBox x:Name="BehaviorBox" Width="210" Height="28" HorizontalAlignment="Left" SelectionChanged="BehaviorBox_SelectionChanged">
+                                    <ComboBoxItem Tag="off">Do not check</ComboBoxItem>
+                                    <ComboBoxItem Tag="check">Check and ask</ComboBoxItem>
+                                    <ComboBoxItem Tag="download">Download and ask</ComboBoxItem>
+                                    <ComboBoxItem Tag="install">Install automatically</ComboBoxItem>
+                                </ComboBox>
+                            </StackPanel>
+                            <TextBlock x:Name="StatusText" Grid.Row="3" Margin="0,8,0,10" FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="#aaaaaa" TextWrapping="Wrap"/>
+                            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button x:Name="LaterButton" Content="Later" Style="{StaticResource LaterButton}" Margin="0,0,6,0" Click="Later_Click"/>
+                                <Button x:Name="UpdateButton" Content="Update now" Style="{StaticResource UpdateButton}" IsDefault="True" Click="Update_Click"/>
+                            </StackPanel>
+                        </Grid>
                     </Grid>
                 </Border>
-                <Grid Grid.Row="1" Margin="24,18,26,10">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="112"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <icons:AppIcon Source="Assets/mcp.png" Width="96" Height="96" HorizontalAlignment="Left" VerticalAlignment="Top"
-                           RenderOptions.BitmapScalingMode="NearestNeighbor">
-                        <icons:AppIcon.Effect><DropShadowEffect Color="#ff2bbd" BlurRadius="13" ShadowDepth="0" Opacity="0.58"/></icons:AppIcon.Effect>
-                    </icons:AppIcon>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock x:Name="HeadingText" FontFamily="{StaticResource BrandSans}" TextOptions.TextHintingMode="Animated" FontSize="23.1" Foreground="#ffffff"><Run Text="A new "/><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="16.43"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="24.64" Foreground="{StaticResource Fuchsia}"/><Run Text=" is ready"/></TextBlock>
-                        <TextBlock x:Name="VersionText" Margin="0,8,0,0" FontFamily="Consolas" FontSize="12.5" Foreground="#ff52c9"/>
-                        <TextBlock x:Name="BodyText" Margin="0,9,0,0" FontSize="12.5" LineHeight="19" Foreground="#d3c7cf" TextWrapping="Wrap"
-                                   Text="Update the local host, reconnect supported agent clients, and pick up the newest Killer tools."/>
-                        <TextBlock x:Name="StatusText" Margin="0,8,0,0" FontFamily="Consolas" FontSize="11" Foreground="#ad97a7" TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Grid>
-                <Grid Grid.Row="2" Margin="24,0,24,14">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <TextBlock VerticalAlignment="Center" Foreground="#ad97a7" FontSize="11.5" Text="Future updates:"/>
-                    <ComboBox x:Name="BehaviorBox" Grid.Column="1" Width="190" Height="28" HorizontalAlignment="Right"
-                              SelectionChanged="BehaviorBox_SelectionChanged">
-                        <ComboBoxItem Tag="off">Do not check</ComboBoxItem>
-                        <ComboBoxItem Tag="check">Check and ask</ComboBoxItem>
-                        <ComboBoxItem Tag="download">Download and ask</ComboBoxItem>
-                        <ComboBoxItem Tag="install">Install automatically</ComboBoxItem>
-                    </ComboBox>
-                </Grid>
-                <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="24,0,24,20">
-                    <Button x:Name="LaterButton" Content="Later" Style="{StaticResource LaterButton}" Margin="0,0,10,0" Click="Later_Click"/>
-                    <Button x:Name="UpdateButton" Content="Update now" Style="{StaticResource UpdateButton}" IsDefault="True" Click="Update_Click"/>
-                </StackPanel>
             </Grid>
         </Grid>
     </Border>

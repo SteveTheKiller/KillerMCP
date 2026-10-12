@@ -18,8 +18,8 @@ public partial class RepairConfirmWindow : Window
     {
         InitializeComponent();
         GrainLayer.Background = UpdateWindow.CreateGrain();
+        PaneGrain.Background = GrainLayer.Background;
         TitleText.Text = request.Title;
-        TargetText.Text = "Target: " + request.Target;
         EffectsText.Text = request.Effects;
         CommandText.Text = request.Command;
         _timer.Tick += Timer_Tick;
@@ -58,7 +58,7 @@ public partial class RepairConfirmWindow : Window
         UpdateTimer();
     }
 
-    private void UpdateTimer() => TimerText.Text = $"Denies automatically in {_remaining / 60}:{_remaining % 60:00}";
+    private void UpdateTimer() => TimerText.Text = $"Denies in {_remaining / 60}:{_remaining % 60:00}";
 
     private void Approve_Click(object sender, RoutedEventArgs e)
     {

@@ -25,6 +25,7 @@ public partial class UpdateWindow : Window
     {
         InitializeComponent();
         GrainLayer.Background = CreateGrain();
+        PaneGrain.Background = GrainLayer.Background;
         string[] args = Environment.GetCommandLineArgs();
         _installedVersion = Value(args, "--installed") ?? InstalledVersion();
         _latestVersion = Value(args, "--latest") ?? Value(args, "--version");
@@ -34,8 +35,7 @@ public partial class UpdateWindow : Window
         _updated = Has(args, "--updated");
         SelectBehavior(ReadBehavior());
         _loadingPreferences = false;
-        if (_latestVersion is not null && !_updated) TitleVersion.Text = $" v{_latestVersion} Installer";
-        VersionText.Text = _latestVersion is null ? $"Installed: v{_installedVersion}" : $"v{_installedVersion}  →  v{_latestVersion}";
+        VersionText.Text = _latestVersion is null ? $"Installed v{_installedVersion}" : $"Installed v{_installedVersion}\nAvailable v{_latestVersion}";
         StatusText.Text = "Signed Windows installer from GitHub Releases";
         if (_updated) ShowSuccess();
         else if (_latestVersion is null)
@@ -109,6 +109,7 @@ public partial class UpdateWindow : Window
     {
         SetHeading("KillerMCP is up to date");
         VersionText.Text = $"Updated to v{_latestVersion}";
+        SidebarLabel.Text = "UPDATED";
         BodyText.Text = "The update finished successfully. Open a new agent chat to use the newest Killer tools.";
         StatusText.Text = "Update installed and client connections refreshed";
         UpdateButton.Visibility = Visibility.Collapsed;

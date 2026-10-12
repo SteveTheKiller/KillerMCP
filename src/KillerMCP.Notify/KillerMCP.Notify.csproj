@@ -12,6 +12,7 @@
     <Resource Include="Assets\mcp.png" />
     <Resource Include="..\..\assets\KillerMCP.ico" Link="Assets\app-icon.ico" />
     <Resource Include="Assets\KillerSans-Regular.ttf" />
+    <Resource Include="..\..\installer\Assets\KillerSansUI-Regular.ttf" Link="Assets\KillerSansUI-Regular.ttf" />
     <Resource Include="Assets\Punktype.ttf" />
     <Resource Include="Assets\Lacquer-Regular.ttf" />
   </ItemGroup>
