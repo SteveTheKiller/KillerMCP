@@ -8,7 +8,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Changed
 
-- Setup's app list shows only released Killer apps.
 - Release builds now publish and check the native package once instead of twice.
 
 ## [0.5.0] - 2026-10-12
