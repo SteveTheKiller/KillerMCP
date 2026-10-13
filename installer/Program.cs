@@ -32,6 +32,7 @@ namespace KillerMCP.Setup
         [STAThread]
         private static int Main(string[] args)
         {
+            KillerFamily.Accessibility.AccessibleControls.Initialize();
             string? testRoot = Environment.GetEnvironmentVariable(TestRootVariable);
             bool isolated = !string.IsNullOrWhiteSpace(testRoot);
             string destination = isolated ? ValidateTestRoot(testRoot!) : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "KillerMCP");
@@ -70,7 +71,7 @@ namespace KillerMCP.Setup
             {
                 if (silent) Console.Error.WriteLine("KillerMCP setup failed: " + exception.Message);
                 else SetupDialog.ShowFailure(exception.Message);
-                return 1;
+                return KillerFamily.Deployment.InstallerExitCodes.FromException(exception);
             }
         }
 
@@ -89,6 +90,7 @@ namespace KillerMCP.Setup
 
         internal static void Install(string destination)
         {
+            using var installLease = KillerFamily.Deployment.InstallerExitCodes.Acquire("KillerMCP");
             ValidateSetupRegistration(destination);
             string parent = Path.GetDirectoryName(destination) ?? throw new InvalidOperationException("The installation directory is unavailable.");
             Directory.CreateDirectory(parent);

@@ -37,7 +37,7 @@ namespace KillerMCP.Setup
             var wizard = new InstallerWizard(destination, isolated);
             bool? result = wizard.ShowDialog();
             application.Shutdown();
-            return result == true ? 0 : 1;
+            return result == true ? KillerFamily.Deployment.InstallerExitCodes.Success : KillerFamily.Deployment.InstallerExitCodes.Cancelled;
         }
 
         private void SetRuntimeStatus()

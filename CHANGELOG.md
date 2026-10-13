@@ -10,6 +10,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 - Release builds now publish and check the native package once instead of twice.
 
+### Fixed
+
+- Installer and update-notifier icon buttons expose their tooltip names to screen readers and show keyboard focus.
+- Silent installs return specific Windows error codes and reject a second concurrent install instead of reporting a general failure.
+
 ## [0.5.0] - 2026-10-12
 
 0.5.0 brings KillerMCP to WinGet and Chocolatey and hardens the host against failed tools and untrusted PDF content.

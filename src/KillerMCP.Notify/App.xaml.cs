@@ -6,6 +6,7 @@ public partial class App : Application
 {
     protected override void OnStartup(StartupEventArgs e)
     {
+        KillerFamily.Accessibility.AccessibleControls.Initialize();
         int index = Array.FindIndex(e.Args, value => value.Equals("--confirm-repair", StringComparison.OrdinalIgnoreCase));
         if (index < 0)
         {
