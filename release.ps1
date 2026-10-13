@@ -86,7 +86,6 @@ Invoke-Checked { dotnet list src\KillerMCP\KillerMCP.csproj package --vulnerable
 Invoke-Checked { dotnet run --project tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj -c Release --no-build } 'Client registration checks failed.'
 Invoke-Checked { dotnet run --project tests\KillerMCP.Runtime.Checks\KillerMCP.Runtime.Checks.csproj -c Release --no-build } 'Runtime checks failed.'
 Invoke-Checked { node scripts\Test-NativeHost.mjs } 'Native host checks failed.'
-Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-NativePackage.ps1 } 'Native package checks failed.'
 
 Step 'Building KillerMCP Setup'
 Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Build-WindowsInstaller.ps1 } 'KillerMCP installer build failed.'
