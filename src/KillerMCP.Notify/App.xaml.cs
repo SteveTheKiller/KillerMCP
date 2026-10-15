@@ -12,6 +12,7 @@ public partial class App : Application
     private EventWaitHandle? _wake;
     private RegisteredWaitHandle? _wakeWait;
     private UpdateWindow? _update;
+    private TrayIcon? _tray;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -56,10 +57,28 @@ public partial class App : Application
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         TaskbarIdentity.UseUpdate();
+        Resources["GrainTileBrush"] = UpdateWindow.CreateGrain();
         _update = new UpdateWindow(args);
         MainWindow = _update;
         _update.Closed += (_, _) => Shutdown();
+
+        // While an update is offered it waits in the notification area, so Later and the close
+        // button hide the window instead of dropping the update until the next notice.
+        _tray = new TrayIcon();
+        _tray.OpenRequested += () => _update?.ShowFront();
+        _tray.ReleaseNotesRequested += () => _update?.OpenReleaseNotes();
+        _tray.ExitRequested += () => _update?.Exit();
+        _update.UpdateStateChanged += SyncTray;
+        SyncTray();
         _update.Start();
+    }
+
+    private void SyncTray()
+    {
+        if (_update is null || _tray is null) return;
+        if (_update.OffersUpdate) _tray.Show(_update.TrayTip);
+        else _tray.Hide();
+        _update.KeepInTray = _tray.IsVisible;
     }
 
     private void OnWake()
@@ -115,6 +134,7 @@ public partial class App : Application
     {
         _wakeWait?.Unregister(null);
         _wake?.Dispose();
+        _tray?.Dispose();
         if (_instance is not null)
         {
             try { _instance.ReleaseMutex(); } catch { }

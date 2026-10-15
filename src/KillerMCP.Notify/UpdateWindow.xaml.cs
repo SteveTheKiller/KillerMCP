@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
@@ -22,6 +23,19 @@ public partial class UpdateWindow : Window
     private bool _busy;
     private string? _downloadedInstaller;
     private string _statusPath = string.Empty;
+    private bool _exiting;
+
+    /// <summary>Raised when the offered version or the download state changes, for the tray.</summary>
+    internal event Action? UpdateStateChanged;
+
+    /// <summary>Set while the tray icon holds the update: closing the window then hides it.</summary>
+    internal bool KeepInTray { get; set; }
+
+    internal bool OffersUpdate => !_updated && _latestVersion is not null;
+
+    internal string TrayTip => _busy && Automatic
+        ? $"Downloading KillerMCP {_latestVersion}"
+        : $"KillerMCP {_latestVersion} is available";
 
     public UpdateWindow(string[] args)
     {
@@ -80,6 +94,7 @@ public partial class UpdateWindow : Window
         SetSidebarVersion("UPDATE  •  {0}", _latestVersion ?? _installedVersion);
         SetStatus("Signed Windows installer from GitHub Releases");
         ShowNotes(_latestVersion is null ? null : ReleaseNotes.Read(_statusPath, _latestVersion));
+        UpdateStateChanged?.Invoke();
         if (_updated) ShowSuccess();
         else if (_latestVersion is null)
         {
@@ -92,7 +107,7 @@ public partial class UpdateWindow : Window
         }
     }
 
-    private void ShowFront()
+    internal void ShowFront()
     {
         if (!IsVisible) Show();
         if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
@@ -106,6 +121,7 @@ public partial class UpdateWindow : Window
         string? version = _latestVersion;
         if (version is null) return;
         _busy = true;
+        UpdateStateChanged?.Invoke();
         try
         {
             string installer = await UpdateInstaller.DownloadAndVerifyAsync(version, _installerUrl);
@@ -114,7 +130,7 @@ public partial class UpdateWindow : Window
             if (_behavior == "install")
             {
                 Process.Start(new ProcessStartInfo(_downloadedInstaller, "/silent /notify") { UseShellExecute = true });
-                Close();
+                Exit();
                 return;
             }
             SetHeading("Your update is ready");
@@ -135,6 +151,7 @@ public partial class UpdateWindow : Window
         finally
         {
             _busy = false;
+            UpdateStateChanged?.Invoke();
         }
     }
 
@@ -152,7 +169,7 @@ public partial class UpdateWindow : Window
             }
             SetStatus("Starting the verified upgrade...");
             Process.Start(new ProcessStartInfo(_downloadedInstaller, "/silent /notify") { UseShellExecute = true });
-            Close();
+            Exit();
         }
         catch (Exception exception)
         {
@@ -254,8 +271,26 @@ public partial class UpdateWindow : Window
     private void SetSidebarVersion(string format, string version) =>
         SidebarVersion.SetVersion(format, version, () => OpenUrl(ReleaseNotes.ReleaseUrl(version)), $"Open the {version} release notes");
 
-    private void ReleaseNotes_Click(object sender, RoutedEventArgs e) =>
-        OpenUrl(ReleaseNotes.ReleaseUrl(_latestVersion ?? _installedVersion));
+    private void ReleaseNotes_Click(object sender, RoutedEventArgs e) => OpenReleaseNotes();
+
+    internal void OpenReleaseNotes() => OpenUrl(ReleaseNotes.ReleaseUrl(_latestVersion ?? _installedVersion));
+
+    /// <summary>Closes the window for good, past the tray, and ends the notifier.</summary>
+    internal void Exit()
+    {
+        _exiting = true;
+        Close();
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!_exiting && KeepInTray && OffersUpdate)
+        {
+            e.Cancel = true;
+            Hide();
+        }
+        base.OnClosing(e);
+    }
 
     private static void OpenUrl(string url)
     {

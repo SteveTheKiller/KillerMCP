@@ -1,4 +1,97 @@
 <Application x:Class="KillerMCP.Notify.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <!-- The tray menu: the family ContextMenu, MenuItem and Separator from KillerUI
+             Controls.xaml in Black with the Magenta accent. The grain sits over the items. The
+             menu has no submenus, so the MenuItem template leaves out the submenu popup. -->
+        <Style TargetType="ContextMenu">
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="HasDropShadow" Value="False"/>
+            <Setter Property="HorizontalOffset" Value="-16"/>
+            <Setter Property="VerticalOffset" Value="-12"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
+            <Setter Property="FontFamily" Value="./Assets/#Killer Sans UI, Segoe UI"/>
+            <Setter Property="Padding" Value="0,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border x:Name="MenuRoot" Opacity="0" Background="#121212" BorderBrush="#1c1c1c" BorderThickness="1"
+                                CornerRadius="6" Margin="22,18,22,26" SnapsToDevicePixels="True" MinWidth="150">
+                            <Border.Effect><DropShadowEffect Color="Black" BlurRadius="22" ShadowDepth="4" Direction="270" Opacity="0.55"/></Border.Effect>
+                            <Grid>
+                                <StackPanel IsItemsHost="True" Margin="{TemplateBinding Padding}" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                <Border IsHitTestVisible="False" CornerRadius="5" Background="{DynamicResource GrainTileBrush}" Opacity="0.24"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <EventTrigger RoutedEvent="ContextMenu.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="MenuRoot" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction><QuadraticEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="MenuItem">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="8,6,10,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="Face" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="3" SnapsToDevicePixels="True">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter x:Name="IconPresenter" Grid.Column="0" ContentSource="Icon" TextElement.FontFamily="Segoe MDL2 Assets"
+                                                  TextElement.FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                                <TextBlock x:Name="Check" Grid.Column="0" Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#ff2bbd"
+                                           VerticalAlignment="Center" HorizontalAlignment="Left" Visibility="Collapsed"/>
+                                <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="Gesture" Grid.Column="2" Text="{TemplateBinding InputGestureText}" Foreground="#cccccc" FontSize="11"
+                                           VerticalAlignment="Center" Margin="24,0,0,0"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="InputGestureText" Value=""><Setter TargetName="Gesture" Property="Visibility" Value="Collapsed"/></Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Face" Property="Background" Value="#333333"/>
+                                <Setter Property="Foreground" Value="#ffffff"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Face" Property="Opacity" Value="0.4"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Margin" Value="8,4"/>
+            <Setter Property="Background" Value="#2a2a2a"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Border Background="{TemplateBinding Background}" Height="{TemplateBinding Height}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Application.Resources>
 </Application>
