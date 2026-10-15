@@ -74,10 +74,15 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH") == "1" || Environ
     }
     if (arguments.SequenceEqual(["--help"]))
     {
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1") Console.WriteLine("  --merge <out.pdf>\n--extract-pages <in.pdf>\n--split <in.pdf>\n--decrypt <in.pdf>\n--to-image <in.pdf>\n--flatten <in.pdf>\n--print <in.pdf>\n--ocr <in.pdf>\n--batch-resave <in>\n--batch-render <in>\n--rotate-pages <in.pdf>\n--delete-pages <in.pdf>\n--move-pages <in.pdf>\n--insert-blank <in.pdf>\n--duplicate-page <in.pdf>\n--document-info <in.pdf>\n--search-text <in.pdf>\n--preflight <in.pdf>\n--accessibility <in.pdf>");
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1") Console.WriteLine("  --merge <out.pdf>\n--extract-pages <in.pdf>\n--split <in.pdf>\n--decrypt <in.pdf>\n--to-image <in.pdf>\n--flatten <in.pdf>\n--print <in.pdf>\n--ocr <in.pdf>\n--batch-resave <in>\n--batch-render <in>\n--rotate-pages <in.pdf>\n--delete-pages <in.pdf>\n--move-pages <in.pdf>\n--insert-blank <in.pdf>\n--duplicate-page <in.pdf>\n--document-info <in.pdf>\n--search-text <in.pdf>\n--preflight <in.pdf>\n--accessibility <in.pdf>\n  KillerPDF.exe --verify | /verify   verify every installed payload file");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>\ncreate --title");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>\ncreate <json>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>\nlist <folder>\ninfo <path>\nread <file>\nprocesses [--limit]\nservices [--limit]\nevents <log>\nregistry <key>\ndrives\nhash <file>");
+        return;
+    }
+    if (arguments.SequenceEqual(["--verify"]))
+    {
+        Console.WriteLine("PASS: verified 3 payload files.");
         return;
     }
     if (arguments.Length > 0 && arguments[0] is "--preflight" or "--accessibility")
@@ -307,7 +312,7 @@ try
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
     var pdfAdapters = await KillerPdfAdapter.CreateAsync(Environment.ProcessPath);
-    Equal(19, pdfAdapters.Count);
+    Equal(20, pdfAdapters.Count);
     var pdfByName = pdfAdapters.ToDictionary(item => item.Tool.Name);
     var sourceOne = Path.Combine(root, "source-one.pdf");
     var sourceTwo = Path.Combine(root, "source-two.pdf");
@@ -320,6 +325,10 @@ try
     }
     Equal(false, (await Pdf("killerpdf_preflight", new { path = sourceOne, profile = "print" })).IsError);
     Equal(false, (await Pdf("killerpdf_accessibility", new { path = sourceOne })).IsError);
+    var verified = await Pdf("killerpdf_verify_install", new { });
+    Equal(false, verified.IsError);
+    Equal(true, JsonDocument.Parse(verified.Text).RootElement.GetProperty("passed").GetBoolean());
+    Equal(true, (await Pdf("killerpdf_verify_install", new { path = sourceOne })).IsError);
     Equal(false, (await Pdf("killerpdf_merge", new { inputs = new[] { sourceOne, sourceTwo }, output = Path.Combine(root, "merged.pdf") })).IsError);
     Equal(false, (await Pdf("killerpdf_extract_pages", new { path = sourceOne, pages = "1", output = Path.Combine(root, "extract.pdf") })).IsError);
     Equal(false, (await Pdf("killerpdf_split", new { path = sourceOne, outputFolder = Path.Combine(root, "split") })).IsError);

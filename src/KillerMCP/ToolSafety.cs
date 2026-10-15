@@ -8,7 +8,7 @@ internal static class ToolSafety
         "killernotes_tags", "killernotes_backlinks", "killernotes_links", "killernotes_history",
         "killernotes_stats", "killendar_agenda", "killerscan_local_network",
         "killerscan_mac_vendor", "killerpdf_document_info", "killerpdf_search_text",
-        "killerpdf_preflight", "killerpdf_accessibility",
+        "killerpdf_preflight", "killerpdf_accessibility", "killerpdf_verify_install",
     };
 
     private static readonly HashSet<string> ReadOnlyShellTools = new(StringComparer.Ordinal)

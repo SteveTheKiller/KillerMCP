@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Added
 
+- killerpdf_verify_install checks every installed KillerPDF program file against the SHA-256 hashes in its payload manifest and reports missing, changed, or extra files.
 - Later and the close button keep an offered update in the notification area, where the KillerMCP icon reopens the update window, opens the release notes, or exits.
 - The update window lists what is new in the offered version, and its version number and Full release notes link open that release on GitHub.
 

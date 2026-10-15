@@ -25,6 +25,7 @@ public static partial class KillerPdfAdapter
         }
         AddReport(help, path!, adapters, "--preflight", "killerpdf_preflight", "Check a local PDF with KillerPDF preflight and return findings without changing the file.", PreflightSchema());
         AddReport(help, path!, adapters, "--accessibility", "killerpdf_accessibility", "Check a local PDF for accessibility findings using KillerPDF without changing the file.", Schema(new JsonObject { ["path"] = PdfPath() }, "path"));
+        if (help.StandardOutput.Contains("--verify | /verify", StringComparison.Ordinal)) adapters.Add(new AppAdapter(VerifyTool(), (input, token) => Verify(path!, input, token)));
         return adapters;
     }
 
@@ -93,6 +94,19 @@ public static partial class KillerPdfAdapter
             return document.RootElement.ValueKind == JsonValueKind.Object && !response.OutputExceeded ? Ok(document.RootElement.GetRawText()) : Error("KillerPDF returned an invalid report");
         }
         catch (JsonException) { return Error("KillerPDF returned an invalid report"); }
+    }
+
+    private static async Task<AppCallResult> Verify(string path, JsonElement input, CancellationToken token)
+    {
+        if (!ObjectWith(input)) return Error("Expected no arguments");
+        var response = await Run(path, ["--verify"], 120, 65536, token).ConfigureAwait(false);
+        if (response.OutputExceeded) return Error("KillerPDF command output exceeded limit");
+        var lines = response.StandardOutput.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        // KillerPDF exits 1 with a FAIL line when a payload file does not match; any other failure is an error.
+        var passed = response.ExitCode == 0 && lines.Length > 0 && lines[0].StartsWith("PASS:", StringComparison.Ordinal);
+        var failed = response.ExitCode == 1 && lines.Length > 0 && lines[0].StartsWith("FAIL:", StringComparison.Ordinal);
+        if (!passed && !failed) return ProcessError(response);
+        return Ok(JsonSerializer.Serialize(new { passed, summary = Limit(lines[0]), problems = lines.Skip(1).Take(50).Select(Limit).ToArray() }));
     }
 
     private static async Task<AppCallResult> Merge(string path, JsonElement input, CancellationToken token)
@@ -250,6 +264,7 @@ public static partial class KillerPdfAdapter
     private static Operation DirectoryOperation(string name, string marker, string description, JsonObject schema, Func<JsonElement, string, List<string>> args, int timeout = 180) => new(marker, OutputKind.Directory, new RuntimeTool(name, description, schema), args, timeout);
     private static Operation Action(string name, string marker, string description, JsonObject schema, Func<JsonElement, List<string>> args, int timeout = 180) => new(marker, OutputKind.Action, new RuntimeTool(name, description, schema), (input, _) => args(input), timeout);
     private static RuntimeTool MergeTool() => new("killerpdf_merge", "Merge two to eight local PDFs with KillerPDF into one new PDF. Use for requests such as \"killer merge these PDFs\". Never replaces an existing output file.", Schema(new JsonObject { ["inputs"] = new JsonObject { ["type"] = "array", ["items"] = PdfPath(), ["minItems"] = 2, ["maxItems"] = 8 }, ["output"] = NewPdf() }, "inputs", "output"));
+    private static RuntimeTool VerifyTool() => new("killerpdf_verify_install", "Check every installed KillerPDF program file against the SHA-256 hashes in its payload manifest and report missing, changed, or extra files. Changes nothing.", Schema(new JsonObject()));
     private static JsonObject PreflightSchema() => Schema(new JsonObject { ["path"] = PdfPath(), ["profile"] = Enum("general", "attachments", "print", "general") }, "path");
     private static JsonObject PdfPath() => new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024, ["description"] = "Absolute path to a local PDF" };
     private static JsonObject NewPdf() => new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024, ["description"] = "Absolute path for a new PDF that does not already exist" };

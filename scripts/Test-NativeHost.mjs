@@ -135,7 +135,7 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killerpdf_resave', 'killerpdf_benchmark_render', 'killerpdf_rotate_pages',
   'killerpdf_delete_pages', 'killerpdf_move_pages', 'killerpdf_insert_blank_page',
   'killerpdf_duplicate_page', 'killerpdf_document_info', 'killerpdf_search_text',
-  'killerpdf_preflight', 'killerpdf_accessibility',
+  'killerpdf_preflight', 'killerpdf_accessibility', 'killerpdf_verify_install',
   'killerbench_code_lookup', 'killerbench_diagnostic_scopes', 'killerbench_check', 'killerbench_scan',
   'killerbench_job', 'killerbench_repair_actions', 'killerbench_repair_preview', 'killerbench_repair_execute',
   'killerbench_repair_recover', 'killerbench_save_scan_note',
