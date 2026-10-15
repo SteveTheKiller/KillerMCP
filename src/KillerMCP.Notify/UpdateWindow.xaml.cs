@@ -92,6 +92,7 @@ public partial class UpdateWindow : Window
         LaterButton.Content = "Later";
         LaterButton.Margin = new Thickness(0, 0, 6, 0);
         SetSidebarVersion("UPDATE  •  {0}", _latestVersion ?? _installedVersion);
+        VersionText.Text = _latestVersion is null ? $"Installed v{_installedVersion}" : $"Installed v{_installedVersion}\nAvailable v{_latestVersion}";
         SetStatus("Signed Windows installer from GitHub Releases");
         ShowNotes(_latestVersion is null ? null : ReleaseNotes.Read(_statusPath, _latestVersion));
         UpdateStateChanged?.Invoke();
@@ -188,6 +189,7 @@ public partial class UpdateWindow : Window
     {
         SetHeading("KillerMCP is up to date");
         SetSidebarVersion("UPDATED  •  {0}", _latestVersion ?? _installedVersion);
+        VersionText.Text = $"Updated to v{_latestVersion}";
         BodyText.Text = "The update finished successfully. Open a new agent chat to use the newest Killer tools.";
         StatusText.Text = "Update installed and client connections refreshed";
         UpdateButton.Visibility = Visibility.Collapsed;
@@ -195,10 +197,7 @@ public partial class UpdateWindow : Window
         LaterButton.Margin = new Thickness(0);
     }
 
-    /// <summary>The status line keeps the installed version in view while an update is offered,
-    /// since the sidebar shows the version being offered.</summary>
-    private void SetStatus(string text) => StatusText.Text =
-        _updated || _latestVersion is null ? text : $"Installed {_installedVersion}  •  {text}";
+    private void SetStatus(string text) => StatusText.Text = text;
 
     private void SetHeading(string text)
     {
