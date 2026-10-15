@@ -57,9 +57,9 @@
                         <Grid HorizontalAlignment="Left"><TextBlock Foreground="#D8000000" Opacity="0.45" Margin="1,2,-1,-2" IsHitTestVisible="False"><TextBlock.Effect><BlurEffect Radius="3"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37"/></TextBlock><TextBlock><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37" Foreground="{StaticResource Accent}"/></TextBlock></Grid>
                         <icons:SetupVersionText x:Name="VersionLabel" TextElement.FontFamily="{StaticResource UiFont}" TextElement.FontSize="10.5" TextElement.Foreground="#a0a0a0" Margin="1,2,0,0"/>
                     </StackPanel>
-                    <StackPanel Grid.Row="2" Margin="1,8,0,0">
-                        <TextBlock TextWrapping="Wrap" Foreground="#d0d0d0" LineHeight="17" Text="One connection for KillerTools and every supported Killer app:"/>
-                        <StackPanel Margin="0,5,0,0">
+                    <StackPanel Grid.Row="2" Margin="1,10,0,0">
+                        <TextBlock FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="#a0a0a0" Text="Works with"/>
+                        <StackPanel x:Name="AppList" Margin="0,3,0,0">
                             <TextBlock><Run Text="Killer" Foreground="#ffffff"/><Run Text="PDF" Foreground="#00ff66"/></TextBlock>
                             <TextBlock><Run Text="Killer" Foreground="#ffffff"/><Run Text="Notes" Foreground="#bf80ff"/></TextBlock>
                             <TextBlock><Run Text="Killer" Foreground="#ffffff"/><Run Text="Scan" Foreground="#ff901f"/></TextBlock>
