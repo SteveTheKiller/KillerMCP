@@ -14,7 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 ### Changed
 
 - Setup and the update window show their version under the wordmark as a label line and a centered version number, matching the KillerPDF installer.
-- The setup sidebar labels its app list "Works with" in one line instead of a three-line description, so seven apps fit above the footer.
+- The setup sidebar labels its app list "Works with" in one line instead of a three-line description, so seven apps fit above the footer, and lists KillerShot in teal.
 - Release builds now publish and check the native package once instead of twice.
 
 ### Fixed

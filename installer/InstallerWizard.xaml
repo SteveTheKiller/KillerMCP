@@ -66,6 +66,7 @@
                             <TextBlock><Run Text="Killer" Foreground="#ffffff"/><Run Text="Shell" Foreground="#50aee8"/></TextBlock>
                             <TextBlock><Run Text="The " Foreground="#ffffff"/><Run Text="Killendar" Foreground="#ff5555"/></TextBlock>
                             <TextBlock><Run Text="Killer" Foreground="#ffffff"/><Run Text="Bench" Foreground="#fff500"/></TextBlock>
+                            <TextBlock><Run Text="Killer" Foreground="#ffffff"/><Run Text="Shot" Foreground="#0affe7"/></TextBlock>
                         </StackPanel>
                     </StackPanel>
                     <TextBlock Grid.Row="3" FontFamily="{StaticResource BrandSans}" FontSize="14" TextOptions.TextFormattingMode="Ideal" Foreground="#a0a0a0" Text="© 2026 Steve the Killer"/>
