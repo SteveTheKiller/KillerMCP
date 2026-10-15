@@ -91,7 +91,7 @@ public partial class UpdateWindow : Window
         UpdateButton.IsEnabled = true;
         LaterButton.Content = "Later";
         LaterButton.Margin = new Thickness(0, 0, 6, 0);
-        SetSidebarVersion("UPDATE  •  {0}", _latestVersion ?? _installedVersion);
+        SetSidebarVersion(_latestVersion ?? _installedVersion);
         VersionText.Text = _latestVersion is null ? $"Installed v{_installedVersion}" : $"Installed v{_installedVersion}\nAvailable v{_latestVersion}";
         SetStatus("Signed Windows installer from GitHub Releases");
         ShowNotes(_latestVersion is null ? null : ReleaseNotes.Read(_statusPath, _latestVersion));
@@ -188,7 +188,7 @@ public partial class UpdateWindow : Window
     private void ShowSuccess()
     {
         SetHeading("KillerMCP is up to date");
-        SetSidebarVersion("UPDATED  •  {0}", _latestVersion ?? _installedVersion);
+        SetSidebarVersion(_latestVersion ?? _installedVersion);
         VersionText.Text = $"Updated to v{_latestVersion}";
         BodyText.Text = "The update finished successfully. Open a new agent chat to use the newest Killer tools.";
         StatusText.Text = "Update installed and client connections refreshed";
@@ -267,8 +267,8 @@ public partial class UpdateWindow : Window
 
     private void Later_Click(object sender, RoutedEventArgs e) => Close();
 
-    private void SetSidebarVersion(string format, string version) =>
-        SidebarVersion.SetVersion(format, version, () => OpenUrl(ReleaseNotes.ReleaseUrl(version)), $"Open the {version} release notes");
+    private void SetSidebarVersion(string version) =>
+        SidebarVersion.SetVersion(version, () => OpenUrl(ReleaseNotes.ReleaseUrl(version)), $"Open the {version} release notes");
 
     private void ReleaseNotes_Click(object sender, RoutedEventArgs e) => OpenReleaseNotes();
 
