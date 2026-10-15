@@ -308,20 +308,37 @@ namespace KillerMCP.Setup
                 FileVersionInfo information = FileVersionInfo.GetVersionInfo(setup);
                 if (!string.Equals(information.ProductName, "KillerMCP-Setup", StringComparison.Ordinal)) return false;
                 if (key == null) return legacy;
-                return Path.GetFullPath(key.GetValue("InstallLocation") as string ?? string.Empty).Equals(Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(key.GetValue("UninstallString") as string, Quote(setup) + " /uninstall", StringComparison.OrdinalIgnoreCase)
-                    && Version.TryParse(key.GetValue("DisplayVersion") as string, out Version? registeredVersion)
-                    && Version.TryParse(CurrentVersion, out Version? currentVersion)
+                bool sameEntry = Path.GetFullPath(key.GetValue("InstallLocation") as string ?? string.Empty).Equals(Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(key.GetValue("UninstallString") as string, Quote(setup) + " /uninstall", StringComparison.OrdinalIgnoreCase);
+                if (!sameEntry
+                    || !Version.TryParse(CurrentVersion, out Version? currentVersion)
+                    || !Version.TryParse(information.FileVersion, out Version? setupVersion)
+                    || setupVersion.Revision != 0) return false;
+                if (Version.TryParse(key.GetValue("DisplayVersion") as string, out Version? registeredVersion)
                     && registeredVersion < currentVersion
-                    && Version.TryParse(information.FileVersion, out Version? setupVersion)
                     && setupVersion.Major == currentVersion.Major
                     && setupVersion.Minor == currentVersion.Minor
-                    && setupVersion.Revision == 0
                     && setupVersion.Build >= registeredVersion.Build
                     && setupVersion.Build <= currentVersion.Build
-                    && (setupVersion.Build == currentVersion.Build || IsTrustedPreviousSetup(setup));
+                    && (setupVersion.Build == currentVersion.Build || IsTrustedPreviousSetup(setup))) return true;
+                return IsStaleRegistration(destination, setup, setupVersion, currentVersion);
             }
             catch { return false; }
+        }
+
+        // Two installs that overlapped before setup took its single-install lease could leave the
+        // entry naming an older release than the verified files and setup copy beside it. When the
+        // setup copy is the signed release of the installed host, only the entry is stale, so the
+        // upgrade rewrites it instead of refusing.
+        private static bool IsStaleRegistration(string destination, string setup, Version setupVersion, Version currentVersion)
+        {
+            string host = Path.Combine(destination, "KillerMCP.exe");
+            var setupRelease = new Version(setupVersion.Major, setupVersion.Minor, setupVersion.Build);
+            return File.Exists(host)
+                && Version.TryParse(FileVersionInfo.GetVersionInfo(host).FileVersion, out Version? hostVersion)
+                && hostVersion == setupVersion
+                && setupRelease <= currentVersion
+                && IsTrustedPreviousSetup(setup);
         }
 
         private static bool IsTrustedPreviousSetup(string setup)

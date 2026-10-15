@@ -19,6 +19,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 ### Fixed
 
 - Updated System.Security.Cryptography.Pkcs to 10.0.13 in the KillerTools engine for the GHSA-846f-f764-76mx and GHSA-2fmv-rv2c-59x7 advisories.
+- Upgrades repair an uninstall entry that overlapping installs left at an older version, when the signed setup copy matches the installed files, instead of failing with a changed setup file error.
 - Agent clients that start several KillerMCP hosts at once now get one update window instead of one per host, and a later notice brings the open window forward.
 - The update and repair approval windows show the KillerMCP icon and their own name on the taskbar instead of a generic KillerMCP.Notify button.
 - Installer and update-notifier icon buttons expose their tooltip names to screen readers and show keyboard focus.
