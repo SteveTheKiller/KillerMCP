@@ -12,29 +12,69 @@ namespace KillerMCP.Notify;
 
 public partial class UpdateWindow : Window
 {
-    private readonly string _installedVersion;
-    private readonly string? _latestVersion;
-    private readonly string _installerUrl;
-    private readonly string _releaseUrl;
-    private readonly string _behavior;
-    private readonly bool _updated;
+    private string _installedVersion = "0.0.0";
+    private string? _latestVersion;
+    private string _installerUrl = string.Empty;
+    private string _releaseUrl = string.Empty;
+    private string _behavior = "check";
+    private bool _updated;
     private bool _loadingPreferences = true;
+    private bool _busy;
     private string? _downloadedInstaller;
 
-    public UpdateWindow()
+    public UpdateWindow(string[] args)
     {
         InitializeComponent();
         GrainLayer.Background = CreateGrain();
         PaneGrain.Background = GrainLayer.Background;
-        string[] args = Environment.GetCommandLineArgs();
+        Apply(args);
+    }
+
+    private bool Automatic => !_updated && _latestVersion is not null && _behavior is "download" or "install";
+
+    /// <summary>Opens the window, or starts the background download first for the automatic
+    /// update choices, which show the window only when it needs the user.</summary>
+    internal void Start()
+    {
+        if (Automatic) _ = RunAutomaticAsync();
+        else ShowFront();
+    }
+
+    /// <summary>Takes over the arguments of a later launch, so the newest notification wins
+    /// without opening a second window.</summary>
+    internal void Reload(string[] args)
+    {
+        if (_busy && Same(args)) return;
+        Apply(args);
+        Start();
+    }
+
+    private bool Same(string[] args) =>
+        string.Equals(Value(args, "--latest") ?? Value(args, "--version"), _latestVersion, StringComparison.OrdinalIgnoreCase)
+        && Has(args, "--updated") == _updated
+        && string.Equals(Value(args, "--behavior") ?? "check", _behavior, StringComparison.OrdinalIgnoreCase);
+
+    private void Apply(string[] args)
+    {
         _installedVersion = Value(args, "--installed") ?? InstalledVersion();
         _latestVersion = Value(args, "--latest") ?? Value(args, "--version");
         _installerUrl = Value(args, "--installer") ?? "https://github.com/SteveTheKiller/KillerMCP/releases/latest/download/KillerMCP-Setup.exe";
         _releaseUrl = Value(args, "--release") ?? "https://github.com/SteveTheKiller/KillerMCP/releases/latest";
         _behavior = Value(args, "--behavior") ?? "check";
         _updated = Has(args, "--updated");
+        _downloadedInstaller = null;
+        _loadingPreferences = true;
         SelectBehavior(ReadBehavior());
         _loadingPreferences = false;
+
+        SetHeading("A new KillerMCP is ready");
+        BodyText.Text = "Update the local host, reconnect supported agent clients, and pick up the newest Killer tools.";
+        SidebarLabel.Text = "UPDATE";
+        UpdateButton.Content = "Update now";
+        UpdateButton.Visibility = Visibility.Visible;
+        UpdateButton.IsEnabled = true;
+        LaterButton.Content = "Later";
+        LaterButton.Margin = new Thickness(0, 0, 6, 0);
         VersionText.Text = _latestVersion is null ? $"Installed v{_installedVersion}" : $"Installed v{_installedVersion}\nAvailable v{_latestVersion}";
         StatusText.Text = "Signed Windows installer from GitHub Releases";
         if (_updated) ShowSuccess();
@@ -47,16 +87,27 @@ public partial class UpdateWindow : Window
             LaterButton.Content = "Close";
             LaterButton.Margin = new Thickness(0);
         }
-        else if (_behavior is "download" or "install") Visibility = Visibility.Hidden;
-        Loaded += Window_Loaded;
     }
 
-    private async void Window_Loaded(object sender, RoutedEventArgs e)
+    private void ShowFront()
     {
-        if (_updated || _latestVersion is null || _behavior == "check") return;
+        if (!IsVisible) Show();
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
+        Topmost = true;
+        Topmost = false;
+    }
+
+    private async Task RunAutomaticAsync()
+    {
+        string? version = _latestVersion;
+        if (version is null) return;
+        _busy = true;
         try
         {
-            _downloadedInstaller = await UpdateInstaller.DownloadAndVerifyAsync(_latestVersion, _installerUrl);
+            string installer = await UpdateInstaller.DownloadAndVerifyAsync(version, _installerUrl);
+            if (version != _latestVersion) return;
+            _downloadedInstaller = installer;
             if (_behavior == "install")
             {
                 Process.Start(new ProcessStartInfo(_downloadedInstaller, "/silent /notify") { UseShellExecute = true });
@@ -67,17 +118,20 @@ public partial class UpdateWindow : Window
             BodyText.Text = "The signed installer has been downloaded and verified. Install it when you are ready.";
             StatusText.Text = "SHA256 and Windows signature verified";
             UpdateButton.Content = "Install now";
-            Visibility = Visibility.Visible;
-            Activate();
+            ShowFront();
         }
         catch (Exception exception)
         {
+            if (version != _latestVersion) return;
             SetHeading("The update needs your attention");
             BodyText.Text = "KillerMCP could not download and verify the update automatically.";
             StatusText.Text = exception.Message;
             UpdateButton.Content = "Open release";
-            Visibility = Visibility.Visible;
-            Activate();
+            ShowFront();
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 
@@ -85,6 +139,7 @@ public partial class UpdateWindow : Window
     {
         if (_updated || _latestVersion is null) { Close(); return; }
         UpdateButton.IsEnabled = false;
+        _busy = true;
         try
         {
             if (_downloadedInstaller is null)
@@ -102,6 +157,10 @@ public partial class UpdateWindow : Window
             UpdateButton.IsEnabled = true;
             Process.Start(new ProcessStartInfo(_releaseUrl) { UseShellExecute = true });
             Debug.WriteLine(exception);
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 

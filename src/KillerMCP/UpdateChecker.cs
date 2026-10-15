@@ -20,6 +20,7 @@ internal static class UpdateChecker
     private const string ReleaseUrl = "https://github.com/SteveTheKiller/KillerMCP/releases/latest";
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromHours(1);
     private static readonly TimeSpan NotificationLifetime = TimeSpan.FromDays(1);
+    private const string NotificationMutexName = @"Local\KillerMCP-UpdateNotification";
 
     public static async Task<UpdateStatus> CheckForUpdateAsync(string currentVersion)
     {
@@ -133,29 +134,53 @@ internal static class UpdateChecker
     private static void ShowNotification(UpdateStatus status)
     {
         if (!OperatingSystem.IsWindows() || !status.UpdateAvailable || string.IsNullOrWhiteSpace(status.LatestVersion)) return;
+        Mutex? gate = null;
+        bool owned = false;
         try
         {
             string behavior = ReadBehavior();
             if (behavior == "off") return;
-            string directory = Path.GetDirectoryName(GetCachePath())!;
-            Directory.CreateDirectory(directory);
-            string statePath = Path.Combine(directory, "update-notification.json");
-            NotificationState? state = null;
-            try { state = JsonSerializer.Deserialize<NotificationState>(File.ReadAllText(statePath)); } catch { }
-            if (state?.LatestVersion == status.LatestVersion && DateTimeOffset.UtcNow - state.ShownAt < NotificationLifetime) return;
-
             string notifier = Environment.GetEnvironmentVariable("KILLERMCP_NOTIFIER")
                 ?? Path.Combine(AppContext.BaseDirectory, "KillerMCP.Notify.exe");
             if (!File.Exists(notifier)) return;
+
+            // Agent clients often start several hosts at once. Only one of them may read the state,
+            // claim the notification and launch the notifier, or every host opens its own window.
+            gate = new Mutex(false, NotificationMutexName);
+            try { owned = gate.WaitOne(TimeSpan.FromSeconds(5)); }
+            catch (AbandonedMutexException) { owned = true; }
+            if (!owned) return;
+
+            string directory = Path.GetDirectoryName(GetCachePath())!;
+            Directory.CreateDirectory(directory);
+            string statePath = Path.Combine(directory, "update-notification.json");
+            string? previous = null;
+            try { previous = File.ReadAllText(statePath); } catch { }
+            NotificationState? state = null;
+            try { state = previous is null ? null : JsonSerializer.Deserialize<NotificationState>(previous); } catch { }
+            if (state?.LatestVersion == status.LatestVersion && DateTimeOffset.UtcNow - state.ShownAt < NotificationLifetime) return;
+
+            File.WriteAllText(statePath, JsonSerializer.Serialize(new NotificationState(status.LatestVersion, DateTimeOffset.UtcNow)) + Environment.NewLine);
             var start = new System.Diagnostics.ProcessStartInfo(notifier)
             {
                 UseShellExecute = true,
                 Arguments = $"--installed {Quote(status.InstalledVersion)} --latest {Quote(status.LatestVersion)} --installer {Quote(status.InstallerUrl)} --release {Quote(status.ReleaseUrl)} --behavior {Quote(behavior)}"
             };
-            System.Diagnostics.Process.Start(start);
-            File.WriteAllText(statePath, JsonSerializer.Serialize(new NotificationState(status.LatestVersion, DateTimeOffset.UtcNow)) + Environment.NewLine);
+            try { System.Diagnostics.Process.Start(start); }
+            catch
+            {
+                // The claim must not hide the next attempt when the notifier never started.
+                if (previous is null) File.Delete(statePath);
+                else File.WriteAllText(statePath, previous);
+                throw;
+            }
         }
         catch { }
+        finally
+        {
+            if (owned) gate!.ReleaseMutex();
+            gate?.Dispose();
+        }
     }
 
     private static string Quote(string value) => '"' + value.Replace("\"", "\\\"", StringComparison.Ordinal) + '"';
