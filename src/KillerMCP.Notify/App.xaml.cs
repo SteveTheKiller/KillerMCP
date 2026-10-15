@@ -24,6 +24,7 @@ public partial class App : Application
             return;
         }
 
+        TaskbarIdentity.UseRepair();
         RepairConfirmWindow? confirm = index + 1 < e.Args.Length ? RepairConfirmWindow.TryCreate(e.Args[index + 1]) : null;
         if (confirm is null)
         {
@@ -54,6 +55,7 @@ public partial class App : Application
             null, Timeout.Infinite, false);
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        TaskbarIdentity.UseUpdate();
         _update = new UpdateWindow(args);
         MainWindow = _update;
         _update.Closed += (_, _) => Shutdown();

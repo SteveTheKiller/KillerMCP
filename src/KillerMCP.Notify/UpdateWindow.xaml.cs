@@ -25,6 +25,7 @@ public partial class UpdateWindow : Window
     public UpdateWindow(string[] args)
     {
         InitializeComponent();
+        TaskbarIdentity.Track(this);
         GrainLayer.Background = CreateGrain();
         PaneGrain.Background = GrainLayer.Background;
         Apply(args);

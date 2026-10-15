@@ -17,6 +17,7 @@ public partial class RepairConfirmWindow : Window
     private RepairConfirmWindow(Request request)
     {
         InitializeComponent();
+        TaskbarIdentity.Track(this);
         GrainLayer.Background = UpdateWindow.CreateGrain();
         PaneGrain.Background = GrainLayer.Background;
         TitleText.Text = request.Title;

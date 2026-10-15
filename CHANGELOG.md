@@ -13,6 +13,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 ### Fixed
 
 - Agent clients that start several KillerMCP hosts at once now get one update window instead of one per host, and a later notice brings the open window forward.
+- The update and repair approval windows show the KillerMCP icon and their own name on the taskbar instead of a generic KillerMCP.Notify button.
 - Installer and update-notifier icon buttons expose their tooltip names to screen readers and show keyboard focus.
 - Silent installs return specific Windows error codes and reject a second concurrent install instead of reporting a general failure.
 

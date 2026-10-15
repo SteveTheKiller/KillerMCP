@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="clr-namespace:KillerMCP.Notify"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="KillerMCP Update" Width="650" Height="390"
+        Title="KillerMCP Update" Icon="Assets/app-icon.ico" Width="650" Height="390"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize"
         AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True"
         FontFamily="./Assets/#Killer Sans UI, Segoe UI" Foreground="#ffffff" UseLayoutRounding="True" SnapsToDevicePixels="True"
