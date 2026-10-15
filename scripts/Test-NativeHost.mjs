@@ -14,10 +14,11 @@ await writeFile(pdfSourceOne, 'fixture one');
 await writeFile(pdfSourceTwo, 'fixture two');
 await writeFile(signedPdf, brotliDecompressSync(Buffer.from(await readFile(resolve('dependencies/KillerTools/tests/KillerTools.Engine.ParityHost/Data/signed-pdf.br64'), 'utf8'), 'base64')));
 let updateRequests = 0;
+const releaseNotes = 'Fixture summary.\n\n### Fixed\n\n- Fixture note.';
 const updateServer = createServer((request, response) => {
   updateRequests++;
   response.writeHead(200, { 'Content-Type': 'application/json' });
-  response.end(JSON.stringify({ tag_name: 'v99.0.0' }));
+  response.end(JSON.stringify({ tag_name: 'v99.0.0', body: releaseNotes }));
 });
 await new Promise(resolve => updateServer.listen(0, '127.0.0.1', resolve));
 const updateAddress = updateServer.address();
@@ -68,6 +69,9 @@ const initialized = await request('initialize', { protocolVersion: '2025-06-18' 
 assert.equal(initialized.serverInfo.name, 'KillerMCP');
 assert.equal(initialized.serverInfo.version, '0.5.1');
 assert.match(initialized.instructions, /KillerMCP 99\.0\.0 is available/);
+const cachedStatus = JSON.parse(await readFile(join(updateDirectory, 'status.json'), 'utf8'));
+assert.equal(cachedStatus.LatestVersion, '99.0.0');
+assert.equal(cachedStatus.Notes, releaseNotes);
 const listed = await request('tools/list');
 for (const tool of listed.tools) {
   assert.equal(typeof tool.annotations.readOnlyHint, 'boolean', tool.name);

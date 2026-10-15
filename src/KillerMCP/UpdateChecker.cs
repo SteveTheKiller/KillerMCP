@@ -21,6 +21,7 @@ internal static class UpdateChecker
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromHours(1);
     private static readonly TimeSpan NotificationLifetime = TimeSpan.FromDays(1);
     private const string NotificationMutexName = @"Local\KillerMCP-UpdateNotification";
+    private const int MaximumNotesLength = 20000;
 
     public static async Task<UpdateStatus> CheckForUpdateAsync(string currentVersion)
     {
@@ -46,6 +47,10 @@ internal static class UpdateChecker
             await using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
             using var release = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
             var latestVersion = release.RootElement.GetProperty("tag_name").GetString()?.TrimStart('v', 'V');
+            // The release body is the changelog section; the update window lists it as what is new.
+            string? notes = release.RootElement.TryGetProperty("body", out JsonElement body) && body.ValueKind == JsonValueKind.String
+                ? body.GetString() : null;
+            if (notes is { Length: > MaximumNotesLength }) notes = notes[..MaximumNotesLength];
             if (!TryVersion(latestVersion, out _))
             {
                 throw new InvalidDataException("The release version is invalid.");
@@ -54,7 +59,7 @@ internal static class UpdateChecker
             var checkedAt = DateTimeOffset.UtcNow;
             var directory = Path.GetDirectoryName(cachePath)!;
             Directory.CreateDirectory(directory);
-            await File.WriteAllTextAsync(cachePath, JsonSerializer.Serialize(new Cache(latestVersion!, checkedAt)) + Environment.NewLine).ConfigureAwait(false);
+            await File.WriteAllTextAsync(cachePath, JsonSerializer.Serialize(new Cache(latestVersion!, checkedAt, notes)) + Environment.NewLine).ConfigureAwait(false);
             return MakeStatus(currentVersion, latestVersion!, checkedAt, false);
         }
         catch
@@ -164,7 +169,7 @@ internal static class UpdateChecker
             var start = new System.Diagnostics.ProcessStartInfo(notifier)
             {
                 UseShellExecute = true,
-                Arguments = $"--installed {Quote(status.InstalledVersion)} --latest {Quote(status.LatestVersion)} --installer {Quote(status.InstallerUrl)} --release {Quote(status.ReleaseUrl)} --behavior {Quote(behavior)}"
+                Arguments = $"--installed {Quote(status.InstalledVersion)} --latest {Quote(status.LatestVersion)} --installer {Quote(status.InstallerUrl)} --release {Quote(status.ReleaseUrl)} --behavior {Quote(behavior)} --status {Quote(GetCachePath())}"
             };
             try { System.Diagnostics.Process.Start(start); }
             catch
@@ -200,6 +205,6 @@ internal static class UpdateChecker
 
     private static bool TryVersion(string? value, out Version version) => Version.TryParse(value?.Trim().TrimStart('v', 'V'), out version!);
 
-    private sealed record Cache(string LatestVersion, DateTimeOffset CheckedAt);
+    private sealed record Cache(string LatestVersion, DateTimeOffset CheckedAt, string? Notes = null);
     private sealed record NotificationState(string LatestVersion, DateTimeOffset ShownAt);
 }

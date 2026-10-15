@@ -21,6 +21,7 @@ public partial class UpdateWindow : Window
     private bool _loadingPreferences = true;
     private bool _busy;
     private string? _downloadedInstaller;
+    private string _statusPath = string.Empty;
 
     public UpdateWindow(string[] args)
     {
@@ -63,6 +64,7 @@ public partial class UpdateWindow : Window
         _releaseUrl = Value(args, "--release") ?? "https://github.com/SteveTheKiller/KillerMCP/releases/latest";
         _behavior = Value(args, "--behavior") ?? "check";
         _updated = Has(args, "--updated");
+        _statusPath = Value(args, "--status") ?? ReleaseNotes.DefaultStatusPath();
         _downloadedInstaller = null;
         _loadingPreferences = true;
         SelectBehavior(ReadBehavior());
@@ -75,8 +77,9 @@ public partial class UpdateWindow : Window
         UpdateButton.IsEnabled = true;
         LaterButton.Content = "Later";
         LaterButton.Margin = new Thickness(0, 0, 6, 0);
-        SidebarVersion.SetVersion("UPDATE  •  {0}", _latestVersion ?? _installedVersion);
+        SetSidebarVersion("UPDATE  •  {0}", _latestVersion ?? _installedVersion);
         SetStatus("Signed Windows installer from GitHub Releases");
+        ShowNotes(_latestVersion is null ? null : ReleaseNotes.Read(_statusPath, _latestVersion));
         if (_updated) ShowSuccess();
         else if (_latestVersion is null)
         {
@@ -167,7 +170,7 @@ public partial class UpdateWindow : Window
     private void ShowSuccess()
     {
         SetHeading("KillerMCP is up to date");
-        SidebarVersion.SetVersion("UPDATED  •  {0}", _latestVersion ?? _installedVersion);
+        SetSidebarVersion("UPDATED  •  {0}", _latestVersion ?? _installedVersion);
         BodyText.Text = "The update finished successfully. Open a new agent chat to use the newest Killer tools.";
         StatusText.Text = "Update installed and client connections refreshed";
         UpdateButton.Visibility = Visibility.Collapsed;
@@ -247,6 +250,56 @@ public partial class UpdateWindow : Window
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerMCP", "update-preferences.json");
 
     private void Later_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void SetSidebarVersion(string format, string version) =>
+        SidebarVersion.SetVersion(format, version, () => OpenUrl(ReleaseNotes.ReleaseUrl(version)), $"Open the {version} release notes");
+
+    private void ReleaseNotes_Click(object sender, RoutedEventArgs e) =>
+        OpenUrl(ReleaseNotes.ReleaseUrl(_latestVersion ?? _installedVersion));
+
+    private static void OpenUrl(string url)
+    {
+        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch (Exception exception) { Debug.WriteLine(exception); }
+    }
+
+    /// <summary>Lists the release notes between the body text and the update choice, or hides the
+    /// section when the host has not stored notes for this version.</summary>
+    private void ShowNotes(ReleaseNotes? notes)
+    {
+        NotesList.Children.Clear();
+        NotesScroller.ScrollToTop();
+        bool show = notes is not null;
+        NotesPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        NotesRow.Height = show ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
+        // The notes get the extra height; without them the window keeps the family setup size.
+        Height = show ? 450 : 390;
+        if (notes is null) return;
+        NotesHeading.Text = $"What's new in {_latestVersion}";
+        NotesLink.ToolTip = $"Open the {_latestVersion} release notes on GitHub";
+        System.Windows.Automation.AutomationProperties.SetName(NotesLink, "Full release notes");
+        var text = new SolidColorBrush(Color.FromRgb(0xd0, 0xd0, 0xd0));
+        var muted = new SolidColorBrush(Color.FromRgb(0x92, 0x92, 0x92));
+        var accent = (Brush)FindResource("Fuchsia");
+        if (notes.Summary.Length > 0)
+            NotesList.Children.Add(new TextBlock { Text = notes.Summary, Foreground = text, TextWrapping = TextWrapping.Wrap, LineHeight = 16, Margin = new Thickness(0, 0, 0, 4) });
+        foreach (ReleaseNotes.Section section in notes.Sections)
+        {
+            if (!string.IsNullOrWhiteSpace(section.Heading))
+                NotesList.Children.Add(new TextBlock { Text = section.Heading.ToUpperInvariant(), FontSize = 9.5, Foreground = muted, Margin = new Thickness(0, 4, 0, 2) });
+            foreach (string item in section.Items)
+            {
+                var row = new Grid { Margin = new Thickness(0, 0, 0, 3) };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+                row.ColumnDefinitions.Add(new ColumnDefinition());
+                row.Children.Add(new TextBlock { Text = "•", Foreground = accent });
+                var line = new TextBlock { Text = item, Foreground = text, TextWrapping = TextWrapping.Wrap, LineHeight = 16 };
+                Grid.SetColumn(line, 1);
+                row.Children.Add(line);
+                NotesList.Children.Add(row);
+            }
+        }
+    }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {

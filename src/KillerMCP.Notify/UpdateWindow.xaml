@@ -153,6 +153,56 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="NotesLink" TargetType="Hyperlink">
+            <Setter Property="Foreground" Value="#ff52c9"/>
+            <Setter Property="TextDecorations" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter Property="TextDecorations" Value="Underline"/></Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="TextDecorations" Value="Underline"/></Trigger>
+            </Style.Triggers>
+        </Style>
+        <!-- The family scrollbar from KillerUI Controls.xaml in Black with the Magenta accent: thin,
+             no arrow buttons, and the thumb fattens on hover. -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width" Value="12"/>
+            <Setter Property="MinWidth" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Track x:Name="PART_Track" IsDirectionReversed="True" Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}"
+                               Value="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" ViewportSize="{TemplateBinding ViewportSize}">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageUpCommand" Focusable="False" IsTabStop="False">
+                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageDownCommand" Focusable="False" IsTabStop="False">
+                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.IncreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb>
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border x:Name="ThumbFace" Background="#88ff2bbd" CornerRadius="3" Margin="4,0"/>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="ThumbFace" Property="Background" Value="#ff2bbd"/>
+                                                    <Setter TargetName="ThumbFace" Property="Margin" Value="2,2"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                        </Track>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
     <Border Margin="8" Background="#000000" BorderBrush="#2a2a2a" BorderThickness="1" CornerRadius="7" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
         <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect>
@@ -179,15 +229,30 @@
                             <TextBlock x:Name="HeadingText" FontFamily="{StaticResource BrandSans}" FontSize="20" TextOptions.TextFormattingMode="Ideal" Margin="0,0,28,0" TextWrapping="Wrap"><Run Text="A new "/><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="14.22"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="21.36" Foreground="{StaticResource Fuchsia}"/><Run Text=" is ready"/></TextBlock>
                             <TextBlock x:Name="BodyText" Grid.Row="1" Margin="0,6,25,14" Foreground="#b8b8b8" TextWrapping="Wrap" LineHeight="19"
                                        Text="Update the local host, reconnect supported agent clients, and pick up the newest Killer tools."/>
-                            <StackPanel Grid.Row="2">
-                                <TextBlock Text="Future updates" FontSize="10" Foreground="#929292" Margin="1,0,0,4"/>
-                                <ComboBox x:Name="BehaviorBox" Width="210" Height="28" HorizontalAlignment="Left" SelectionChanged="BehaviorBox_SelectionChanged">
-                                    <ComboBoxItem Tag="off">Do not check</ComboBoxItem>
-                                    <ComboBoxItem Tag="check">Check and ask</ComboBoxItem>
-                                    <ComboBoxItem Tag="download">Download and ask</ComboBoxItem>
-                                    <ComboBoxItem Tag="install">Install automatically</ComboBoxItem>
-                                </ComboBox>
-                            </StackPanel>
+                            <Grid Grid.Row="2">
+                                <Grid.RowDefinitions><RowDefinition x:Name="NotesRow" Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Grid x:Name="NotesPanel" Margin="0,0,0,10" Visibility="Collapsed">
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                    <DockPanel Margin="1,0,1,4">
+                                        <TextBlock DockPanel.Dock="Right" FontSize="10"><Hyperlink x:Name="NotesLink" Style="{StaticResource NotesLink}" Click="ReleaseNotes_Click"><Run Text="Full release notes"/></Hyperlink></TextBlock>
+                                        <TextBlock x:Name="NotesHeading" FontSize="10" Foreground="#929292" Text="What's new"/>
+                                    </DockPanel>
+                                    <Border Grid.Row="1" Background="#050505" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="4">
+                                        <ScrollViewer x:Name="NotesScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Padding="10,6,2,7">
+                                            <StackPanel x:Name="NotesList" TextElement.FontSize="11.5"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
+                                <StackPanel Grid.Row="1">
+                                    <TextBlock Text="Future updates" FontSize="10" Foreground="#929292" Margin="1,0,0,4"/>
+                                    <ComboBox x:Name="BehaviorBox" Width="210" Height="28" HorizontalAlignment="Left" SelectionChanged="BehaviorBox_SelectionChanged">
+                                        <ComboBoxItem Tag="off">Do not check</ComboBoxItem>
+                                        <ComboBoxItem Tag="check">Check and ask</ComboBoxItem>
+                                        <ComboBoxItem Tag="download">Download and ask</ComboBoxItem>
+                                        <ComboBoxItem Tag="install">Install automatically</ComboBoxItem>
+                                    </ComboBox>
+                                </StackPanel>
+                            </Grid>
                             <TextBlock x:Name="StatusText" Grid.Row="3" Margin="0,8,0,10" FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="#aaaaaa" TextWrapping="Wrap"/>
                             <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button x:Name="LaterButton" Content="Later" Style="{StaticResource LaterButton}" Margin="0,0,6,0" Click="Later_Click"/>

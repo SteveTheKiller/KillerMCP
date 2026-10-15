@@ -6,6 +6,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ## [0.5.1] - Unreleased
 
+### Added
+
+- The update window lists what is new in the offered version, and its version number and Full release notes link open that release on GitHub.
+
 ### Changed
 
 - Setup and the update window show their version under the wordmark as a label line and a centered version number, matching the KillerPDF installer. The update window keeps the installed version in its status line.
