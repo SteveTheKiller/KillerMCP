@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "KillerMCP": {
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-File",
+        "${CLAUDE_PLUGIN_ROOT}/start-killermcp.ps1"
+      ]
+    }
+  }
+}

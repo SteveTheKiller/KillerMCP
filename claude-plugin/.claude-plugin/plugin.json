@@ -1,0 +1,18 @@
+{
+  "name": "killermcp",
+  "displayName": "KillerMCP",
+  "version": "0.5.1",
+  "description": "One local MCP connection to KillerTools and the installed Killer apps: KillerPDF, KillerNotes, KillerScan, KillerShell, Killendar and KillerBench. Requires the KillerMCP Windows app.",
+  "author": {
+    "name": "Steve the Killer",
+    "url": "https://killertools.net"
+  },
+  "homepage": "https://github.com/SteveTheKiller/KillerMCP",
+  "repository": "https://github.com/SteveTheKiller/KillerMCP",
+  "license": "GPL-3.0-only",
+  "keywords": ["windows", "it", "pdf", "notes", "network", "killertools"],
+  "icon": "./icon.png",
+  "documentationUrl": "https://github.com/SteveTheKiller/KillerMCP/blob/main/docs/CAPABILITIES.md",
+  "supportUrl": "https://github.com/SteveTheKiller/KillerMCP/issues",
+  "privacyPolicyUrl": "https://github.com/SteveTheKiller/KillerMCP/blob/main/PRIVACY.md"
+}
