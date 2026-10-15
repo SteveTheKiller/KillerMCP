@@ -70,14 +70,13 @@ public partial class UpdateWindow : Window
 
         SetHeading("A new KillerMCP is ready");
         BodyText.Text = "Update the local host, reconnect supported agent clients, and pick up the newest Killer tools.";
-        SidebarLabel.Text = "UPDATE";
         UpdateButton.Content = "Update now";
         UpdateButton.Visibility = Visibility.Visible;
         UpdateButton.IsEnabled = true;
         LaterButton.Content = "Later";
         LaterButton.Margin = new Thickness(0, 0, 6, 0);
-        VersionText.Text = _latestVersion is null ? $"Installed v{_installedVersion}" : $"Installed v{_installedVersion}\nAvailable v{_latestVersion}";
-        StatusText.Text = "Signed Windows installer from GitHub Releases";
+        SidebarVersion.SetVersion("UPDATE  •  {0}", _latestVersion ?? _installedVersion);
+        SetStatus("Signed Windows installer from GitHub Releases");
         if (_updated) ShowSuccess();
         else if (_latestVersion is null)
         {
@@ -117,7 +116,7 @@ public partial class UpdateWindow : Window
             }
             SetHeading("Your update is ready");
             BodyText.Text = "The signed installer has been downloaded and verified. Install it when you are ready.";
-            StatusText.Text = "SHA256 and Windows signature verified";
+            SetStatus("SHA256 and Windows signature verified");
             UpdateButton.Content = "Install now";
             ShowFront();
         }
@@ -126,7 +125,7 @@ public partial class UpdateWindow : Window
             if (version != _latestVersion) return;
             SetHeading("The update needs your attention");
             BodyText.Text = "KillerMCP could not download and verify the update automatically.";
-            StatusText.Text = exception.Message;
+            SetStatus(exception.Message);
             UpdateButton.Content = "Open release";
             ShowFront();
         }
@@ -145,16 +144,16 @@ public partial class UpdateWindow : Window
         {
             if (_downloadedInstaller is null)
             {
-                StatusText.Text = "Downloading and verifying the signed update...";
+                SetStatus("Downloading and verifying the signed update...");
                 _downloadedInstaller = await UpdateInstaller.DownloadAndVerifyAsync(_latestVersion, _installerUrl);
             }
-            StatusText.Text = "Starting the verified upgrade...";
+            SetStatus("Starting the verified upgrade...");
             Process.Start(new ProcessStartInfo(_downloadedInstaller, "/silent /notify") { UseShellExecute = true });
             Close();
         }
         catch (Exception exception)
         {
-            StatusText.Text = "Automatic update failed. Opening the release page.";
+            SetStatus("Automatic update failed. Opening the release page.");
             UpdateButton.IsEnabled = true;
             Process.Start(new ProcessStartInfo(_releaseUrl) { UseShellExecute = true });
             Debug.WriteLine(exception);
@@ -168,14 +167,18 @@ public partial class UpdateWindow : Window
     private void ShowSuccess()
     {
         SetHeading("KillerMCP is up to date");
-        VersionText.Text = $"Updated to v{_latestVersion}";
-        SidebarLabel.Text = "UPDATED";
+        SidebarVersion.SetVersion("UPDATED  •  {0}", _latestVersion ?? _installedVersion);
         BodyText.Text = "The update finished successfully. Open a new agent chat to use the newest Killer tools.";
         StatusText.Text = "Update installed and client connections refreshed";
         UpdateButton.Visibility = Visibility.Collapsed;
         LaterButton.Content = "Close";
         LaterButton.Margin = new Thickness(0);
     }
+
+    /// <summary>The status line keeps the installed version in view while an update is offered,
+    /// since the sidebar shows the version being offered.</summary>
+    private void SetStatus(string text) => StatusText.Text =
+        _updated || _latestVersion is null ? text : $"Installed {_installedVersion}  •  {text}";
 
     private void SetHeading(string text)
     {
