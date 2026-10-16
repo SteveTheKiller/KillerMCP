@@ -2,11 +2,11 @@
 
 Last updated: October 15, 2026
 
-This policy covers the installed Windows edition of KillerMCP and its Claude plugin. Steve Riley operates KillerMCP. The hosted KillerTools server at mcp.killertools.net has its own [privacy policy](https://mcp.killertools.net/privacy).
+This policy covers the installed Windows edition of KillerMCP and its Claude plugin. Steve the Killer operates KillerMCP. The hosted KillerTools server at mcp.killertools.net has its own [privacy policy](https://mcp.killertools.net/privacy).
 
 ## What KillerMCP collects
 
-KillerMCP has no accounts, analytics or telemetry. It runs on your computer, and your tool arguments, files, notes and results stay there unless a tool you call needs a network service, as described below. The only requests that reach servers Steve Riley runs are the CVE and GIF searches, which pass through his proxies, and the KillerScan speed test.
+KillerMCP has no accounts, analytics or telemetry. It runs on your computer, and your tool arguments, files, notes and results stay there unless a tool you call needs a network service, as described below. The only requests that reach servers Steve the Killer runs are the CVE and GIF searches, which pass through his proxies, and the KillerScan speed test.
 
 ## Network services KillerMCP contacts
 
