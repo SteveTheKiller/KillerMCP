@@ -6,6 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+& (Join-Path $PSScriptRoot 'Test-PluginVersion.ps1')
 $output = Join-Path $root "artifacts\packages\$RuntimeIdentifier"
 $staging = Join-Path $root "artifacts\staging\$RuntimeIdentifier"
 

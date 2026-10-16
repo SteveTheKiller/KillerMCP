@@ -39,6 +39,7 @@ if ($SkipSign) {
 [xml]$project = Get-Content -LiteralPath 'src\KillerMCP\KillerMCP.csproj' -Raw
 $Version = [string]$project.Project.PropertyGroup.Version
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { Fail 'KillerMCP.csproj does not contain an x.y.z version.' }
+& (Join-Path $PSScriptRoot 'scripts\Test-PluginVersion.ps1')
 
 $Tag = "v$Version"
 $installer = Join-Path $PSScriptRoot 'artifacts\installer\KillerMCP-Setup.exe'

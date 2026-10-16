@@ -13,6 +13,8 @@ choco install killermcp
 
 App tools appear only for the Killer apps that are installed. Your organization may block local MCP servers on managed computers.
 
+The plugin version matches the KillerMCP app release version. Native packaging and release checks stop if the plugin version differs from `src/KillerMCP/KillerMCP.csproj` or its public author is not Steve the Killer. The hosted Killer Tools plugin is versioned separately.
+
 ## What the plugin runs
 
 The plugin starts one local MCP server. It runs `start-killermcp.ps1` with Windows PowerShell, and that script starts the installed `KillerMCP.exe` from `%LOCALAPPDATA%\Programs\KillerMCP`. If the app is missing, the script stops and says so. The plugin contains no other code and installs nothing.
