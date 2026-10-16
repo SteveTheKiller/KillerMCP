@@ -95,7 +95,7 @@ License: GPL-3.0
 LicenseUrl: https://github.com/SteveTheKiller/KillerMCP/blob/HEAD/LICENSE
 Copyright: Copyright (c) 2026 Steve the Killer
 ShortDescription: One local MCP connection for KillerTools and the Killer app family.
-Description: KillerMCP gives MCP compatible agents one local connection to the 81 KillerTools utilities and to KillerPDF, KillerScan, KillerNotes, KillerShell, Killendar, and KillerBench when they are installed. Setup registers it with supported agent clients such as Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf. It installs for the current user. No account, no telemetry. Open source under GPLv3.
+Description: KillerMCP gives MCP compatible agents one local connection to the 81 KillerTools utilities and to KillerPDF, KillerScan, KillerNotes, KillerShell, Killendar, KillerBench, and KillerShot when they are installed. Setup registers it with supported agent clients such as Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf. It installs for the current user. No account, no telemetry. Open source under GPLv3.
 Moniker: killermcp
 Tags:
 - ai

@@ -2,7 +2,7 @@
   "name": "killermcp",
   "displayName": "KillerMCP",
   "version": "0.5.2",
-  "description": "One local MCP connection to KillerTools and the installed Killer apps: KillerPDF, KillerNotes, KillerScan, KillerShell, Killendar and KillerBench. Requires the KillerMCP Windows app.",
+  "description": "One local MCP connection to KillerTools and the installed Killer apps: KillerPDF, KillerNotes, KillerScan, KillerShell, Killendar, KillerBench and KillerShot. Requires the KillerMCP Windows app.",
   "author": {
     "name": "Steve the Killer",
     "url": "https://killertools.net"

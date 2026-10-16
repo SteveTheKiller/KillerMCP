@@ -12,6 +12,7 @@ public static class AppDiscovery
         ["killerpdf"] = new("KILLERPDF_CLI", "KillerPDF", "KillerPDF.App.exe"),
         ["killerscan"] = new("KILLERSCAN_CLI", "KillerScan", "KillerScan.exe"),
         ["killershell"] = new("KILLERSHELL_CLI", "KillerShell", "KillerShell.exe"),
+        ["killershot"] = new("KILLERSHOT_CLI", "KillerShot", "KillerShot.exe"),
     };
 
     public static string? Discover(string app, IReadOnlyDictionary<string, string?>? environment = null)

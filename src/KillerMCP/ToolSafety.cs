@@ -19,6 +19,11 @@ internal static class ToolSafety
         "killershell_hash_file",
     };
 
+    private static readonly HashSet<string> ReadOnlyShotTools = new(StringComparer.Ordinal)
+    {
+        "killershot_list_monitors", "killershot_list_windows", "killershot_recent", "killershot_settings",
+    };
+
     private static readonly HashSet<string> DestructiveTools = new(StringComparer.Ordinal)
     {
         "killernotes_update", "killernotes_set_group_color", "killernotes_set_title_color",
@@ -53,6 +58,8 @@ internal static class ToolSafety
             return ReadOnlyShellTools.Contains(name);
         if (name.StartsWith("killerbench_", StringComparison.Ordinal))
             return name is not ("killerbench_repair_execute" or "killerbench_save_scan_note");
+        if (name.StartsWith("killershot_", StringComparison.Ordinal))
+            return ReadOnlyShotTools.Contains(name);
         if (name.StartsWith("killernotes_", StringComparison.Ordinal)
             || name.StartsWith("killendar_", StringComparison.Ordinal)
             || name.StartsWith("killerscan_", StringComparison.Ordinal)
@@ -75,5 +82,6 @@ internal static class ToolSafety
         or "killerpdf_rotate_pages" or "killerpdf_delete_pages" or "killerpdf_move_pages"
         or "killerpdf_insert_blank_page" or "killerpdf_duplicate_page"
         or "open_browser_companion_local" ||
-        name.StartsWith("killerscan_", StringComparison.Ordinal);
+        name.StartsWith("killerscan_", StringComparison.Ordinal) ||
+        name.StartsWith("killershot_", StringComparison.Ordinal);
 }

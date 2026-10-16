@@ -1,6 +1,6 @@
 # KillerMCP for Claude
 
-KillerMCP gives Claude one local connection to KillerTools and the Killer apps installed on your Windows computer. It includes all 81 KillerTools utilities, such as subnet math, DNS and RDAP lookups, Windows error and event codes, PowerShell building and data formatting. It also adds tools from each supported app it finds: KillerPDF, KillerNotes, KillerScan, KillerShell, Killendar and KillerBench.
+KillerMCP gives Claude one local connection to KillerTools and the Killer apps installed on your Windows computer. It includes all 81 KillerTools utilities, such as subnet math, DNS and RDAP lookups, Windows error and event codes, PowerShell building and data formatting. It also adds tools from each supported app it finds: KillerPDF, KillerNotes, KillerScan, KillerShell, Killendar, KillerBench and KillerShot.
 
 ## Requirements
 
@@ -29,6 +29,7 @@ Each tool carries read-only, destructive and open-world annotations, so review a
 - Killendar can create an appointment in the open app.
 - KillerScan probes your local network, and its speed test can transfer a large amount of data.
 - KillerBench checks only read Windows state. KillerBench repairs change Windows and stay off until you turn them on. Most of them ask for administrator approval.
+- KillerShot tools take screenshots and screen recordings and save them as new files. They never replace an existing file.
 
 ## What it sends over the network
 

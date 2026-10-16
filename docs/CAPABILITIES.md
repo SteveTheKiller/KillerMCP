@@ -30,6 +30,7 @@ The 81 KillerTools utilities include calculations, lookups, and generated output
 - KillerNotes tools can create and change notes and export files.
 - Killendar can create an appointment in the open, unlocked app.
 - KillerBench checks and scans read Windows state without changing it. KillerBench repairs change Windows and stay off until the user turns them on.
+- KillerShot tools capture the screen and save image or video files. They refuse to overwrite existing output paths and leave the clipboard alone unless asked.
 - Cross app workflows can create PDFs, notes, or page images.
 
 Tool availability depends on the supported apps installed on the computer. Review a client's proposed tool call, especially its arguments, before approving access to sensitive data, network targets, printers, or local output paths.
@@ -268,11 +269,23 @@ KillerMCP never offers BitLocker changes, previous Windows removal, offline driv
 
 Each repair request, approval, denial and outcome is recorded at `%LOCALAPPDATA%\KillerMCP\killerbench-actions.jsonl`. The log records the action, tier, target and exit code, not the command output.
 
+### KillerShot
+
+- List monitors, numbered left to right, with their bounds in screen pixels.
+- List up to 500 capturable windows with their handles, titles and process names.
+- Take a screenshot of one monitor, every monitor, one window by handle or title, or one rectangle of the desktop, with an optional delay of up to 30 seconds.
+- Record a monitor, every monitor, a window or a rectangle to MP4 or GIF for 1 to 300 seconds. MP4 can include system sound, the microphone or both.
+- List up to 20 recent captures with their paths, times and sizes.
+- Open an image in the KillerShot editor on the user's screen.
+- Read the capture, recording and shortcut settings without changing them.
+
+Captures are saved as PNG or JPEG and recordings as MP4 or GIF. Output paths must be absolute, and an existing file is never replaced. Without an output path, KillerShot saves into its own output folder when that setting is on, and every screenshot also goes into its Recent history. The clipboard is left alone unless the call asks for a copy, and no shutter sound plays. The tools return file paths, not image data. MP4 recordings can be at most 4096 pixels wide; use GIF or a smaller area for a wider desktop. A screenshot can show anything on the screen, including other apps and private information, so review capture requests before approving them.
+
 ## Where data goes
 
 Installed KillerMCP runs its tools and app adapters on the computer. Some KillerTools network and reference lookups still contact their named public data sources.
 
-The MCP client and its model provider can receive tool arguments and results, including local paths, snippets, calendar fields, network results, or private values. The provider's data handling rules still apply. Review sensitive inputs and requested paths before approving a tool call.
+The MCP client and its model provider can receive tool arguments and results, including local paths, snippets, calendar fields, network results, window titles, or private values. Screenshot and recording files stay on the computer unless the client opens them. The provider's data handling rules still apply. Review sensitive inputs and requested paths before approving a tool call.
 
 ## Source and exact operation names
 

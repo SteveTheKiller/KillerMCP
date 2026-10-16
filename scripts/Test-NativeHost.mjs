@@ -39,6 +39,8 @@ const environment = {
   KILLENDAR_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
   KILLERBENCH_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
   KILLERMCP_FAKE_BENCH: '1',
+  KILLERSHOT_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
+  KILLERMCP_FAKE_SHOT: '1',
   KILLERMCP_STATE_DIR: join(updateDirectory, 'state'),
   KILLERBENCH_STATE_DIR: join(updateDirectory, 'bench-state'),
 };
@@ -90,6 +92,10 @@ assert.equal(safety('killerbench_check').openWorldHint, true);
 assert.equal(safety('killerbench_repair_preview').readOnlyHint, true);
 assert.equal(safety('killerbench_repair_execute').destructiveHint, true);
 assert.equal(safety('killerbench_save_scan_note').destructiveHint, false);
+assert.equal(safety('killershot_list_windows').readOnlyHint, true);
+assert.equal(safety('killershot_capture_monitor').readOnlyHint, false);
+assert.equal(safety('killershot_capture_monitor').destructiveHint, false);
+assert.equal(safety('killershot_record').openWorldHint, false);
 assert.deepEqual(listed.tools.map(tool => tool.name), [
   'text_statistics', 'convert_case', 'encode_base64', 'decode_base64', 'text_to_ascii_binary',
   'ascii_binary_to_text', 'draw_ascii_text', 'search_emoji', 'arabic_to_roman', 'roman_to_arabic', 'text_to_nato_alphabet',
@@ -139,6 +145,9 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killerbench_code_lookup', 'killerbench_diagnostic_scopes', 'killerbench_check', 'killerbench_scan',
   'killerbench_job', 'killerbench_repair_actions', 'killerbench_repair_preview', 'killerbench_repair_execute',
   'killerbench_repair_recover', 'killerbench_save_scan_note',
+  'killershot_list_monitors', 'killershot_list_windows', 'killershot_capture_monitor', 'killershot_capture_all',
+  'killershot_capture_window', 'killershot_capture_region', 'killershot_record', 'killershot_recent',
+  'killershot_open_in_editor', 'killershot_settings',
   'killer_create_pdf', 'killernotes_export_pdf', 'killerscan_export_report_pdf',
   'killerscan_save_report_note', 'killendar_export_agenda_pdf', 'killendar_save_agenda_note',
   'killershell_export_directory_pdf', 'killershell_save_directory_note', 'killerpdf_save_pages_as_notes',

@@ -22,7 +22,7 @@
 **Features:**
 
 - All 81 KillerTools website utilities from the native KillerTools engine
-- Automatic tool discovery for supported versions of KillerPDF, KillerScan, KillerNotes, KillerShell, Killendar, and KillerBench
+- Automatic tool discovery for supported versions of KillerPDF, KillerScan, KillerNotes, KillerShell, Killendar, KillerBench, and KillerShot
 - Registers itself with Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when they are found
 - Labeled tool effects and a local tool call log that never records arguments or results
 - Signed updates that must match the published SHA256 and pass Windows signature verification

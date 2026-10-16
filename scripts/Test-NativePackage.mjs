@@ -15,7 +15,7 @@ if (!existsSync(executable) || !existsSync(configurator) || !existsSync(join(dir
 const environment = { ...process.env };
 environment.KILLERMCP_UPDATE_API = 'http://127.0.0.1:1/unavailable';
 environment.KILLERMCP_UPDATE_CACHE = join(tmpdir(), `killermcp-native-package-${process.pid}.json`);
-for (const variable of ['KILLERPDF_CLI', 'KILLERNOTES_CLI', 'KILLERSCAN_CLI', 'KILLERSHELL_CLI', 'KILLENDAR_CLI']) {
+for (const variable of ['KILLERPDF_CLI', 'KILLERNOTES_CLI', 'KILLERSCAN_CLI', 'KILLERSHELL_CLI', 'KILLENDAR_CLI', 'KILLERSHOT_CLI']) {
   environment[variable] = join(directory, 'missing-app-cli');
 }
 
