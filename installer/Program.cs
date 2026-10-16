@@ -59,6 +59,12 @@ namespace KillerMCP.Setup
                 }
                 if (silent)
                 {
+                    // An unsigned or tampered setup must not install itself unattended.
+                    if (!isolated && !IsTrustedSetup(Assembly.GetExecutingAssembly().Location))
+                    {
+                        Console.Error.WriteLine("Silent install refused: setup has no valid Authenticode signature.");
+                        return KillerFamily.Deployment.InstallerExitCodes.SecurityRejected;
+                    }
                     if (!HasRuntime10(isolated)) return MissingRuntimeExitCode;
                     Install(destination);
                     if (notify) NotifySuccess(destination);
@@ -320,7 +326,7 @@ namespace KillerMCP.Setup
                     && setupVersion.Minor == currentVersion.Minor
                     && setupVersion.Build >= registeredVersion.Build
                     && setupVersion.Build <= currentVersion.Build
-                    && (setupVersion.Build == currentVersion.Build || IsTrustedPreviousSetup(setup))) return true;
+                    && (setupVersion.Build == currentVersion.Build || IsTrustedSetup(setup))) return true;
                 return IsStaleRegistration(destination, setup, setupVersion, currentVersion);
             }
             catch { return false; }
@@ -338,10 +344,10 @@ namespace KillerMCP.Setup
                 && Version.TryParse(FileVersionInfo.GetVersionInfo(host).FileVersion, out Version? hostVersion)
                 && hostVersion == setupVersion
                 && setupRelease <= currentVersion
-                && IsTrustedPreviousSetup(setup);
+                && IsTrustedSetup(setup);
         }
 
-        private static bool IsTrustedPreviousSetup(string setup)
+        private static bool IsTrustedSetup(string setup)
         {
             if (!UpdateBootstrap.HasTrustedSignature(setup)) return false;
             using (var certificate = new X509Certificate2(X509Certificate.CreateFromSignedFile(setup)))
