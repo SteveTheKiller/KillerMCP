@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 - KillerShot tools list monitors and windows, take screenshots of a monitor, every monitor, a window or a rectangle, record MP4 or GIF for a set time, list recent captures, open an image in the KillerShot editor, and read KillerShot's settings.
 
+### Changed
+- The keyboard focus outline is a thin solid ring in the theme accent instead of a thick dotted line, and uses the text color where the accent would be too faint to see.
+
 ### Fixed
 
 - Silent installs refuse a setup without a valid signature and return 1625 instead of installing.
