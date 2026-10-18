@@ -87,6 +87,9 @@ assert.equal(safety('killerscan_scan_network').openWorldHint, true);
 assert.equal(safety('killernotes_update').destructiveHint, true);
 assert.equal(safety('killendar_create_appointment').destructiveHint, false);
 assert.equal(safety('killerpdf_print').destructiveHint, true);
+assert.equal(safety('killerpdf_signatures').readOnlyHint, true);
+assert.equal(safety('killerpdf_redact').destructiveHint, false);
+assert.equal(safety('killerpdf_sign').openWorldHint, true);
 assert.equal(safety('killerbench_check').readOnlyHint, true);
 assert.equal(safety('killerbench_check').openWorldHint, true);
 assert.equal(safety('killerbench_repair_preview').readOnlyHint, true);
@@ -141,6 +144,20 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killerpdf_resave', 'killerpdf_benchmark_render', 'killerpdf_rotate_pages',
   'killerpdf_delete_pages', 'killerpdf_move_pages', 'killerpdf_insert_blank_page',
   'killerpdf_duplicate_page', 'killerpdf_document_info', 'killerpdf_search_text',
+  'killerpdf_optimize', 'killerpdf_number_pages', 'killerpdf_bates', 'killerpdf_booklet', 'killerpdf_nup',
+  'killerpdf_auto_bookmarks', 'killerpdf_scan_to_text', 'killerpdf_reverse_pages',
+  'killerpdf_fix_orientation', 'killerpdf_straighten', 'killerpdf_divide_spreads',
+  'killerpdf_rasterize_region', 'killerpdf_print_production', 'killerpdf_signatures', 'killerpdf_layers',
+  'killerpdf_portfolio', 'killerpdf_comments', 'killerpdf_navigation_audit', 'killerpdf_measurements',
+  'killerpdf_separations', 'killerpdf_render_separations', 'killerpdf_compare_structure',
+  'killerpdf_list_attachments', 'killerpdf_extract_attachments', 'killerpdf_recognize_fields',
+  'killerpdf_add_form_fields', 'killerpdf_set_layer', 'killerpdf_portfolio_view', 'killerpdf_add_attachment',
+  'killerpdf_edit_attachment', 'killerpdf_repair_links', 'killerpdf_table_of_contents',
+  'killerpdf_page_labels', 'killerpdf_initial_view', 'killerpdf_redact', 'killerpdf_protect',
+  'killerpdf_export', 'killerpdf_convert_office', 'killerpdf_data_merge', 'killerpdf_replace_text',
+  'killerpdf_export_form_data', 'killerpdf_import_form_data', 'killerpdf_xfa_to_acroform',
+  'killerpdf_flatten_forms', 'killerpdf_run_macro', 'killerpdf_list_macros', 'killerpdf_sign',
+  'killerpdf_scan', 'killerpdf_list_scanners',
   'killerpdf_preflight', 'killerpdf_accessibility', 'killerpdf_verify_install',
   'killerbench_code_lookup', 'killerbench_diagnostic_scopes', 'killerbench_check', 'killerbench_scan',
   'killerbench_job', 'killerbench_repair_actions', 'killerbench_repair_preview', 'killerbench_repair_execute',

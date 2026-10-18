@@ -87,7 +87,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     }
     if (arguments.SequenceEqual(["--help"]))
     {
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1") Console.WriteLine("  --merge <out.pdf>\n--extract-pages <in.pdf>\n--split <in.pdf>\n--decrypt <in.pdf>\n--to-image <in.pdf>\n--flatten <in.pdf>\n--print <in.pdf>\n--ocr <in.pdf>\n--batch-resave <in>\n--batch-render <in>\n--rotate-pages <in.pdf>\n--delete-pages <in.pdf>\n--move-pages <in.pdf>\n--insert-blank <in.pdf>\n--duplicate-page <in.pdf>\n--document-info <in.pdf>\n--search-text <in.pdf>\n--preflight <in.pdf>\n--accessibility <in.pdf>\n  KillerPDF.exe --verify | /verify   verify every installed payload file");
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1") Console.WriteLine("  --merge <out.pdf>\n--extract-pages <in.pdf>\n--split <in.pdf>\n--decrypt <in.pdf>\n--to-image <in.pdf>\n--flatten <in.pdf>\n--print <in.pdf>\n--ocr <in.pdf>\n--batch-resave <in>\n--batch-render <in>\n--rotate-pages <in.pdf>\n--delete-pages <in.pdf>\n--move-pages <in.pdf>\n--insert-blank <in.pdf>\n--duplicate-page <in.pdf>\n--document-info <in.pdf>\n--search-text <in.pdf>\n--preflight <in.pdf>\n--accessibility <in.pdf>\n--optimize <in.pdf>\n--number-pages <in.pdf>\n--bates <outDir>\n--booklet <in.pdf>\n--nup <in.pdf>\n--auto-bookmarks <in.pdf>\n--scan-to-text <in.pdf>\n--reverse-pages <in.pdf>\n--fix-orientation <in.pdf>\n--straighten <in.pdf>\n--divide-spreads <in.pdf>\n--rasterize-region <in.pdf>\n--print-production <in.pdf>\n--signatures <in.pdf>\n--layers <in.pdf>\n--portfolio <in.pdf>\n--comments <in.pdf>\n--navigation-audit <in.pdf>\n--measurements <in.pdf>\n--separations <in.pdf>\n--compare-structure <original.pdf>\n--attachments <in.pdf>\n--recognize-fields <in.pdf>\n--set-layer <in.pdf>\n--portfolio-view <in.pdf>\n--add-attachment <in.pdf>\n--edit-attachment <in.pdf>\n--repair-links <in.pdf>\n--toc <in.pdf>\n--page-labels <in.pdf>\n--initial-view <in.pdf>\n--redact <in.pdf>\n--protect <in.pdf>\n--export <in.pdf>\n--convert-office <in.docx\n--data-merge <template.pdf>\n--replace-text <in.pdf>\n--export-form-data <in.pdf>\n--import-form-data <in.pdf>\n--xfa-to-acroform <in.pdf>\n--flatten-forms <in.pdf>\n--macro <in.pdf>\n--sign <in.pdf>\n--scan <out.pdf>\n  KillerPDF.exe --verify | /verify   verify every installed payload file");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>\ncreate --title");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>\ncreate <json>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>\nlist <folder>\ninfo <path>\nread <file>\nprocesses [--limit]\nservices [--limit]\nevents <log>\nregistry <key>\ndrives\nhash <file>");
@@ -107,6 +107,29 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     if (arguments.Length > 0 && arguments[0] is "--print" or "--document-info" or "--search-text")
     {
         Console.Write("Fixture action completed");
+        return;
+    }
+    if (arguments.Length > 0 && arguments[0].StartsWith("--", StringComparison.Ordinal) && arguments.Contains("--json"))
+    {
+        Console.Write(JsonSerializer.Serialize(new { valid = true, command = arguments[0] }));
+        return;
+    }
+    if (arguments.Length == 2 && arguments[0] is "--macro" or "--scan" && arguments[1] == "--list")
+    {
+        Console.Write("Fixture list");
+        return;
+    }
+    var stagedOutput = arguments.FirstOrDefault(argument => argument.Contains("killermcp-pdf-", StringComparison.Ordinal) && Path.GetFileName(argument).StartsWith("output", StringComparison.Ordinal));
+    if (arguments.Length > 0 && arguments[0].StartsWith("--", StringComparison.Ordinal) && stagedOutput is not null)
+    {
+        var termsIndex = Array.IndexOf(arguments, "--terms");
+        if (termsIndex >= 0 && (termsIndex + 1 >= arguments.Length || !File.Exists(arguments[termsIndex + 1]))) { Environment.ExitCode = 1; return; }
+        if (Path.HasExtension(stagedOutput)) File.WriteAllText(stagedOutput, "fixture output");
+        else
+        {
+            Directory.CreateDirectory(stagedOutput);
+            File.WriteAllText(Path.Combine(stagedOutput, "item-1.pdf"), "fixture");
+        }
         return;
     }
     if (arguments.Length > 0 && arguments[0].StartsWith("--", StringComparison.Ordinal))
@@ -327,7 +350,7 @@ try
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
     var pdfAdapters = await KillerPdfAdapter.CreateAsync(Environment.ProcessPath);
-    Equal(20, pdfAdapters.Count);
+    Equal(69, pdfAdapters.Count);
     var pdfByName = pdfAdapters.ToDictionary(item => item.Tool.Name);
     var sourceOne = Path.Combine(root, "source-one.pdf");
     var sourceTwo = Path.Combine(root, "source-two.pdf");
@@ -361,6 +384,67 @@ try
     Equal(false, (await Pdf("killerpdf_duplicate_page", new { path = sourceOne, page = 1, output = Path.Combine(root, "duplicate.pdf") })).IsError);
     Equal(false, (await Pdf("killerpdf_document_info", new { path = sourceOne })).IsError);
     Equal(false, (await Pdf("killerpdf_search_text", new { path = sourceOne, query = "fixture" })).IsError);
+    var attachmentFile = Path.Combine(root, "notes.txt");
+    var officeFile = Path.Combine(root, "letter.docx");
+    var dataFile = Path.Combine(root, "records.csv");
+    var formData = Path.Combine(root, "values.fdf");
+    var certificateFile = Path.Combine(root, "signer.pfx");
+    var recipientFile = Path.Combine(root, "recipient.cer");
+    var macroFile = Path.Combine(root, "macro.json");
+    foreach (var fixture in new[] { attachmentFile, officeFile, dataFile, formData, certificateFile, recipientFile, macroFile }) File.WriteAllText(fixture, "fixture");
+    string NewPdf(string name) => Path.Combine(root, name + ".pdf");
+    Equal(false, (await Pdf("killerpdf_split", new { path = sourceOne, outputFolder = Path.Combine(root, "split-parts"), parts = 2, nameTemplate = "{name}-{index}" })).IsError);
+    Equal(false, (await Pdf("killerpdf_flatten", new { path = sourceOne, output = NewPdf("scanned-look"), colorMode = "grayscale", compression = "jpeg", jpegQuality = 70, scannedLook = "tilt,grain" })).IsError);
+    Equal(false, (await Pdf("killerpdf_optimize", new { path = sourceOne, output = NewPdf("optimized"), strip = "metadata,comments", imageDpi = 150, jpegQuality = 80 })).IsError);
+    Equal(false, (await Pdf("killerpdf_number_pages", new { path = sourceOne, output = NewPdf("numbered"), template = "Page {page} of {pages}", edge = "footer", align = "center", numberFormat = "decimal", fontSize = 10 })).IsError);
+    Equal(false, (await Pdf("killerpdf_bates", new { inputs = new[] { sourceOne, sourceTwo }, outputFolder = Path.Combine(root, "bates"), start = 1, digits = 6, prefix = "KP" })).IsError);
+    Equal(false, (await Pdf("killerpdf_booklet", new { path = sourceOne, output = NewPdf("booklet"), sheet = "letter", binding = "long", marks = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_nup", new { path = sourceOne, output = NewPdf("nup"), grid = "2x2", margin = 18 })).IsError);
+    Equal(false, (await Pdf("killerpdf_auto_bookmarks", new { path = sourceOne, output = NewPdf("bookmarked"), depth = 2 })).IsError);
+    Equal(false, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-text"), language = "eng" })).IsError);
+    Equal(false, (await Pdf("killerpdf_reverse_pages", new { path = sourceOne, output = NewPdf("reversed"), pages = "1-2" })).IsError);
+    Equal(false, (await Pdf("killerpdf_fix_orientation", new { path = sourceOne, output = NewPdf("upright") })).IsError);
+    Equal(false, (await Pdf("killerpdf_straighten", new { path = sourceOne, output = NewPdf("level") })).IsError);
+    Equal(false, (await Pdf("killerpdf_divide_spreads", new { path = sourceOne, output = NewPdf("divided"), direction = "vertical", splitAt = 0.5 })).IsError);
+    Equal(false, (await Pdf("killerpdf_rasterize_region", new { path = sourceOne, output = NewPdf("region"), page = 1, box = "72,72,300,300", dpi = 200 })).IsError);
+    foreach (var report in new[] { "killerpdf_print_production", "killerpdf_signatures", "killerpdf_layers", "killerpdf_portfolio", "killerpdf_comments", "killerpdf_navigation_audit", "killerpdf_measurements", "killerpdf_separations", "killerpdf_list_attachments", "killerpdf_recognize_fields" })
+        Equal(true, JsonDocument.Parse((await Pdf(report, new { path = sourceOne })).Text).RootElement.GetProperty("valid").GetBoolean());
+    Equal(false, (await Pdf("killerpdf_compare_structure", new { path = sourceOne, changed = sourceTwo })).IsError);
+    Equal(false, (await Pdf("killerpdf_render_separations", new { path = sourceOne, outputFolder = Path.Combine(root, "plates"), pages = "1", dpi = 72 })).IsError);
+    Equal(false, (await Pdf("killerpdf_extract_attachments", new { path = sourceOne, outputFolder = Path.Combine(root, "attachments") })).IsError);
+    Equal(false, (await Pdf("killerpdf_add_form_fields", new { path = sourceOne, output = NewPdf("fields") })).IsError);
+    Equal(false, (await Pdf("killerpdf_set_layer", new { path = sourceOne, output = NewPdf("layer"), layer = "Notes", name = "Review", visible = false, locked = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_portfolio_view", new { path = sourceOne, output = NewPdf("portfolio"), view = "tile" })).IsError);
+    Equal(false, (await Pdf("killerpdf_add_attachment", new { path = sourceOne, output = NewPdf("attached"), files = new[] { attachmentFile }, relationship = "supplement" })).IsError);
+    Equal(false, (await Pdf("killerpdf_edit_attachment", new { path = sourceOne, output = NewPdf("edited-attachment"), name = "notes.txt", mime = "text/plain" })).IsError);
+    Equal(false, (await Pdf("killerpdf_repair_links", new { path = sourceOne, output = NewPdf("links"), @unsafe = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_table_of_contents", new { path = sourceOne, output = NewPdf("contents"), title = "Contents", depth = 2 })).IsError);
+    Equal(false, (await Pdf("killerpdf_page_labels", new { path = sourceOne, output = NewPdf("labels"), ranges = "1:lower-roman,3:decimal" })).IsError);
+    Equal(false, (await Pdf("killerpdf_initial_view", new { path = sourceOne, output = NewPdf("view"), page = 1, zoom = "fit-width", layout = "single", panel = "outlines", hideToolbar = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_redact", new { path = sourceOne, output = NewPdf("redacted"), terms = new[] { "Jane Doe", "555-0100" }, find = new[] { "email", "phone" }, rasterize = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_protect", new { path = sourceOne, output = NewPdf("protected"), userPassword = "open", ownerPassword = "owner", allow = new[] { "print" } })).IsError);
+    Equal(false, (await Pdf("killerpdf_export", new { path = sourceOne, output = Path.Combine(root, "export.docx"), pages = "1" })).IsError);
+    Equal(false, (await Pdf("killerpdf_convert_office", new { path = officeFile, output = NewPdf("converted") })).IsError);
+    Equal(false, (await Pdf("killerpdf_data_merge", new { path = sourceOne, data = dataFile, outputFolder = Path.Combine(root, "merge"), flatten = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_replace_text", new { path = sourceOne, output = NewPdf("replaced"), find = "fixture", replace = "sample", wholeWord = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_export_form_data", new { path = sourceOne, output = Path.Combine(root, "values.xfdf") })).IsError);
+    Equal(false, (await Pdf("killerpdf_import_form_data", new { path = sourceOne, data = formData, output = NewPdf("filled") })).IsError);
+    Equal(false, (await Pdf("killerpdf_xfa_to_acroform", new { path = sourceOne, output = NewPdf("acroform") })).IsError);
+    Equal(false, (await Pdf("killerpdf_flatten_forms", new { path = sourceOne, output = NewPdf("flat-forms") })).IsError);
+    Equal(false, (await Pdf("killerpdf_run_macro", new { path = sourceOne, output = NewPdf("macro"), macro = "starter:privacy", terms = new[] { "secret" } })).IsError);
+    Equal(false, (await Pdf("killerpdf_run_macro", new { path = sourceOne, output = NewPdf("macro-file"), macroFile })).IsError);
+    Equal(false, (await Pdf("killerpdf_list_macros", new { })).IsError);
+    Equal(false, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, appearancePage = 1, appearanceCorner = "bottom-right" })).IsError);
+    Equal(false, (await Pdf("killerpdf_scan", new { output = NewPdf("scanned"), showSettings = false })).IsError);
+    Equal(false, (await Pdf("killerpdf_list_scanners", new { })).IsError);
+    Equal(true, (await Pdf("killerpdf_export", new { path = sourceOne, output = NewPdf("export-as-pdf") })).IsError);
+    Equal(true, (await Pdf("killerpdf_redact", new { path = sourceOne, output = NewPdf("bad-redact"), find = new[] { "passport" } })).IsError);
+    Equal(true, (await Pdf("killerpdf_bates", new { inputs = new[] { Path.Combine(root, "missing.pdf") }, outputFolder = Path.Combine(root, "bad-bates") })).IsError);
+    Equal(true, (await Pdf("killerpdf_compare_structure", new { path = sourceOne, changed = Path.Combine(root, "missing.pdf") })).IsError);
+    Equal(true, (await Pdf("killerpdf_replace_text", new { path = sourceOne, output = NewPdf("bad-replace"), find = "--flatten", replace = "x" })).IsError);
+    Equal(true, (await Pdf("killerpdf_protect", new { path = sourceOne, output = NewPdf("bad-protect"), recipients = new[] { recipientFile + ",x.cer" } })).IsError);
+    Equal(true, (await Pdf("killerpdf_divide_spreads", new { path = sourceOne, output = NewPdf("bad-divide"), splitAt = 0.95 })).IsError);
+    Equal(true, (await Pdf("killerpdf_convert_office", new { path = sourceOne, output = NewPdf("bad-convert") })).IsError);
     Equal(true, (await Pdf("killerpdf_extract_pages", new { path = sourceOne, pages = "bad", output = Path.Combine(root, "bad.pdf") })).IsError);
     Equal(true, (await Pdf("killerpdf_merge", new { inputs = new[] { sourceOne, sourceTwo }, output = Path.Combine(root, "merged.pdf") })).IsError);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", null);

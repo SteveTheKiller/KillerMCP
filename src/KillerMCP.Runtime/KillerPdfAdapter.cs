@@ -34,18 +34,18 @@ public static partial class KillerPdfAdapter
         yield return FileOperation("killerpdf_extract_pages", "--extract-pages <in.pdf>", "Extract selected pages from a local PDF into a new PDF without changing the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["pages"] = PageRange(), ["output"] = NewPdf() }, "path", "pages", "output"),
             (input, output) => ["--extract-pages", String(input, "path"), String(input, "pages"), output]);
-        yield return DirectoryOperation("killerpdf_split", "--split <in.pdf>", "Split a local PDF into one new PDF per page in a new folder without changing the source.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["outputFolder"] = NewFolder() }, "path", "outputFolder"),
-            (input, output) => ["--split", String(input, "path"), output]);
+        yield return DirectoryOperation("killerpdf_split", "--split <in.pdf>", "Split a local PDF into new PDFs in a new folder, one per page by default, or by page count, equal parts, bookmark level or file size. Never changes the source.",
+            Schema(new JsonObject { ["path"] = PdfPath(), ["outputFolder"] = NewFolder(), ["every"] = Integer(1, 100000), ["parts"] = Integer(2, 10000), ["bookmarkLevel"] = Integer(1, 6), ["maxSize"] = Text(16, "^\\d+(?:KB|MB)?$", "Largest part size such as 500KB or 5MB"), ["nameTemplate"] = Text(256, null, "File names from {name} {index} {first} {last} {title}") }, "path", "outputFolder"),
+            (input, output) => Options(["--split", String(input, "path"), output], input, ("every", "--every"), ("parts", "--parts"), ("bookmarkLevel", "--bookmarks"), ("maxSize", "--max-size"), ("nameTemplate", "--name")));
         yield return FileOperation("killerpdf_decrypt", "--decrypt <in.pdf>", "Remove PDF encryption into a new local PDF. Supply a password when the document requires one. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["password"] = Password() }, "path", "output"),
             (input, output) => Append(["--decrypt", String(input, "path"), output], input, "password", "--password"));
         yield return DirectoryOperation("killerpdf_render_pages", "--to-image <in.pdf>", "Render selected PDF pages into PNG or JPEG images in a new folder. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["outputFolder"] = NewFolder(), ["pages"] = PageRange(), ["dpi"] = Integer(36, 1200, 150), ["format"] = EnumWithDefault(["png", "jpg"], "png"), ["transparent"] = Boolean(false), ["password"] = Password() }, "path", "outputFolder"),
             (input, output) => RenderArguments(input, output));
-        yield return FileOperation("killerpdf_flatten", "--flatten <in.pdf>", "Rasterize a local PDF into a new uneditable PDF. Never changes the source.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["dpi"] = Integer(36, 1200, 150), ["password"] = Password() }, "path", "output"),
-            (input, output) => Append(["--flatten", String(input, "path"), output, "--dpi", Number(input, "dpi", 150)], input, "password", "--password"));
+        yield return FileOperation("killerpdf_flatten", "--flatten <in.pdf>", "Rasterize a local PDF into a new uneditable PDF, in color, grayscale or black and white, optionally looking printed and scanned. Never changes the source.",
+            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["dpi"] = Integer(36, 1200, 150), ["password"] = Password(), ["colorMode"] = Choice("color", "grayscale", "black-white"), ["threshold"] = Integer(0, 255), ["compression"] = Choice("lossless", "jpeg"), ["jpegQuality"] = Integer(1, 100), ["scannedLook"] = Text(64, "^(?:all|[a-z-]+(?:,[a-z-]+)*)$", "all, or any of tilt, paper, grain, soft-focus, shadow") }, "path", "output"),
+            (input, output) => Options(Append(["--flatten", String(input, "path"), output, "--dpi", Number(input, "dpi", 150)], input, "password", "--password"), input, ("colorMode", "--color-mode"), ("threshold", "--threshold"), ("compression", "--compression"), ("jpegQuality", "--jpeg-quality"), ("scannedLook", "--scanned-look")), 300);
         yield return Action("killerpdf_print", "--print <in.pdf>", "Print selected pages from a local PDF. This sends a real print job to the selected or default printer.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["printer"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 256 }, ["pages"] = PageRange(), ["copies"] = Integer(1, 99, 1), ["password"] = Password() }, "path"), PrintArguments);
         yield return FileOperation("killerpdf_ocr", "--ocr <in.pdf>", "Create a new searchable PDF with OCR. A language model may be downloaded on first use. Never changes the source.",
@@ -77,6 +77,7 @@ public static partial class KillerPdfAdapter
         yield return Action("killerpdf_search_text", "--search-text <in.pdf>", "Search text in a local PDF and return the matching page numbers without changing it.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["query"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 512 } }, "path", "query"),
             input => ["--search-text", String(input, "path"), String(input, "query")]);
+        foreach (var operation in DocumentOperations()) yield return operation;
     }
 
     private static async Task<AppCallResult> Report(string path, string command, JsonElement input, CancellationToken token)
@@ -143,14 +144,26 @@ public static partial class KillerPdfAdapter
             {
                 var action = await Run(path, definition.Arguments(input, string.Empty), definition.TimeoutSeconds, 262144, token).ConfigureAwait(false);
                 if (action.OutputExceeded) return Error("KillerPDF command output exceeded limit");
-                if (action.ExitCode != 0) return ProcessError(action);
+                if (!definition.SuccessCodes.Contains(action.ExitCode)) return ProcessError(action);
                 return Ok(JsonSerializer.Serialize(new { completed = true, message = Limit(action.StandardOutput.Trim()) }));
             }
+            if (definition.Kind == OutputKind.Report)
+            {
+                var report = await Run(path, definition.Arguments(input, string.Empty), definition.TimeoutSeconds, 262144, token).ConfigureAwait(false);
+                if (report.OutputExceeded) return Error("KillerPDF command output exceeded limit");
+                if (!definition.SuccessCodes.Contains(report.ExitCode)) return ProcessError(report);
+                try
+                {
+                    using var document = JsonDocument.Parse(report.StandardOutput);
+                    return document.RootElement.ValueKind is JsonValueKind.Object or JsonValueKind.Array ? Ok(document.RootElement.GetRawText()) : Error("KillerPDF returned an invalid report");
+                }
+                catch (JsonException) { return Error("KillerPDF returned an invalid report"); }
+            }
             Directory.CreateDirectory(temporary);
-            var staged = definition.Kind == OutputKind.File ? Path.Combine(temporary, "output.pdf") : Path.Combine(temporary, "output");
+            var staged = definition.Kind == OutputKind.File ? Path.Combine(temporary, "output" + Path.GetExtension(String(input, "output")).ToLowerInvariant()) : Path.Combine(temporary, "output");
             var response = await Run(path, definition.Arguments(input, staged), definition.TimeoutSeconds, 262144, token).ConfigureAwait(false);
             if (response.OutputExceeded) return Error("KillerPDF command output exceeded limit");
-            if (response.ExitCode != 0) return ProcessError(response);
+            if (!definition.SuccessCodes.Contains(response.ExitCode)) return ProcessError(response);
             if (definition.Kind == OutputKind.File ? !File.Exists(staged) : !Directory.Exists(staged)) return Error("KillerPDF did not create the requested output");
             var destination = definition.Kind == OutputKind.File ? String(input, "output") : String(input, "outputFolder");
             if (definition.Kind == OutputKind.File) File.Copy(staged, destination, false); else Directory.Move(staged, destination);
@@ -196,16 +209,21 @@ public static partial class KillerPdfAdapter
     private static string? ValidateOperation(JsonElement input, Operation definition)
     {
         if (!ObjectWith(input, definition.Tool.InputSchema["properties"]!.AsObject().Select(item => item.Key).ToArray()) || !HasRequired(input, definition.Tool.InputSchema)) return "Expected PDF arguments";
-        var pathProblem = ValidatePdf(input);
+        var pathProblem = definition.InputExtensions.Length == 0 ? null : definition.InputExtensions.SequenceEqual([".pdf"]) ? ValidatePdf(input) : ValidateInput(input, definition.InputExtensions);
         if (pathProblem is not null) return pathProblem;
-        if (definition.Kind != OutputKind.Action)
+        if (definition.Kind is OutputKind.File or OutputKind.Directory)
         {
             var name = definition.Kind == OutputKind.File ? "output" : "outputFolder";
             if (!input.TryGetProperty(name, out var destinationValue) || destinationValue.ValueKind != JsonValueKind.String || destinationValue.GetString() is not { } destination || !Path.IsPathFullyQualified(destination) || destination.Length > 1024) return "Output must be an absolute path";
             if (File.Exists(destination) || Directory.Exists(destination)) return "Output already exists";
             if (!Directory.Exists(Path.GetDirectoryName(destination))) return "Output folder does not exist";
-            if (definition.Kind == OutputKind.File && !destination.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) return "Output must be a PDF path";
+            if (definition.Kind == OutputKind.File && !definition.OutputExtensions.Any(extension => destination.EndsWith(extension, StringComparison.OrdinalIgnoreCase)))
+                return definition.OutputExtensions.SequenceEqual([".pdf"]) ? "Output must be a PDF path" : "Output must end with " + string.Join(", ", definition.OutputExtensions);
         }
+        var fileProblem = ValidateFiles(input, definition.ExtraFiles);
+        if (fileProblem is not null) return fileProblem;
+        var valueProblem = ValidateValues(input, definition.Tool.InputSchema);
+        if (valueProblem is not null) return valueProblem;
         if (!OptionalPageRange(input, "pages")) return "Invalid page range";
         if (!OptionalInteger(input, "dpi", 36, 1200)) return "DPI must be between 36 and 1200";
         if (!OptionalInteger(input, "copies", 1, 99)) return "Copies must be between 1 and 99";
@@ -223,6 +241,15 @@ public static partial class KillerPdfAdapter
         if (input.TryGetProperty("printer", out var printer) && (printer.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(printer.GetString()) || printer.GetString()!.Length > 256)) return "Invalid printer";
         if (input.TryGetProperty("transparent", out var transparent) && transparent.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return "Transparent must be true or false";
         return null;
+    }
+
+    private static string? ValidateInput(JsonElement input, string[] extensions)
+    {
+        if (!input.TryGetProperty("path", out var value) || value.ValueKind != JsonValueKind.String || value.GetString() is not { Length: > 0 and <= 1024 } path
+            || !Path.IsPathFullyQualified(path) || !extensions.Any(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase)))
+            return "Path must name an absolute " + string.Join(", ", extensions) + " file";
+        try { var info = new FileInfo(path); return !info.Exists || info.Length > MaxPdfBytes ? "Input must be a file no larger than 64 MiB" : null; }
+        catch { return "Unable to read input file"; }
     }
 
     private static string? ValidatePdf(JsonElement input)
@@ -299,8 +326,17 @@ public static partial class KillerPdfAdapter
     private static string Limit(string text) => text.Length <= 1024 ? text : text[..1024];
     private static void TryDelete(string path) { try { if (System.IO.Directory.Exists(path)) System.IO.Directory.Delete(path, true); } catch { } }
 
-    private sealed record Operation(string Marker, OutputKind Kind, RuntimeTool Tool, Func<JsonElement, string, List<string>> Arguments, int TimeoutSeconds);
-    private enum OutputKind { File, Directory, Action }
+    private sealed record Operation(string Marker, OutputKind Kind, RuntimeTool Tool, Func<JsonElement, string, List<string>> Arguments, int TimeoutSeconds)
+    {
+        // Extensions accepted for "path"; empty when the tool takes no input document.
+        public string[] InputExtensions { get; init; } = [".pdf"];
+        public string[] OutputExtensions { get; init; } = [".pdf"];
+        // Properties holding absolute paths to other local files the command reads.
+        public string[] ExtraFiles { get; init; } = [];
+        // Exit codes that mean the command ran; reports exit 3 when they have findings.
+        public int[] SuccessCodes { get; init; } = [0];
+    }
+    private enum OutputKind { File, Directory, Action, Report }
 
     [GeneratedRegex("^\\s*--merge <out\\.pdf>", RegexOptions.Multiline | RegexOptions.CultureInvariant)] private static partial Regex MergeMarker();
     [GeneratedRegex("^\\d+(?:-\\d+)?(?:,\\d+(?:-\\d+)?)*$", RegexOptions.CultureInvariant)] private static partial Regex PageRangePattern();
