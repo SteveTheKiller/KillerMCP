@@ -275,7 +275,7 @@ Each repair request, approval, denial and outcome is recorded at `%LOCALAPPDATA%
 - List up to 500 capturable windows with their handles, titles and process names.
 - Take a screenshot of one monitor, every monitor, one window by handle or title, or one rectangle of the desktop, with an optional delay of up to 30 seconds.
 - Record a monitor, every monitor, a window or a rectangle to MP4 or GIF for 1 to 300 seconds. MP4 can include system sound, the microphone or both.
-- List up to 20 recent captures with their paths, times and sizes.
+- List up to 20 of the newest captures in the encrypted library with their ids, times, sizes, window titles and program names.
 - Open an image in the KillerShot editor on the user's screen.
 - Read the capture, recording and shortcut settings without changing them.
 

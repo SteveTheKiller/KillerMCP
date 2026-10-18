@@ -44,7 +44,7 @@ public static class KillerShotAdapter
             new RuntimeTool("killershot_record", "Record a monitor, every monitor, a window or a rectangle to MP4 or GIF with KillerShot for a set number of seconds and return the saved file path. MP4 can include system sound or the microphone.", RecordSchema()),
             (input, token) => RecordAsync(path!, input, token));
         Add(help, "recent [options]", adapters,
-            new RuntimeTool("killershot_recent", "List KillerShot's recent captures, newest first, with their file paths, capture times and sizes.", LimitSchema(20, 20)),
+            new RuntimeTool("killershot_recent", "List the newest captures in KillerShot's encrypted library with their ids, capture times, sizes, window titles and program names.", LimitSchema(20, 20)),
             (input, token) => RecentAsync(path!, input, token));
         Add(help, "open <image>", adapters,
             new RuntimeTool("killershot_open_in_editor", "Open an image file in the KillerShot editor on the user's screen for annotation, redaction or cropping.", PathSchema()),
