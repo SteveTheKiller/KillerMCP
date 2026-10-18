@@ -88,7 +88,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     if (arguments.SequenceEqual(["--help"]))
     {
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1") Console.WriteLine("  --merge <out.pdf>\n--extract-pages <in.pdf>\n--split <in.pdf>\n--decrypt <in.pdf>\n--to-image <in.pdf>\n--flatten <in.pdf>\n--print <in.pdf>\n--ocr <in.pdf>\n--batch-resave <in>\n--batch-render <in>\n--rotate-pages <in.pdf>\n--delete-pages <in.pdf>\n--move-pages <in.pdf>\n--insert-blank <in.pdf>\n--duplicate-page <in.pdf>\n--document-info <in.pdf>\n--search-text <in.pdf>\n--preflight <in.pdf>\n--accessibility <in.pdf>\n--optimize <in.pdf>\n--number-pages <in.pdf>\n--bates <outDir>\n--booklet <in.pdf>\n--nup <in.pdf>\n--auto-bookmarks <in.pdf>\n--scan-to-text <in.pdf>\n--reverse-pages <in.pdf>\n--fix-orientation <in.pdf>\n--straighten <in.pdf>\n--divide-spreads <in.pdf>\n--rasterize-region <in.pdf>\n--print-production <in.pdf>\n--signatures <in.pdf>\n--layers <in.pdf>\n--portfolio <in.pdf>\n--comments <in.pdf>\n--navigation-audit <in.pdf>\n--measurements <in.pdf>\n--separations <in.pdf>\n--compare-structure <original.pdf>\n--attachments <in.pdf>\n--recognize-fields <in.pdf>\n--set-layer <in.pdf>\n--portfolio-view <in.pdf>\n--add-attachment <in.pdf>\n--edit-attachment <in.pdf>\n--repair-links <in.pdf>\n--toc <in.pdf>\n--page-labels <in.pdf>\n--initial-view <in.pdf>\n--redact <in.pdf>\n--protect <in.pdf>\n--export <in.pdf>\n--convert-office <in.docx\n--data-merge <template.pdf>\n--replace-text <in.pdf>\n--export-form-data <in.pdf>\n--import-form-data <in.pdf>\n--xfa-to-acroform <in.pdf>\n--flatten-forms <in.pdf>\n--macro <in.pdf>\n--sign <in.pdf>\n--scan <out.pdf>\n  KillerPDF.exe --verify | /verify   verify every installed payload file");
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>\ncreate --title");
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>\ncreate --title title (--content markdown | --content-file absolute.md)");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>\ncreate <json>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>\nlist <folder>\ninfo <path>\nread <file>\nprocesses [--limit]\nservices [--limit]\nevents <log>\nregistry <key>\ndrives\nhash <file>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1") Console.WriteLine("KillerShot command line\n  capture [options]\n  record --seconds <n> [options]\n  recent [options]\n  open <image>\n  monitors\n  windows [--limit <n>]\n  settings");
@@ -182,7 +182,9 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     }
     if (arguments.Length >= 5 && arguments[0] == "create" && arguments[1] == "--title")
     {
-        Console.Write(JsonSerializer.Serialize(new { id = 42, title = arguments[2] }));
+        var fileIndex = Array.IndexOf(arguments, "--content-file");
+        if (fileIndex >= 0 && (fileIndex + 1 >= arguments.Length || !File.Exists(arguments[fileIndex + 1]))) { Environment.ExitCode = 1; return; }
+        Console.Write(JsonSerializer.Serialize(new { id = 42, title = arguments[2], characters = fileIndex >= 0 ? File.ReadAllText(arguments[fileIndex + 1]).Length : arguments[4].Length }));
         return;
     }
     if (arguments.Length == 5 && arguments[0] == "export" && arguments[1] == "--id" && arguments[3] == "--output")
@@ -272,6 +274,10 @@ try
     Equal("Subnet plans", JsonDocument.Parse(result.Text).RootElement[0].GetProperty("title").GetString());
     using var invalid = JsonDocument.Parse("{\"query\":\"\"}");
     Equal(true, (await adapter.CallAsync(invalid.RootElement, CancellationToken.None)).IsError);
+    using var longNote = JsonDocument.Parse(JsonSerializer.Serialize(new { title = "Long", content = new string('x', 40000) }));
+    var longCreated = await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(longNote.RootElement, CancellationToken.None);
+    Equal(false, longCreated.IsError);
+    Equal(40000, JsonDocument.Parse(longCreated.Text).RootElement.GetProperty("characters").GetInt32());
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", null);
     Console.WriteLine("PASS native KillerNotes adapter");
 
@@ -462,7 +468,7 @@ try
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", "1");
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
     var integrationAdapters = IntegrationAdapter.Create(Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath);
-    Equal(9, integrationAdapters.Count);
+    Equal(10, integrationAdapters.Count);
     var integrationByName = integrationAdapters.ToDictionary(item => item.Tool.Name);
     async Task<AppCallResult> Integration(string name, object arguments)
     {
@@ -473,6 +479,8 @@ try
     Equal(false, (await Integration("killendar_save_agenda_note", new { date = "2026-09-28", days = 7, limit = 5 })).IsError);
     Equal(false, (await Integration("killershell_save_directory_note", new { path = root, limit = 5 })).IsError);
     Equal(false, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = 150 })).IsError);
+    Equal(42, JsonDocument.Parse((await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = "1", title = "Fixture text" })).Text).RootElement.GetProperty("id").GetInt32());
+    Equal(true, (await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = "first" })).IsError);
     Equal(true, (await Integration("killer_create_pdf", new { content = "report", output = "relative.pdf" })).IsError);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", null);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", null);

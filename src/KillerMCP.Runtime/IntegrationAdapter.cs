@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 
 namespace KillerMCP.Runtime;
 
-public static class IntegrationAdapter
+public static partial class IntegrationAdapter
 {
     public static IReadOnlyList<AppAdapter> Create(string? notes, string? calendar, string? shell, string? scan, string? pdf)
     {
@@ -21,6 +21,7 @@ public static class IntegrationAdapter
         if (IsFile(calendar) && AppVersion.IsAtLeast(calendar!, new Version(1, 1, 4)) && IsFile(notes)) tools.Add(Tool("killendar_save_agenda_note", "Save a Killendar agenda as a new KillerNotes note.", AgendaNoteSchema(), (input, token) => AgendaNote(calendar!, notes!, input, token)));
         if (IsFile(shell)) tools.Add(Tool("killershell_export_directory_pdf", "Export a KillerShell directory listing to a new PDF.", DirectoryOutputSchema(), (input, token) => DirectoryPdf(shell!, input, token)));
         if (IsFile(shell) && IsFile(notes)) tools.Add(Tool("killershell_save_directory_note", "Save a KillerShell directory listing as a new KillerNotes note.", DirectoryNoteSchema(), (input, token) => DirectoryNote(shell!, notes!, input, token)));
+        if (IsFile(pdf) && IsFile(notes)) tools.Add(Tool("killerpdf_save_text_as_note", "Export the text of a local PDF as Markdown with KillerPDF and save it as one new KillerNotes note. Scanned pages need killerpdf_ocr or killerpdf_scan_to_text first.", PdfTextNoteSchema(), (input, token) => PdfTextToNote(pdf!, notes!, input, token)));
         if (IsFile(pdf) && IsFile(notes)) tools.Add(Tool("killerpdf_save_pages_as_notes", "Render selected KillerPDF pages and save each page image as a new KillerNotes note.", PdfNotesSchema(), (input, token) => PdfPagesToNotes(pdf!, notes!, input, token)));
         return tools;
     }
@@ -131,6 +132,32 @@ public static class IntegrationAdapter
         finally { Delete(temp); }
     }
 
+    private static async Task<AppCallResult> PdfTextToNote(string pdf, string notes, JsonElement input, CancellationToken token)
+    {
+        if (!Exact(input, "path", "pages", "title", "group") || !ExistingFile(input, "path", ".pdf", out var path)) return Error("Provide an existing absolute PDF path");
+        string? pages = null, title = Path.GetFileNameWithoutExtension(path), group = null;
+        if (input.TryGetProperty("pages", out var p) && (p.ValueKind != JsonValueKind.String || (pages = p.GetString())!.Length > 200 || !PageList().IsMatch(pages))) return Error("Pages must look like 1-3,5");
+        if (input.TryGetProperty("title", out var t) && (t.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(title = t.GetString()) || title!.Length > 240)) return Error("Title must be 1 to 240 characters");
+        if (input.TryGetProperty("group", out var g) && (g.ValueKind != JsonValueKind.String || (group = g.GetString())!.Length > 240)) return Error("Group must be at most 240 characters");
+        // A KillerPDF without --export would open its window with the file instead, so ask first.
+        var help = await RunApp(pdf, ["--help"], 15, token).ConfigureAwait(false);
+        if (help.ExitCode != 0 || !help.StandardOutput.Contains("--export <in.pdf>", StringComparison.Ordinal)) return Error("KillerPDF 1.9 or later is needed to export a PDF's text");
+        var temp = TempFolder();
+        try
+        {
+            Directory.CreateDirectory(temp);
+            var markdown = Path.Combine(temp, "text.md");
+            var args = new List<string> { "--export", path!, markdown };
+            if (pages is not null) args.AddRange(["--pages", pages]);
+            var exported = await RunApp(pdf, args, 300, token).ConfigureAwait(false);
+            if (exported.ExitCode != 0 || !File.Exists(markdown)) return Error(Limit(string.IsNullOrWhiteSpace(exported.StandardOutput) ? "KillerPDF could not export the text" : exported.StandardOutput.Trim()));
+            var text = await File.ReadAllTextAsync(markdown, token).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(text)) return Error("The PDF has no text to save. Run killerpdf_ocr or killerpdf_scan_to_text on a scanned PDF first.");
+            return await CreateNote(notes, title!, text, group, token).ConfigureAwait(false);
+        }
+        finally { Delete(temp); }
+    }
+
     private static async Task<(JsonElement Root, AppCallResult? Error)> Scan(string path, string? target, bool full, int limit, CancellationToken token)
     {
         var args = new List<string> { "/scan" };
@@ -151,12 +178,21 @@ public static class IntegrationAdapter
         catch (JsonException) { return (default, Error(app + " returned invalid JSON")); }
     }
 
+    // Reports and exported text can run past what a command line holds, so long text goes to
+    // KillerNotes in a file when it accepts one.
     private static async Task<AppCallResult> CreateNote(string notes, string title, string content, string? group, CancellationToken token)
     {
-        var args = new List<string> { "create", "--title", title, "--content", content };
-        if (!string.IsNullOrWhiteSpace(group)) args.AddRange(["--group", group!]);
-        var result = await RunApp(notes, args, 30, token).ConfigureAwait(false);
-        return result.ExitCode == 0 && !result.OutputExceeded ? Ok(result.StandardOutput.Trim()) : ProcessError("KillerNotes", result);
+        var (contentArguments, folder, problem) = await NotesContent.ArgumentsAsync(notes, content, token).ConfigureAwait(false);
+        if (problem is not null) return Error(problem);
+        try
+        {
+            var args = new List<string> { "create", "--title", title };
+            args.AddRange(contentArguments);
+            if (!string.IsNullOrWhiteSpace(group)) args.AddRange(["--group", group!]);
+            var result = await RunApp(notes, args, 30, token).ConfigureAwait(false);
+            return result.ExitCode == 0 && !result.OutputExceeded ? Ok(result.StandardOutput.Trim()) : ProcessError("KillerNotes", result);
+        }
+        finally { NotesContent.Delete(folder); }
     }
 
     private static async Task<AppCallResult> RenderPdf(string html, string output, CancellationToken token)
@@ -302,6 +338,7 @@ public static class IntegrationAdapter
     private static JsonObject AgendaNoteSchema() => Schema(new() { ["date"] = String(10), ["days"] = Integer(1, 31, 7), ["limit"] = Integer(1, 100, 50), ["group"] = String(240) }, "date");
     private static JsonObject DirectoryOutputSchema() => Schema(new() { ["path"] = PathValue("Existing absolute directory"), ["limit"] = Integer(1, 100, 100), ["output"] = PathValue("New absolute PDF path") }, "path", "output");
     private static JsonObject DirectoryNoteSchema() => Schema(new() { ["path"] = PathValue("Existing absolute directory"), ["limit"] = Integer(1, 100, 100), ["group"] = String(240) }, "path");
+    private static JsonObject PdfTextNoteSchema() => Schema(new() { ["path"] = PathValue("Existing absolute PDF path"), ["pages"] = String(200), ["title"] = String(240), ["group"] = String(240) }, "path");
     private static JsonObject PdfNotesSchema() => Schema(new() { ["path"] = PathValue("Existing absolute PDF path"), ["pages"] = String(200), ["dpi"] = Integer(72, 600, 150), ["group"] = String(240) }, "path");
     private static JsonObject Schema(JsonObject properties, params string[] required) { var schema = new JsonObject { ["type"] = "object", ["properties"] = properties, ["additionalProperties"] = false }; if (required.Length > 0) schema["required"] = new JsonArray(required.Select(value => JsonValue.Create(value)).ToArray()); return schema; }
     private static JsonObject String(int max) => new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = max };
@@ -309,5 +346,6 @@ public static class IntegrationAdapter
     private static JsonObject Integer(int min, int max, int fallback) => new() { ["type"] = "integer", ["minimum"] = min, ["maximum"] = max, ["default"] = fallback };
     private static JsonObject Integer(int min, int max) => new() { ["type"] = "integer", ["minimum"] = min, ["maximum"] = max };
     private static JsonObject Boolean(bool fallback) => new() { ["type"] = "boolean", ["default"] = fallback };
+    [System.Text.RegularExpressions.GeneratedRegex("^\\d+(?:-\\d+)?(?:,\\d+(?:-\\d+)?)*$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)] private static partial System.Text.RegularExpressions.Regex PageList();
     private static JsonObject Enum(params string[] values) => new() { ["type"] = "string", ["enum"] = new JsonArray(values.Select(value => JsonValue.Create(value)).ToArray()), ["default"] = values[0] };
 }

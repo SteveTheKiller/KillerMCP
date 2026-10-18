@@ -12,6 +12,10 @@ public static class KillerNotesAdapter
         if (!IsFile(path) || !AppVersion.IsAtLeast(path!, MinimumVersion)) return [];
         var help = await Run(path!, ["--help"], cancellationToken).ConfigureAwait(false);
         if (help.ExitCode != 0 || !help.StandardOutput.Contains("create --title", StringComparison.Ordinal)) return [];
+        // KillerNotes that reads long text from a file takes a whole note; older ones take what fits on a command line.
+        bool longNotes = NotesContent.AcceptsFile(help.StandardOutput);
+        int contentLimit = longNotes ? NotesContent.NoteLimit : NotesContent.CommandLineLimit;
+        string limitText = longNotes ? "500,000" : "30,000";
         return
         [
             Make(path!, "killernotes_search", "Search notes by title, tags, and content.", Schema(new() { ["query"] = Text(200), ["limit"] = Integer(1, 20, 10) }, "query"), i => ["search", Str(i, "query"), "--limit", Num(i, "limit", 10)]),
@@ -23,8 +27,8 @@ public static class KillerNotesAdapter
             Make(path!, "killernotes_links", "List links from a note and whether each target exists.", Schema(new() { ["id"] = Id(), ["limit"] = Integer(1, 50, 20) }, "id"), i => ["links", Num(i, "id"), "--limit", Num(i, "limit", 20)]),
             Make(path!, "killernotes_history", "List saved versions for a note.", Schema(new() { ["id"] = Id(), ["limit"] = Integer(1, 50, 20) }, "id"), i => ["history", Num(i, "id"), "--limit", Num(i, "limit", 20)]),
             Make(path!, "killernotes_stats", "Return note, group, tag, link, history, trash, pin, and Markdown counts.", Schema(new()), _ => ["stats"]),
-            Make(path!, "killernotes_create", "Create a Markdown note of up to 30,000 characters in the open KillerNotes vault.", Schema(new() { ["title"] = Text(240), ["content"] = Text(30000), ["group"] = Text(240), ["tags"] = Text(1000), ["titleColor"] = Color() }, "title", "content"), i => Optional(["create", "--title", Str(i, "title"), "--content", Str(i, "content")], i, ("group", "--group"), ("tags", "--tags"), ("titleColor", "--title-color"))),
-            Make(path!, "killernotes_update", "Update a note's title, Markdown content of up to 30,000 characters, group, tags, or title color.", Schema(new() { ["id"] = Id(), ["title"] = Text(240), ["content"] = Text(30000), ["group"] = Text(240, true), ["tags"] = Text(1000, true), ["titleColor"] = Color(true) }, "id"), i => Optional(["update", "--id", Num(i, "id")], i, ("title", "--title"), ("content", "--content"), ("group", "--group"), ("tags", "--tags"), ("titleColor", "--title-color"))),
+            Make(path!, "killernotes_create", $"Create a Markdown note of up to {limitText} characters in the open KillerNotes vault.", Schema(new() { ["title"] = Text(240), ["content"] = Text(contentLimit), ["group"] = Text(240), ["tags"] = Text(1000), ["titleColor"] = Color() }, "title", "content"), i => Optional(["create", "--title", Str(i, "title"), "--content", Str(i, "content")], i, ("group", "--group"), ("tags", "--tags"), ("titleColor", "--title-color"))),
+            Make(path!, "killernotes_update", $"Update a note's title, Markdown content of up to {limitText} characters, group, tags, or title color.", Schema(new() { ["id"] = Id(), ["title"] = Text(240), ["content"] = Text(contentLimit), ["group"] = Text(240, true), ["tags"] = Text(1000, true), ["titleColor"] = Color(true) }, "id"), i => Optional(["update", "--id", Num(i, "id")], i, ("title", "--title"), ("content", "--content"), ("group", "--group"), ("tags", "--tags"), ("titleColor", "--title-color"))),
             Make(path!, "killernotes_create_group", "Create a note group and optionally set its color.", Schema(new() { ["name"] = Text(240), ["parent"] = Text(240), ["color"] = Color() }, "name"), i => Optional(["create-group", "--name", Str(i, "name")], i, ("parent", "--parent"), ("color", "--color"))),
             Make(path!, "killernotes_set_group_color", "Set or clear a note group color.", Schema(new() { ["name"] = Text(240), ["color"] = Color(true) }, "name", "color"), i => ["set-group-color", "--name", Str(i, "name"), "--color", Str(i, "color")]),
             Make(path!, "killernotes_set_title_color", "Set or clear a note title color.", Schema(new() { ["id"] = Id(), ["color"] = Color(true) }, "id", "color"), i => ["set-title-color", "--id", Num(i, "id"), "--color", Str(i, "color")]),
@@ -36,8 +40,24 @@ public static class KillerNotesAdapter
     private static AppAdapter Make(string path, string name, string description, JsonObject schema, Func<JsonElement, List<string>> args) => new(new RuntimeTool(name, description, schema), async (input, token) =>
     {
         if (!Valid(input, schema)) return new AppCallResult("Invalid KillerNotes tool arguments", true);
-        try { var r = await Run(path, args(input), token).ConfigureAwait(false); if (r.ExitCode != 0 || r.OutputExceeded) return new AppCallResult(Error(r), true); using var doc = JsonDocument.Parse(r.StandardOutput); return new AppCallResult(doc.RootElement.GetRawText()); }
-        catch (Exception ex) when (ex is JsonException or TimeoutException or InvalidOperationException) { return new AppCallResult(Limit(ex.Message), true); }
+        var arguments = args(input);
+        string? folder = null;
+        try
+        {
+            // Text too long for a command line goes to KillerNotes in a file.
+            int index = arguments.IndexOf("--content");
+            if (index >= 0 && index + 1 < arguments.Count && arguments[index + 1].Length > NotesContent.CommandLineLimit)
+            {
+                var prepared = await NotesContent.ArgumentsAsync(path, arguments[index + 1], token).ConfigureAwait(false);
+                if (prepared.Error is not null) return new AppCallResult(prepared.Error, true);
+                arguments.RemoveRange(index, 2);
+                arguments.InsertRange(index, prepared.Arguments);
+                folder = prepared.Folder;
+            }
+            var r = await Run(path, arguments, token).ConfigureAwait(false); if (r.ExitCode != 0 || r.OutputExceeded) return new AppCallResult(Error(r), true); using var doc = JsonDocument.Parse(r.StandardOutput); return new AppCallResult(doc.RootElement.GetRawText());
+        }
+        catch (Exception ex) when (ex is JsonException or TimeoutException or InvalidOperationException or IOException or UnauthorizedAccessException) { return new AppCallResult(Limit(ex.Message), true); }
+        finally { NotesContent.Delete(folder); }
     });
 
     private static Task<ProcessResult> Run(string path, IEnumerable<string> args, CancellationToken token) { var prefix = path.EndsWith("KillerNotes.exe", StringComparison.OrdinalIgnoreCase) ? new[] { "--cli" } : Array.Empty<string>(); return ProcessRunner.RunAsync(path, prefix.Concat(args), TimeSpan.FromSeconds(30), 65536, token); }

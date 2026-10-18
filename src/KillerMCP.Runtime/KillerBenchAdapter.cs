@@ -395,12 +395,18 @@ public static partial class KillerBenchAdapter
             var group = KillerBenchRepairs.Optional(input, "group");
             if (title.Length > 120 || group?.Length > 240) return Error("title or group is too long");
             var content = Markdown(job.Work.Result["data"] ?? job.Work.Result["text"]);
-            var args = new List<string>();
-            if (notes!.EndsWith("KillerNotes.exe", StringComparison.OrdinalIgnoreCase)) args.Add("--cli");
-            args.AddRange(["create", "--title", title, "--content", content]);
-            if (!string.IsNullOrWhiteSpace(group)) args.AddRange(["--group", group]);
-            var response = await ProcessRunner.RunAsync(notes!, args, TimeSpan.FromSeconds(30), 1_048_576, token).ConfigureAwait(false);
-            return response.ExitCode == 0 ? Ok(response.StandardOutput.Trim()) : Error(Limit(string.IsNullOrWhiteSpace(response.StandardError) ? "KillerNotes command failed" : response.StandardError.Trim()));
+            // A full scan report can run past what a command line holds; NotesContent sends it in a file then.
+            var (contentArguments, folder, problem) = await NotesContent.ArgumentsAsync(notes!, content, token).ConfigureAwait(false);
+            if (problem is not null) return Error(problem);
+            try
+            {
+                var args = new List<string>(NotesContent.Prefix(notes!)) { "create", "--title", title };
+                args.AddRange(contentArguments);
+                if (!string.IsNullOrWhiteSpace(group)) args.AddRange(["--group", group]);
+                var response = await ProcessRunner.RunAsync(notes!, args, TimeSpan.FromSeconds(30), 1_048_576, token).ConfigureAwait(false);
+                return response.ExitCode == 0 ? Ok(response.StandardOutput.Trim()) : Error(Limit(string.IsNullOrWhiteSpace(response.StandardError) ? "KillerNotes command failed" : response.StandardError.Trim()));
+            }
+            finally { NotesContent.Delete(folder); }
         }
 
         private async Task<(KillerBenchRepairPlan? Plan, string? Error)> Plan(JsonElement input, CancellationToken token)

@@ -94,7 +94,7 @@ internal static class ToolSafety
         or "killernotes_export" or "killernotes_export_pdf" or "killendar_export_agenda_pdf"
         or "killendar_save_agenda_note" or "killerscan_export_report_pdf"
         or "killerscan_save_report_note" or "killerbench_save_scan_note" or "killershell_export_directory_pdf"
-        or "killershell_save_directory_note" or "killerpdf_save_pages_as_notes"
+        or "killershell_save_directory_note" or "killerpdf_save_pages_as_notes" or "killerpdf_save_text_as_note"
         or "killerpdf_merge" or "killerpdf_extract_pages" or "killerpdf_split"
         or "killerpdf_decrypt" or "killerpdf_render_pages" or "killerpdf_flatten"
         or "killerpdf_ocr" or "killerpdf_resave" or "killerpdf_benchmark_render"

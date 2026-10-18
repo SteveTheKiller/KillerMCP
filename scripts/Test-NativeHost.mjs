@@ -167,7 +167,8 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killershot_open_in_editor', 'killershot_settings',
   'killer_create_pdf', 'killernotes_export_pdf', 'killerscan_export_report_pdf',
   'killerscan_save_report_note', 'killendar_export_agenda_pdf', 'killendar_save_agenda_note',
-  'killershell_export_directory_pdf', 'killershell_save_directory_note', 'killerpdf_save_pages_as_notes',
+  'killershell_export_directory_pdf', 'killershell_save_directory_note', 'killerpdf_save_text_as_note',
+  'killerpdf_save_pages_as_notes',
 ]);
 const called = await request('tools/call', { name: 'text_statistics', arguments: { text: 'hello world' } });
 assert.deepEqual(JSON.parse(called.content[0].text), { characterCount: 11, wordCount: 2, lineCount: 1, byteSize: 11 });

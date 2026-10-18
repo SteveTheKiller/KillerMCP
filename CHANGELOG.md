@@ -13,12 +13,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - KillerPDF reports cover print production, signatures, layers, portfolios, comments, navigation, measurements, separations, attachments, recognized fields and structural comparison.
 - killerpdf_split splits by page count, equal parts, bookmark level or file size, and killerpdf_flatten takes color mode, compression and a scanned look.
 - killerpdf_scan_to_text can write each converted word as scanned beside it as text for review, and keep the words a review names as scanned.
+- killerpdf_save_text_as_note exports a PDF's text as Markdown and saves it as one KillerNotes note.
 
 ### Changed
 - The keyboard focus outline is a thin solid ring in the theme accent instead of a thick dotted line, and uses the text color where the accent would be too faint to see.
 
 ### Fixed
 
+- Reports saved as KillerNotes notes, and notes from killernotes_create and killernotes_update, no longer fail past about 30,000 characters. Longer text goes to KillerNotes in a file, up to the 500,000 characters a note holds.
 - Silent installs refuse a setup without a valid signature and return 1625 instead of installing.
 
 ## [0.5.1] - 2026-10-14
