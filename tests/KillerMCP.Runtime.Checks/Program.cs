@@ -122,8 +122,11 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     var stagedOutput = arguments.FirstOrDefault(argument => argument.Contains("killermcp-pdf-", StringComparison.Ordinal) && Path.GetFileName(argument).StartsWith("output", StringComparison.Ordinal));
     if (arguments.Length > 0 && arguments[0].StartsWith("--", StringComparison.Ordinal) && stagedOutput is not null)
     {
-        var termsIndex = Array.IndexOf(arguments, "--terms");
-        if (termsIndex >= 0 && (termsIndex + 1 >= arguments.Length || !File.Exists(arguments[termsIndex + 1]))) { Environment.ExitCode = 1; return; }
+        foreach (var listed in new[] { "--terms", "--keep-scanned" })
+        {
+            var listIndex = Array.IndexOf(arguments, listed);
+            if (listIndex >= 0 && (listIndex + 1 >= arguments.Length || !File.Exists(arguments[listIndex + 1]))) { Environment.ExitCode = 1; return; }
+        }
         if (Path.HasExtension(stagedOutput)) File.WriteAllText(stagedOutput, "fixture output");
         else
         {
@@ -402,6 +405,9 @@ try
     Equal(false, (await Pdf("killerpdf_nup", new { path = sourceOne, output = NewPdf("nup"), grid = "2x2", margin = 18 })).IsError);
     Equal(false, (await Pdf("killerpdf_auto_bookmarks", new { path = sourceOne, output = NewPdf("bookmarked"), depth = 2 })).IsError);
     Equal(false, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-text"), language = "eng" })).IsError);
+    Equal(false, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-review"), reviewFolder = Path.Combine(root, "scan-review"), keepScanned = new[] { "1:2", "3:17" } })).IsError);
+    Equal(true, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-bad-keep"), keepScanned = new[] { "first" } })).IsError);
+    Equal(true, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-bad-review"), reviewFolder = root })).IsError);
     Equal(false, (await Pdf("killerpdf_reverse_pages", new { path = sourceOne, output = NewPdf("reversed"), pages = "1-2" })).IsError);
     Equal(false, (await Pdf("killerpdf_fix_orientation", new { path = sourceOne, output = NewPdf("upright") })).IsError);
     Equal(false, (await Pdf("killerpdf_straighten", new { path = sourceOne, output = NewPdf("level") })).IsError);

@@ -12,6 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - KillerPDF tools cover its 1.9 commands: optimize, page numbers and Bates stamps, booklets and n-up sheets, bookmarks from headings, Convert Scan to Text, reverse, upright, straighten and divide pages, partial rasterizing, redaction, protection, signing with a trusted timestamp, export to Word, Excel, PowerPoint, HTML, Markdown, text and JSON, Office to PDF, data merge, text replacement, form data, field recognition, XFA conversion, form flattening, macros, scanning, layers, attachments, portfolios, links, contents pages, page labels and the initial view.
 - KillerPDF reports cover print production, signatures, layers, portfolios, comments, navigation, measurements, separations, attachments, recognized fields and structural comparison.
 - killerpdf_split splits by page count, equal parts, bookmark level or file size, and killerpdf_flatten takes color mode, compression and a scanned look.
+- killerpdf_scan_to_text can write each converted word as scanned beside it as text for review, and keep the words a review names as scanned.
 
 ### Changed
 - The keyboard focus outline is a thin solid ring in the theme accent instead of a thick dotted line, and uses the text color where the accent would be too faint to see.

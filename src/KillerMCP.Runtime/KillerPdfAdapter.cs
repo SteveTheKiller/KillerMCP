@@ -220,7 +220,7 @@ public static partial class KillerPdfAdapter
             if (definition.Kind == OutputKind.File && !definition.OutputExtensions.Any(extension => destination.EndsWith(extension, StringComparison.OrdinalIgnoreCase)))
                 return definition.OutputExtensions.SequenceEqual([".pdf"]) ? "Output must be a PDF path" : "Output must end with " + string.Join(", ", definition.OutputExtensions);
         }
-        var fileProblem = ValidateFiles(input, definition.ExtraFiles);
+        var fileProblem = ValidateFiles(input, definition.ExtraFiles) ?? ValidateNewFolders(input, definition.NewFolders);
         if (fileProblem is not null) return fileProblem;
         var valueProblem = ValidateValues(input, definition.Tool.InputSchema);
         if (valueProblem is not null) return valueProblem;
@@ -333,6 +333,8 @@ public static partial class KillerPdfAdapter
         public string[] OutputExtensions { get; init; } = [".pdf"];
         // Properties holding absolute paths to other local files the command reads.
         public string[] ExtraFiles { get; init; } = [];
+        // Properties holding absolute paths for extra new folders the command writes.
+        public string[] NewFolders { get; init; } = [];
         // Exit codes that mean the command ran; reports exit 3 when they have findings.
         public int[] SuccessCodes { get; init; } = [0];
     }

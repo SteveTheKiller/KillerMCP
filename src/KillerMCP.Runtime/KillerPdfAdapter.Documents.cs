@@ -36,9 +36,10 @@ public static partial class KillerPdfAdapter
         yield return FileOperation("killerpdf_auto_bookmarks", "--auto-bookmarks <in.pdf>", "Build bookmarks from the detected headings of a local PDF into a new PDF. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["minSize"] = Range(0, 200), ["depth"] = Integer(1, 6), ["pattern"] = Text(256, null, "Regular expression a heading must match") }, "path", "output"),
             (input, output) => Options(["--auto-bookmarks", String(input, "path"), output], input, ("minSize", "--min-size"), ("depth", "--depth"), ("pattern", "--pattern")));
-        yield return FileOperation("killerpdf_scan_to_text", "--scan-to-text <in.pdf>", "Replace the words on scanned pages of a local PDF with real text in the closest matching typeface, in a new PDF. A language model may be downloaded on first use. Never changes the source.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["language"] = Language() }, "path", "output"),
-            (input, output) => ["--scan-to-text", String(input, "path"), output, "--lang", OptionalString(input, "language", "eng")], 900);
+        yield return FileOperation("killerpdf_scan_to_text", "--scan-to-text <in.pdf>", "Replace the words on scanned pages of a local PDF with real text in the closest matching typeface, in a new PDF. reviewFolder receives each converted word as scanned beside it as text (p<page>-w<word>.png, least certain first in review.json); keepScanned lists page:word ids from a review to keep as scanned. A language model may be downloaded on first use. Never changes the source.",
+            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["language"] = Language(), ["reviewFolder"] = NewFolder(), ["keepScanned"] = ListOf(Text(16, "^\\d+:\\d+$", "page:word, such as 3:17"), 1, 10000) }, "path", "output"),
+            (input, output) => KeepScanned(Options(["--scan-to-text", String(input, "path"), output, "--lang", OptionalString(input, "language", "eng")], input, ("reviewFolder", "--review")), input, output), 900)
+            with { NewFolders = ["reviewFolder"] };
         yield return FileOperation("killerpdf_reverse_pages", "--reverse-pages <in.pdf>", "Reverse the order of all or the selected pages of a local PDF into a new PDF. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["pages"] = PageRange() }, "path", "output"),
             (input, output) => Options(["--reverse-pages", String(input, "path"), output], input, ("pages", "--pages")));
@@ -246,6 +247,29 @@ public static partial class KillerPdfAdapter
         File.WriteAllLines(file, terms.EnumerateArray().Select(item => item.GetString()!.Replace('\r', ' ').Replace('\n', ' ')));
         args.AddRange(["--terms", file]);
         return args;
+    }
+
+    // The words a review asked to keep as scanned, written beside the staged output.
+    private static List<string> KeepScanned(List<string> args, JsonElement input, string output)
+    {
+        if (!input.TryGetProperty("keepScanned", out var ids) || ids.ValueKind != JsonValueKind.Array || ids.GetArrayLength() == 0) return args;
+        var file = Path.Combine(Path.GetDirectoryName(output)!, "keep-scanned.txt");
+        File.WriteAllLines(file, ids.EnumerateArray().Select(item => item.GetString()!));
+        args.AddRange(["--keep-scanned", file]);
+        return args;
+    }
+
+    // Each named property, when given, is an absolute path for a new folder in an existing one.
+    private static string? ValidateNewFolders(JsonElement input, IEnumerable<string> properties)
+    {
+        foreach (var property in properties)
+        {
+            if (!input.TryGetProperty(property, out var value)) continue;
+            if (value.ValueKind != JsonValueKind.String || value.GetString() is not { Length: > 0 and <= 1024 } path || !Path.IsPathFullyQualified(path)) return $"{property} must be an absolute path";
+            if (File.Exists(path) || Directory.Exists(path)) return $"{property} already exists";
+            if (!Directory.Exists(Path.GetDirectoryName(path))) return $"{property} parent folder does not exist";
+        }
+        return null;
     }
 
     private static bool Flag(JsonElement input, string property) => input.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.True;
