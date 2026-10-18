@@ -26,7 +26,7 @@ internal static class ToolSafety
         "killerpdf_page_labels", "killerpdf_initial_view", "killerpdf_redact", "killerpdf_protect", "killerpdf_export",
         "killerpdf_convert_office", "killerpdf_data_merge", "killerpdf_replace_text", "killerpdf_export_form_data",
         "killerpdf_import_form_data", "killerpdf_xfa_to_acroform", "killerpdf_flatten_forms", "killerpdf_run_macro",
-        "killerpdf_sign", "killerpdf_scan",
+        "killerpdf_sign", "killerpdf_scan", "killerpdf_images_to_pdf",
     };
 
     private static readonly HashSet<string> ReadOnlyShellTools = new(StringComparer.Ordinal)
@@ -95,6 +95,7 @@ internal static class ToolSafety
         or "killendar_save_agenda_note" or "killerscan_export_report_pdf"
         or "killerscan_save_report_note" or "killerbench_save_scan_note" or "killershell_export_directory_pdf"
         or "killershell_save_directory_note" or "killerpdf_save_pages_as_notes" or "killerpdf_save_text_as_note"
+        or "killerpdf_save_report_as_note" or "killernotes_export_notes_pdf"
         or "killerpdf_merge" or "killerpdf_extract_pages" or "killerpdf_split"
         or "killerpdf_decrypt" or "killerpdf_render_pages" or "killerpdf_flatten"
         or "killerpdf_ocr" or "killerpdf_resave" or "killerpdf_benchmark_render"

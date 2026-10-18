@@ -198,6 +198,10 @@ public static partial class KillerPdfAdapter
             with { InputExtensions = [] };
         yield return Action("killerpdf_list_scanners", "--scan <out.pdf>", "List the TWAIN scanners KillerPDF can scan with.",
             Schema(new JsonObject()), _ => ["--scan", "--list"], 60) with { InputExtensions = [] };
+        yield return new Operation("--merge <out.pdf>", OutputKind.File, new RuntimeTool("killerpdf_images_to_pdf", "Turn up to 50 local images, such as PNG or JPEG screenshots from KillerShot or TIFF scans, into one new PDF, one image per page in the order given. Never changes the images.",
+            Schema(new JsonObject { ["images"] = ListOf(FilePath("Absolute path to a local .png, .jpg, .jpeg, .tif, .tiff, .bmp or .gif image", "\\.(?:[Pp][Nn][Gg]|[Jj][Pp][Ee]?[Gg]|[Tt][Ii][Ff][Ff]?|[Bb][Mm][Pp]|[Gg][Ii][Ff])$"), 1, 50), ["output"] = NewPdf() }, "images", "output")),
+            (input, output) => ["--merge", output, .. Strings(input, "images")], 300)
+            with { InputExtensions = [], ExtraFiles = ["images"] };
     }
 
     private static List<string> SignArguments(JsonElement input, string output)

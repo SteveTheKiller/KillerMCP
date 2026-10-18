@@ -157,7 +157,7 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killerpdf_export', 'killerpdf_convert_office', 'killerpdf_data_merge', 'killerpdf_replace_text',
   'killerpdf_export_form_data', 'killerpdf_import_form_data', 'killerpdf_xfa_to_acroform',
   'killerpdf_flatten_forms', 'killerpdf_run_macro', 'killerpdf_list_macros', 'killerpdf_sign',
-  'killerpdf_scan', 'killerpdf_list_scanners',
+  'killerpdf_scan', 'killerpdf_list_scanners', 'killerpdf_images_to_pdf',
   'killerpdf_preflight', 'killerpdf_accessibility', 'killerpdf_verify_install',
   'killerbench_code_lookup', 'killerbench_diagnostic_scopes', 'killerbench_check', 'killerbench_scan',
   'killerbench_job', 'killerbench_repair_actions', 'killerbench_repair_preview', 'killerbench_repair_execute',
@@ -165,9 +165,10 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killershot_list_monitors', 'killershot_list_windows', 'killershot_capture_monitor', 'killershot_capture_all',
   'killershot_capture_window', 'killershot_capture_region', 'killershot_record', 'killershot_recent',
   'killershot_open_in_editor', 'killershot_settings',
-  'killer_create_pdf', 'killernotes_export_pdf', 'killerscan_export_report_pdf',
+  'killer_create_pdf', 'killernotes_export_pdf', 'killernotes_export_notes_pdf', 'killerscan_export_report_pdf',
   'killerscan_save_report_note', 'killendar_export_agenda_pdf', 'killendar_save_agenda_note',
   'killershell_export_directory_pdf', 'killershell_save_directory_note', 'killerpdf_save_text_as_note',
+  'killerpdf_save_report_as_note',
   'killerpdf_save_pages_as_notes',
 ]);
 const called = await request('tools/call', { name: 'text_statistics', arguments: { text: 'hello world' } });

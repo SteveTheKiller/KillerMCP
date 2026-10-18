@@ -15,6 +15,7 @@ public static partial class IntegrationAdapter
             Tool("killer_create_pdf", "Create a new PDF from HTML or plain text. Use this to turn agent output or data from a Killer app into a PDF.", ContentPdfSchema(), CreatePdf),
         };
         if (IsFile(notes)) tools.Add(Tool("killernotes_export_pdf", "Export one KillerNotes note directly to a new PDF.", IdOutputSchema(), (input, token) => NotePdf(notes!, input, token)));
+        if (IsFile(notes) && IsFile(pdf)) tools.Add(Tool("killernotes_export_notes_pdf", "Export up to 50 KillerNotes notes, in the order given, into one new PDF combined by KillerPDF.", NotesPdfSchema(), (input, token) => NotesPdf(notes!, pdf!, input, token)));
         if (IsFile(scan)) tools.Add(Tool("killerscan_export_report_pdf", "Scan a network and create a PDF report with a device table.", ScanOutputSchema(), (input, token) => ScanPdf(scan!, input, token)));
         if (IsFile(scan) && IsFile(notes)) tools.Add(Tool("killerscan_save_report_note", "Scan a network and save the device report as a new KillerNotes note.", ScanNoteSchema(), (input, token) => ScanNote(scan!, notes!, input, token)));
         if (IsFile(calendar) && AppVersion.IsAtLeast(calendar!, new Version(1, 1, 4))) tools.Add(Tool("killendar_export_agenda_pdf", "Export a Killendar agenda to a new PDF.", AgendaOutputSchema(), (input, token) => AgendaPdf(calendar!, input, token)));
@@ -22,6 +23,7 @@ public static partial class IntegrationAdapter
         if (IsFile(shell)) tools.Add(Tool("killershell_export_directory_pdf", "Export a KillerShell directory listing to a new PDF.", DirectoryOutputSchema(), (input, token) => DirectoryPdf(shell!, input, token)));
         if (IsFile(shell) && IsFile(notes)) tools.Add(Tool("killershell_save_directory_note", "Save a KillerShell directory listing as a new KillerNotes note.", DirectoryNoteSchema(), (input, token) => DirectoryNote(shell!, notes!, input, token)));
         if (IsFile(pdf) && IsFile(notes)) tools.Add(Tool("killerpdf_save_text_as_note", "Export the text of a local PDF as Markdown with KillerPDF and save it as one new KillerNotes note. Scanned pages need killerpdf_ocr or killerpdf_scan_to_text first.", PdfTextNoteSchema(), (input, token) => PdfTextToNote(pdf!, notes!, input, token)));
+        if (IsFile(pdf) && IsFile(notes)) tools.Add(Tool("killerpdf_save_report_as_note", "Run a KillerPDF report on a local PDF, such as its signatures, comments, measurements or preflight findings, and save the report as a new KillerNotes note. Never changes the PDF.", PdfReportNoteSchema(), (input, token) => PdfReportToNote(pdf!, notes!, input, token)));
         if (IsFile(pdf) && IsFile(notes)) tools.Add(Tool("killerpdf_save_pages_as_notes", "Render selected KillerPDF pages and save each page image as a new KillerNotes note.", PdfNotesSchema(), (input, token) => PdfPagesToNotes(pdf!, notes!, input, token)));
         return tools;
     }
@@ -155,6 +157,71 @@ public static partial class IntegrationAdapter
             if (string.IsNullOrWhiteSpace(text)) return Error("The PDF has no text to save. Run killerpdf_ocr or killerpdf_scan_to_text on a scanned PDF first.");
             return await CreateNote(notes, title!, text, group, token).ConfigureAwait(false);
         }
+        finally { Delete(temp); }
+    }
+
+    private static readonly (string Name, string Command, string Label)[] PdfReports =
+    [
+        ("signatures", "--signatures", "Signatures"), ("comments", "--comments", "Comments"),
+        ("measurements", "--measurements", "Measurements"), ("navigation", "--navigation-audit", "Navigation audit"),
+        ("layers", "--layers", "Layers"), ("print-production", "--print-production", "Print production"),
+        ("portfolio", "--portfolio", "Portfolio"), ("attachments", "--attachments", "Attachments"),
+        ("separations", "--separations", "Separations"), ("preflight", "--preflight", "Preflight"),
+        ("accessibility", "--accessibility", "Accessibility"), ("fields", "--recognize-fields", "Recognized form fields"),
+    ];
+
+    private static async Task<AppCallResult> PdfReportToNote(string pdf, string notes, JsonElement input, CancellationToken token)
+    {
+        if (!Exact(input, "path", "report", "title", "group") || !ExistingFile(input, "path", ".pdf", out var path)) return Error("Provide an existing absolute PDF path and a report");
+        if (!input.TryGetProperty("report", out var r) || r.ValueKind != JsonValueKind.String || PdfReports.FirstOrDefault(item => item.Name == r.GetString()) is not { Command: not null } report) return Error("Report must be one of " + string.Join(", ", PdfReports.Select(item => item.Name)));
+        string? title = $"KillerPDF {report.Label}: {Path.GetFileName(path)}", group = null;
+        if (input.TryGetProperty("title", out var t) && (t.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(title = t.GetString()) || title!.Length > 240)) return Error("Title must be 1 to 240 characters");
+        if (input.TryGetProperty("group", out var g) && (g.ValueKind != JsonValueKind.String || (group = g.GetString())!.Length > 240)) return Error("Group must be at most 240 characters");
+        // A KillerPDF without the report would open its window with the file instead, so ask first.
+        var help = await RunApp(pdf, ["--help"], 15, token).ConfigureAwait(false);
+        if (help.ExitCode != 0 || !help.StandardOutput.Contains(report.Command + " <in.pdf>", StringComparison.Ordinal)) return Error($"This KillerPDF has no {report.Label.ToLowerInvariant()} report; KillerPDF 1.9 or later is needed");
+        // The reports exit 3 when they have findings, which is still a finished report.
+        var result = await RunApp(pdf, [report.Command, path!], 120, token).ConfigureAwait(false);
+        if (result.ExitCode is not (0 or 3) || result.OutputExceeded || string.IsNullOrWhiteSpace(result.StandardOutput)) return Error(Limit(string.IsNullOrWhiteSpace(result.StandardOutput) ? "KillerPDF could not run the report" : result.StandardOutput.Trim()));
+        return await CreateNote(notes, title!, "```text\n" + result.StandardOutput.TrimEnd() + "\n```\n", group, token).ConfigureAwait(false);
+    }
+
+    private static async Task<AppCallResult> NotesPdf(string notes, string pdf, JsonElement input, CancellationToken token)
+    {
+        if (!Exact(input, "ids", "output") || !input.TryGetProperty("ids", out var ids) || ids.ValueKind != JsonValueKind.Array || ids.GetArrayLength() is < 1 or > 50
+            || !Text(input, "output", 1024, out var output) || !NewPdf(output!)) return Error("Provide 1 to 50 note IDs and a new absolute PDF output path");
+        var list = new List<int>();
+        foreach (var id in ids.EnumerateArray())
+        {
+            if (!id.TryGetInt32(out var number) || number < 1) return Error("Note IDs must be positive whole numbers");
+            list.Add(number);
+        }
+        var temp = TempFolder();
+        try
+        {
+            Directory.CreateDirectory(temp);
+            var parts = new List<string>();
+            for (int i = 0; i < list.Count; i++)
+            {
+                var html = Path.Combine(temp, $"note-{i + 1}.html");
+                var exported = await RunApp(notes, ["export", "--id", list[i].ToString(), "--output", html], 30, token).ConfigureAwait(false);
+                if (exported.ExitCode != 0 || !File.Exists(html)) return ProcessError("KillerNotes", exported);
+                var part = Path.Combine(temp, $"note-{i + 1}.pdf");
+                var rendered = await RenderPdf(await File.ReadAllTextAsync(html, token).ConfigureAwait(false), part, token).ConfigureAwait(false);
+                if (rendered.IsError) return rendered;
+                parts.Add(part);
+            }
+            var combined = parts[0];
+            if (parts.Count > 1)
+            {
+                combined = Path.Combine(temp, "notes.pdf");
+                var merged = await RunApp(pdf, new[] { "--merge", combined }.Concat(parts), 120, token).ConfigureAwait(false);
+                if (merged.ExitCode != 0 || !File.Exists(combined)) return Error(Limit(string.IsNullOrWhiteSpace(merged.StandardOutput) ? "KillerPDF could not combine the notes" : merged.StandardOutput.Trim()));
+            }
+            File.Copy(combined, output!, false);
+            return Ok(JsonSerializer.Serialize(new { output, notes = parts.Count }));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return Error(Limit(ex.Message)); }
         finally { Delete(temp); }
     }
 
@@ -338,6 +405,8 @@ public static partial class IntegrationAdapter
     private static JsonObject AgendaNoteSchema() => Schema(new() { ["date"] = String(10), ["days"] = Integer(1, 31, 7), ["limit"] = Integer(1, 100, 50), ["group"] = String(240) }, "date");
     private static JsonObject DirectoryOutputSchema() => Schema(new() { ["path"] = PathValue("Existing absolute directory"), ["limit"] = Integer(1, 100, 100), ["output"] = PathValue("New absolute PDF path") }, "path", "output");
     private static JsonObject DirectoryNoteSchema() => Schema(new() { ["path"] = PathValue("Existing absolute directory"), ["limit"] = Integer(1, 100, 100), ["group"] = String(240) }, "path");
+    private static JsonObject PdfReportNoteSchema() => Schema(new() { ["path"] = PathValue("Existing absolute PDF path"), ["report"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(PdfReports.Select(item => JsonValue.Create(item.Name)).ToArray()) }, ["title"] = String(240), ["group"] = String(240) }, "path", "report");
+    private static JsonObject NotesPdfSchema() => Schema(new() { ["ids"] = new JsonObject { ["type"] = "array", ["items"] = Integer(1, int.MaxValue), ["minItems"] = 1, ["maxItems"] = 50 }, ["output"] = PathValue("New absolute PDF path") }, "ids", "output");
     private static JsonObject PdfTextNoteSchema() => Schema(new() { ["path"] = PathValue("Existing absolute PDF path"), ["pages"] = String(200), ["title"] = String(240), ["group"] = String(240) }, "path");
     private static JsonObject PdfNotesSchema() => Schema(new() { ["path"] = PathValue("Existing absolute PDF path"), ["pages"] = String(200), ["dpi"] = Integer(72, 600, 150), ["group"] = String(240) }, "path");
     private static JsonObject Schema(JsonObject properties, params string[] required) { var schema = new JsonObject { ["type"] = "object", ["properties"] = properties, ["additionalProperties"] = false }; if (required.Length > 0) schema["required"] = new JsonArray(required.Select(value => JsonValue.Create(value)).ToArray()); return schema; }

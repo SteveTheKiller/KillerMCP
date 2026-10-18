@@ -109,6 +109,12 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
         Console.Write("Fixture action completed");
         return;
     }
+    if (arguments.Length == 2 && arguments[0].StartsWith("--", StringComparison.Ordinal) && File.Exists(arguments[1]) && Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1")
+    {
+        Console.Write("Signatures: 0");
+        Environment.ExitCode = 3;
+        return;
+    }
     if (arguments.Length > 0 && arguments[0].StartsWith("--", StringComparison.Ordinal) && arguments.Contains("--json"))
     {
         Console.Write(JsonSerializer.Serialize(new { valid = true, command = arguments[0] }));
@@ -359,7 +365,7 @@ try
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
     var pdfAdapters = await KillerPdfAdapter.CreateAsync(Environment.ProcessPath);
-    Equal(69, pdfAdapters.Count);
+    Equal(70, pdfAdapters.Count);
     var pdfByName = pdfAdapters.ToDictionary(item => item.Tool.Name);
     var sourceOne = Path.Combine(root, "source-one.pdf");
     var sourceTwo = Path.Combine(root, "source-two.pdf");
@@ -449,6 +455,12 @@ try
     Equal(false, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, appearancePage = 1, appearanceCorner = "bottom-right" })).IsError);
     Equal(false, (await Pdf("killerpdf_scan", new { output = NewPdf("scanned"), showSettings = false })).IsError);
     Equal(false, (await Pdf("killerpdf_list_scanners", new { })).IsError);
+    var pictureOne = Path.Combine(root, "picture-one.png");
+    var pictureTwo = Path.Combine(root, "picture-two.jpg");
+    File.WriteAllText(pictureOne, "fixture");
+    File.WriteAllText(pictureTwo, "fixture");
+    Equal(false, (await Pdf("killerpdf_images_to_pdf", new { images = new[] { pictureOne, pictureTwo }, output = NewPdf("pictures") })).IsError);
+    Equal(true, (await Pdf("killerpdf_images_to_pdf", new { images = new[] { sourceOne }, output = NewPdf("not-pictures") })).IsError);
     Equal(true, (await Pdf("killerpdf_export", new { path = sourceOne, output = NewPdf("export-as-pdf") })).IsError);
     Equal(true, (await Pdf("killerpdf_redact", new { path = sourceOne, output = NewPdf("bad-redact"), find = new[] { "passport" } })).IsError);
     Equal(true, (await Pdf("killerpdf_bates", new { inputs = new[] { Path.Combine(root, "missing.pdf") }, outputFolder = Path.Combine(root, "bad-bates") })).IsError);
@@ -468,7 +480,7 @@ try
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", "1");
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
     var integrationAdapters = IntegrationAdapter.Create(Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath);
-    Equal(10, integrationAdapters.Count);
+    Equal(12, integrationAdapters.Count);
     var integrationByName = integrationAdapters.ToDictionary(item => item.Tool.Name);
     async Task<AppCallResult> Integration(string name, object arguments)
     {
@@ -481,6 +493,9 @@ try
     Equal(false, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = 150 })).IsError);
     Equal(42, JsonDocument.Parse((await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = "1", title = "Fixture text" })).Text).RootElement.GetProperty("id").GetInt32());
     Equal(true, (await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = "first" })).IsError);
+    Equal(42, JsonDocument.Parse((await Integration("killerpdf_save_report_as_note", new { path = sourceOne, report = "signatures" })).Text).RootElement.GetProperty("id").GetInt32());
+    Equal(true, (await Integration("killerpdf_save_report_as_note", new { path = sourceOne, report = "everything" })).IsError);
+    Equal(true, (await Integration("killernotes_export_notes_pdf", new { ids = Array.Empty<int>(), output = Path.Combine(root, "notes.pdf") })).IsError);
     Equal(true, (await Integration("killer_create_pdf", new { content = "report", output = "relative.pdf" })).IsError);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", null);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", null);

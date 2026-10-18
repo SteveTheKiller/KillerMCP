@@ -14,6 +14,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - killerpdf_split splits by page count, equal parts, bookmark level or file size, and killerpdf_flatten takes color mode, compression and a scanned look.
 - killerpdf_scan_to_text can write each converted word as scanned beside it as text for review, and keep the words a review names as scanned.
 - killerpdf_save_text_as_note exports a PDF's text as Markdown and saves it as one KillerNotes note.
+- killerpdf_save_report_as_note saves a KillerPDF report, such as a PDF's signatures, comments, measurements or preflight findings, as a KillerNotes note.
+- killernotes_export_notes_pdf exports several KillerNotes notes into one PDF, in the order given.
+- killerpdf_images_to_pdf turns PNG, JPEG, TIFF, BMP and GIF images, such as KillerShot captures, into one PDF.
 
 ### Changed
 - The keyboard focus outline is a thin solid ring in the theme accent instead of a thick dotted line, and uses the text color where the accent would be too faint to see.
