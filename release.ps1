@@ -49,6 +49,11 @@ $engineProject = Join-Path $PSScriptRoot 'dependencies\KillerTools\src\KillerToo
 
 Step "Checking KillerMCP $Version release inputs"
 if ((git branch --show-current).Trim() -ne 'main') { Fail 'KillerMCP releases must run from main.' }
+git fetch origin main --quiet
+if ($LASTEXITCODE -ne 0) { Fail 'Could not fetch origin/main.' }
+if ((git rev-parse HEAD).Trim() -ne (git rev-parse origin/main).Trim()) {
+    Fail 'Local main and origin/main differ. Push the reviewed source first, then rerun the release or dry run.'
+}
 if (-not (Test-Path -LiteralPath $engineProject -PathType Leaf)) {
     Fail 'The pinned KillerTools submodule is missing. Run git submodule update --init.'
 }
@@ -72,11 +77,6 @@ if (-not $DryRun) {
     }
     $dirty = @(git status --porcelain)
     if ($dirty.Count) { Fail "The working tree is not clean:`n$($dirty -join "`n")" }
-    git fetch origin main --quiet
-    if ($LASTEXITCODE -ne 0) { Fail 'Could not fetch origin/main.' }
-    if ((git rev-parse HEAD).Trim() -ne (git rev-parse origin/main).Trim()) {
-        Fail 'Local main and origin/main differ. Push the reviewed source first.'
-    }
     if (git tag --list $Tag) { Fail "Tag $Tag already exists locally." }
     if (git ls-remote --tags origin $Tag) { Fail "Tag $Tag already exists on origin." }
 }

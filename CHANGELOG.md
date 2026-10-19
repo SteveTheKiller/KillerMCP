@@ -32,6 +32,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - Reports and notes use a file when escaped text would exceed the command line, support up to 500,000 characters, and clean up failed handoffs.
 - KillerShot captures always save a file, and monitor, image, PDF, macro, and signature inputs match their advertised validation.
 - The startup update check honors the saved update behavior.
+- Release dry runs stop before building when local main has not been pushed or differs from origin.
 
 ## [0.5.1] - 2026-10-14
 
