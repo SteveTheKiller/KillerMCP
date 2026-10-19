@@ -279,15 +279,16 @@ namespace KillerFamily.Accessibility
         private Brush RingBrush()
         {
             if (SystemParameters.HighContrast) return SystemColors.HighlightBrush;
-            Brush? text = TryFindResource("TextBrush") as Brush;
-            if (TryFindResource("PrimaryBrush") is SolidColorBrush accent)
+            Brush text = TryFindResource("TextBrush") as Brush ?? Brushes.White;
+            if ((TryFindResource("PrimaryBrush") ?? TryFindResource("Fuchsia")) is SolidColorBrush accent)
             {
                 var surfaces = new[] { "BackgroundBrush", "PaneBrush" }
                     .SelectMany(key => SurfaceColors(TryFindResource(key) as Brush)).ToList();
+                if (surfaces.Count == 0) surfaces.Add(Color.FromRgb(10, 10, 10));
                 if (surfaces.All(surface => Contrast(Over(accent.Color, surface), surface) >= MinimumContrast))
                     return accent;
             }
-            return text ?? SystemColors.WindowTextBrush;
+            return text;
         }
 
         private static IEnumerable<Color> SurfaceColors(Brush? brush) => brush switch
