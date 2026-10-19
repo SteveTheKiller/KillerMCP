@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Windows.Controls;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -12,6 +13,8 @@ namespace KillerMCP.Setup
     {
         private readonly string _destination;
         private readonly bool _isolated;
+        private readonly string _preferencesPath;
+        private readonly string _initialBehavior;
         private bool _installed;
         private string? _installedVersion;
 
@@ -20,6 +23,10 @@ namespace KillerMCP.Setup
             _destination = destination;
             _isolated = isolated;
             InitializeComponent();
+            _preferencesPath = UpdatePreferences.PathFor(destination, isolated);
+            _initialBehavior = UpdatePreferences.Read(_preferencesPath);
+            foreach (ComboBoxItem option in UpdateBehaviorBox.Items)
+                if ((string)option.Tag == _initialBehavior) UpdateBehaviorBox.SelectedItem = option;
             TaskbarIdentity.Track(this);
             VersionLabel.SetVersion(Program.CurrentVersion);
             InstallLocation.Text = destination;
@@ -68,10 +75,13 @@ namespace KillerMCP.Setup
             if (!Program.HasRuntime10(_isolated)) { SetRuntimeStatus(); return; }
             try
             {
+                string behavior = (string)((ComboBoxItem)UpdateBehaviorBox.SelectedItem).Tag;
+                UpdateBehaviorBox.IsEnabled = false;
                 InstallButton.IsEnabled = false;
                 Heading.Text = "Installing KillerMCP";
                 Status.Text = "Verifying the native runtime and connecting compatible agent clients...";
                 await Task.WhenAll(Task.Run(() => Program.Install(_destination)), Task.Delay(700));
+                UpdatePreferences.Save(_preferencesPath, behavior, _initialBehavior);
                 _installed = true;
                 Heading.Text = "KillerMCP is installed";
                 Status.Text = "Installed. Restart your agent client, then start a new chat to load KillerMCP tools.";
@@ -82,6 +92,7 @@ namespace KillerMCP.Setup
             }
             catch (Exception exception)
             {
+                UpdateBehaviorBox.IsEnabled = true;
                 Status.Text = exception.Message;
                 Status.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(227, 93, 106));
                 InstallButton.IsEnabled = true;

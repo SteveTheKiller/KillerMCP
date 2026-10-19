@@ -44,6 +44,9 @@ namespace KillerMCP.Setup
 
         internal static int Check(string destination)
         {
+            bool isolated = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("KILLERMCP_TEST_INSTALL_ROOT"));
+            string behavior = UpdatePreferences.Read(UpdatePreferences.PathFor(destination, isolated));
+            if (behavior == "off") return 0;
             string host = Path.Combine(destination, "KillerMCP.exe");
             if (!File.Exists(host)) return 0;
             string? currentText = FileVersionInfo.GetVersionInfo(host).FileVersion;
@@ -62,11 +65,22 @@ namespace KillerMCP.Setup
             }
             catch { return 0; }
             if (!Version.TryParse(latestText, out Version? latest) || latest <= current) return 0;
-            if (!SetupDialog.ConfirmUpdate(latestText!)) return 0;
-
             try
             {
+                string notifier = Path.Combine(destination, "KillerMCP.Notify.exe");
+                if (File.Exists(notifier))
+                {
+                    string arguments = "--installed " + Program.Quote(currentText!) +
+                        " --latest " + Program.Quote(latestText!) +
+                        " --installer " + Program.Quote(ReleaseBase + "v" + latestText + "/KillerMCP-Setup.exe") +
+                        " --release " + Program.Quote("https://github.com/SteveTheKiller/KillerMCP/releases/tag/v" + latestText) +
+                        " --behavior " + Program.Quote(behavior);
+                    Process.Start(new ProcessStartInfo(notifier, arguments) { UseShellExecute = true });
+                    return 0;
+                }
+                if (behavior == "check" && !SetupDialog.ConfirmUpdate(latestText!)) return 0;
                 string installer = DownloadAndVerify(latestText!);
+                if (behavior == "download" && !SetupDialog.ConfirmUpdate(latestText!)) return 0;
                 int parent = Process.GetCurrentProcess().Id;
                 Process.Start(new ProcessStartInfo(installer, "/silent /notify /wait-for " + parent) { UseShellExecute = true });
                 return 0;

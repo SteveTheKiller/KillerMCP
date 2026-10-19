@@ -41,6 +41,36 @@
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="#ff52c9"/><Setter Property="Background" Value="#24101f"/>
+            <Setter Property="BorderBrush" Value="#7a155f"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="9,2"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
+                <Grid>
+                    <ToggleButton Focusable="False" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" Background="Transparent" BorderThickness="0">
+                        <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><ContentPresenter/></ControlTemplate></ToggleButton.Template>
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3">
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="26"/></Grid.ColumnDefinitions>
+                                <TextBlock Margin="{TemplateBinding Padding}" VerticalAlignment="Center" Foreground="#f4edf3" Text="{TemplateBinding SelectionBoxItem}"/>
+                                <Border Grid.Column="1" BorderBrush="#7a155f" BorderThickness="1,0,0,0"><Path Width="8" Height="5" Stretch="Fill" Fill="#ff52c9" Data="M 0 0 L 8 0 L 4 5 Z"/></Border>
+                            </Grid>
+                        </Border>
+                    </ToggleButton>
+                    <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" PopupAnimation="Fade" Focusable="False">
+                        <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" Margin="0,2,0,0" Background="#171116" BorderBrush="#ff2bbd" BorderThickness="1" CornerRadius="3"><ScrollViewer MaxHeight="220"><StackPanel IsItemsHost="True"/></ScrollViewer></Border>
+                    </Popup>
+                </Grid>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="#f4edf3"/><Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
+                <Border x:Name="ItemFace" Background="Transparent" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemFace" Property="Background" Value="#7a155f"/></Trigger>
+                    <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemFace" Property="Background" Value="#a71980"/><Setter Property="Foreground" Value="#ffffff"/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
     </Window.Resources>
     <Border Margin="8" Background="#000000" BorderBrush="#2a2a2a" BorderThickness="1" CornerRadius="7" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
         <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect>
@@ -90,6 +120,13 @@
                         <TextBlock x:Name="RuntimeStatus" Margin="1,13,0,0" FontFamily="{StaticResource UiFont}" FontSize="10.5" TextWrapping="Wrap"/>
                         <TextBlock Margin="1,10,0,0" Foreground="#cfcfcf" TextWrapping="Wrap" Text="Setup installs the verified runtime, detects supported Killer apps, and registers one shared MCP connection."/>
                         <TextBlock x:Name="RuntimeLink" Margin="1,12,0,0" Foreground="#ff52c9" TextDecorations="Underline" Cursor="Hand" MouseLeftButtonDown="RuntimeLink_Click" Text="Download .NET 10 runtime"/>
+                        <TextBlock Margin="1,12,0,4" Foreground="#929292" FontSize="10" Text="Update behavior"/>
+                        <ComboBox x:Name="UpdateBehaviorBox" Width="210" Height="28" HorizontalAlignment="Left" AutomationProperties.Name="Update behavior">
+                            <ComboBoxItem Tag="off">Do not check</ComboBoxItem>
+                            <ComboBoxItem Tag="check">Check and ask</ComboBoxItem>
+                            <ComboBoxItem Tag="download">Download and ask</ComboBoxItem>
+                            <ComboBoxItem Tag="install">Install automatically</ComboBoxItem>
+                        </ComboBox>
                     </StackPanel>
                     <TextBlock x:Name="Status" Grid.Row="3" Margin="0,8,0,10" FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="#aaaaaa" Text="Ready to install" TextWrapping="Wrap"/>
                     <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
