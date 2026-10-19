@@ -131,6 +131,8 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
         return;
     }
     var stagedOutput = arguments.FirstOrDefault(argument => argument.Contains("killermcp-pdf-", StringComparison.Ordinal) && Path.GetFileName(argument).StartsWith("output", StringComparison.Ordinal));
+    if (stagedOutput is not null && arguments[0] == "--macro" && Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_RENAME") == "1")
+        stagedOutput = Path.Combine(Path.GetDirectoryName(stagedOutput)!, "renamed.pdf");
     if (arguments.Length > 0 && arguments[0].StartsWith("--", StringComparison.Ordinal) && stagedOutput is not null)
     {
         foreach (var listed in new[] { "--terms", "--keep-scanned" })

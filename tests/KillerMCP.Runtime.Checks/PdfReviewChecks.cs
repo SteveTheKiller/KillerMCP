@@ -39,6 +39,15 @@ internal static class PdfReviewChecks
         File.WriteAllText(Path.Combine(second, "DOCUMENT.PDF"), "fixture two");
         using var duplicateBates = JsonDocument.Parse(JsonSerializer.Serialize(new { inputs = new[] { Path.Combine(first, "document.pdf"), Path.Combine(second, "DOCUMENT.PDF") }, outputFolder = Path.Combine(root, "bates-collision") }));
         Require((await adapters["killerpdf_bates"].CallAsync(duplicateBates.RootElement, CancellationToken.None)).IsError, "Bates must reject case-insensitive duplicate output file names");
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_RENAME", "1");
+        try
+        {
+            string output = Path.Combine(root, "requested-macro-output.pdf");
+            using var macro = JsonDocument.Parse(JsonSerializer.Serialize(new { path = sourcePdf, output, macro = "Rename fixture" }));
+            var result = await adapters["killerpdf_run_macro"].CallAsync(macro.RootElement, CancellationToken.None);
+            Require(!result.IsError && File.ReadAllText(output) == "fixture output", "Renamed macro output must be preserved at the requested path: " + result.Text);
+        }
+        finally { Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_RENAME", null); }
         if (Environment.GetEnvironmentVariable("KILLERMCP_CHECK_SECOND_VOLUME") is { Length: > 0 } otherVolume)
         {
             string destination = Path.Combine(otherVolume, "split-" + Guid.NewGuid().ToString("N"));

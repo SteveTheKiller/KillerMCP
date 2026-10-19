@@ -166,6 +166,11 @@ public static partial class KillerPdfAdapter
             var response = await Run(path, definition.Arguments(input, staged), definition.TimeoutSeconds, 262144, token).ConfigureAwait(false);
             if (response.OutputExceeded) return Error("KillerPDF command output exceeded limit");
             if (!definition.SuccessCodes.Contains(response.ExitCode)) return ProcessError(response);
+            if (definition.Tool.Name == "killerpdf_run_macro" && !File.Exists(staged))
+            {
+                var renamed = Directory.GetFiles(temporary, "*.pdf", SearchOption.TopDirectoryOnly);
+                if (renamed.Length == 1) staged = renamed[0];
+            }
             if (definition.Kind == OutputKind.File ? !File.Exists(staged) : !Directory.Exists(staged)) return Error("KillerPDF did not create the requested output");
             var destination = definition.Kind == OutputKind.File ? String(input, "output") : String(input, "outputFolder");
             if (definition.Kind == OutputKind.File) File.Copy(staged, destination, false); else Directory.Move(staged, destination);
