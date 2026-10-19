@@ -25,11 +25,11 @@ if ($env:OS -eq 'Windows_NT') {
     $start.CreateNoWindow = $true
     $start.RedirectStandardError = $true
     $start.RedirectStandardOutput = $true
-    $start.Environment['PSExecutionPolicyPreference'] = 'Restricted'
-    $start.Environment['LOCALAPPDATA'] = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString('N'))
-    foreach ($argument in $server.args) {
-        $start.ArgumentList.Add($argument.Replace('${CLAUDE_PLUGIN_ROOT}', (Join-Path $Root 'claude-plugin')))
-    }
+    $start.EnvironmentVariables['PSExecutionPolicyPreference'] = 'Restricted'
+    $start.EnvironmentVariables['LOCALAPPDATA'] = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString('N'))
+    $start.Arguments = ($server.args | ForEach-Object {
+        '"' + $_.Replace('${CLAUDE_PLUGIN_ROOT}', (Join-Path $Root 'claude-plugin')) + '"'
+    }) -join ' '
     $process = [Diagnostics.Process]::Start($start)
     try {
         $errorOutput = $process.StandardError.ReadToEnd()
