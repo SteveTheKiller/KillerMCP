@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 - Updates started from an agent client such as Codex finish installing. Setup no longer stops partway when the client closes the KillerMCP hosts it replaces.
 - The update window stays open when the agent client that started KillerMCP closes it.
+- An update notice that closes before it opens is offered again at the next check instead of a day later.
 
 ## [0.6.0] - 2026-10-19
 

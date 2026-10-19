@@ -8,6 +8,7 @@ public partial class App : Application
 {
     private const string InstanceName = @"Local\KillerMCP-UpdateWindow";
     private const string WakeName = @"Local\KillerMCP-UpdateWindow-Wake";
+    private const string NoticeOpenedName = @"Local\KillerMCP-UpdateNotice-Opened";
     private Mutex? _instance;
     private EventWaitHandle? _wake;
     private RegisteredWaitHandle? _wakeWait;
@@ -71,6 +72,18 @@ public partial class App : Application
         _update.UpdateStateChanged += SyncTray;
         SyncTray();
         _update.Start();
+        SignalNoticeOpened();
+    }
+
+    // Tells the host that opened this notice that it is up, so the host records it as shown.
+    private static void SignalNoticeOpened()
+    {
+        try
+        {
+            using var opened = EventWaitHandle.OpenExisting(NoticeOpenedName);
+            opened.Set();
+        }
+        catch { }
     }
 
     private void SyncTray()
@@ -84,7 +97,9 @@ public partial class App : Application
     private void OnWake()
     {
         string[]? args = ReadHandoff();
-        if (_update is not null && args is not null) _update.Reload(args);
+        if (_update is null || args is null) return;
+        _update.Reload(args);
+        SignalNoticeOpened();
     }
 
     private static void WakeFirstInstance()

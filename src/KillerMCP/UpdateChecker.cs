@@ -21,6 +21,8 @@ internal static class UpdateChecker
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromHours(1);
     private static readonly TimeSpan NotificationLifetime = TimeSpan.FromDays(1);
     private const string NotificationMutexName = @"Local\KillerMCP-UpdateNotification";
+    private const string NoticeOpenedEventName = @"Local\KillerMCP-UpdateNotice-Opened";
+    private static readonly TimeSpan NoticeOpenWait = TimeSpan.FromSeconds(20);
     private const int MaximumNotesLength = 20000;
 
     public static async Task<UpdateStatus> CheckForUpdateAsync(string currentVersion)
@@ -74,9 +76,10 @@ internal static class UpdateChecker
 
     public static void StartMonitoring(string currentVersion, UpdateStatus initialStatus, Action<UpdateStatus> onUpdate)
     {
-        ShowNotification(initialStatus);
+        // The notice waits for its window to open, so it runs beside the MCP connection instead of delaying it.
         _ = Task.Run(async () =>
         {
+            ShowNotification(initialStatus);
             while (true)
             {
                 await Task.Delay(CacheLifetime).ConfigureAwait(false);
@@ -159,23 +162,19 @@ internal static class UpdateChecker
             string directory = Path.GetDirectoryName(GetCachePath())!;
             Directory.CreateDirectory(directory);
             string statePath = Path.Combine(directory, "update-notification.json");
-            string? previous = null;
-            try { previous = File.ReadAllText(statePath); } catch { }
             NotificationState? state = null;
-            try { state = previous is null ? null : JsonSerializer.Deserialize<NotificationState>(previous); } catch { }
+            try { state = JsonSerializer.Deserialize<NotificationState>(File.ReadAllText(statePath)); } catch { }
             if (state?.LatestVersion == status.LatestVersion && DateTimeOffset.UtcNow - state.ShownAt < NotificationLifetime) return;
 
-            File.WriteAllText(statePath, JsonSerializer.Serialize(new NotificationState(status.LatestVersion, DateTimeOffset.UtcNow)) + Environment.NewLine);
+            // The update window signals once it has taken the notice. Only then does the notice
+            // count as shown; one that closed before opening is offered again by the next check.
+            using var opened = new EventWaitHandle(false, EventResetMode.AutoReset, NoticeOpenedEventName);
+            opened.Reset();
             string arguments = $"--installed {Quote(status.InstalledVersion)} --latest {Quote(status.LatestVersion)} --installer {Quote(status.InstallerUrl)} --release {Quote(status.ReleaseUrl)} --behavior {Quote(behavior)} --status {Quote(GetCachePath())}";
             // The notice has to outlive this host, which an agent client can close at any time.
-            try { DetachedProcess.Start(notifier, arguments); }
-            catch
-            {
-                // The claim must not hide the next attempt when the notifier never started.
-                if (previous is null) File.Delete(statePath);
-                else File.WriteAllText(statePath, previous);
-                throw;
-            }
+            DetachedProcess.Start(notifier, arguments);
+            if (!opened.WaitOne(OpenWait())) return;
+            File.WriteAllText(statePath, JsonSerializer.Serialize(new NotificationState(status.LatestVersion, DateTimeOffset.UtcNow)) + Environment.NewLine);
         }
         catch { }
         finally
@@ -184,6 +183,10 @@ internal static class UpdateChecker
             gate?.Dispose();
         }
     }
+
+    private static TimeSpan OpenWait() =>
+        int.TryParse(Environment.GetEnvironmentVariable("KILLERMCP_NOTICE_WAIT_MS"), out int milliseconds) && milliseconds > 0
+            ? TimeSpan.FromMilliseconds(milliseconds) : NoticeOpenWait;
 
     private static string Quote(string value) => '"' + value.Replace("\"", "\\\"", StringComparison.Ordinal) + '"';
 
