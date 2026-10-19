@@ -5,6 +5,8 @@
       "args": [
         "-NoProfile",
         "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
         "-File",
         "${CLAUDE_PLUGIN_ROOT}/start-killermcp.ps1"
       ]

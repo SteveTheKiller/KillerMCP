@@ -16,3 +16,27 @@ if ([string]$plugin.author.name -cne 'Steve the Killer') {
     throw 'KillerMCP plugin author must be Steve the Killer.'
 }
 Write-Output "KillerMCP app and plugin versions match: $appVersion. Publisher: Steve the Killer."
+
+if ($env:OS -eq 'Windows_NT') {
+    $manifest = Get-Content -LiteralPath (Join-Path $Root 'claude-plugin\.mcp.json') -Raw | ConvertFrom-Json
+    $server = $manifest.mcpServers.KillerMCP
+    $start = [Diagnostics.ProcessStartInfo]::new($server.command)
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardError = $true
+    $start.RedirectStandardOutput = $true
+    $start.Environment['PSExecutionPolicyPreference'] = 'Restricted'
+    $start.Environment['LOCALAPPDATA'] = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString('N'))
+    foreach ($argument in $server.args) {
+        $start.ArgumentList.Add($argument.Replace('${CLAUDE_PLUGIN_ROOT}', (Join-Path $Root 'claude-plugin')))
+    }
+    $process = [Diagnostics.Process]::Start($start)
+    try {
+        $errorOutput = $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
+        if ($process.ExitCode -ne 1 -or $errorOutput -notlike '*KillerMCP is not installed for this Windows user*') {
+            throw "Claude plugin launcher did not run under a restricted inherited policy: $errorOutput"
+        }
+    } finally { $process.Dispose() }
+    Write-Output 'Claude plugin launcher runs under a restricted inherited execution policy.'
+}
