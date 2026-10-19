@@ -166,12 +166,9 @@ internal static class UpdateChecker
             if (state?.LatestVersion == status.LatestVersion && DateTimeOffset.UtcNow - state.ShownAt < NotificationLifetime) return;
 
             File.WriteAllText(statePath, JsonSerializer.Serialize(new NotificationState(status.LatestVersion, DateTimeOffset.UtcNow)) + Environment.NewLine);
-            var start = new System.Diagnostics.ProcessStartInfo(notifier)
-            {
-                UseShellExecute = true,
-                Arguments = $"--installed {Quote(status.InstalledVersion)} --latest {Quote(status.LatestVersion)} --installer {Quote(status.InstallerUrl)} --release {Quote(status.ReleaseUrl)} --behavior {Quote(behavior)} --status {Quote(GetCachePath())}"
-            };
-            try { System.Diagnostics.Process.Start(start); }
+            string arguments = $"--installed {Quote(status.InstalledVersion)} --latest {Quote(status.LatestVersion)} --installer {Quote(status.InstallerUrl)} --release {Quote(status.ReleaseUrl)} --behavior {Quote(behavior)} --status {Quote(GetCachePath())}";
+            // The notice has to outlive this host, which an agent client can close at any time.
+            try { DetachedProcess.Start(notifier, arguments); }
             catch
             {
                 // The claim must not hide the next attempt when the notifier never started.

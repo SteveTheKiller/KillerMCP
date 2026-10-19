@@ -18,6 +18,7 @@ if ($LASTEXITCODE -ne 0) { throw 'KillerMCP native host checks failed.' }
 if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
     & (Join-Path $PSScriptRoot 'Test-WindowsInstaller.ps1')
     & (Join-Path $PSScriptRoot 'Test-ClientJobUpdate.ps1') -Installer (Join-Path $root 'artifacts\installer\KillerMCP-Setup.exe')
+    & (Join-Path $PSScriptRoot 'Test-ClientJobNotice.ps1')
 }
 
 Write-Output 'All KillerMCP checks passed.'
