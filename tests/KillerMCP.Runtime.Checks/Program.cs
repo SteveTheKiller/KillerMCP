@@ -377,6 +377,8 @@ try
         return await pdfByName[name].CallAsync(document.RootElement, CancellationToken.None);
     }
     Equal(false, (await Pdf("killerpdf_preflight", new { path = sourceOne, profile = "print" })).IsError);
+    foreach (var template in new[] { "../escaped", "..\\escaped", "C:\\escaped", "sub/name", ".." })
+        Equal(true, (await Pdf("killerpdf_split", new { path = sourceOne, outputFolder = Path.Combine(root, "unsafe-split"), nameTemplate = template })).IsError);
     Equal(false, (await Pdf("killerpdf_accessibility", new { path = sourceOne })).IsError);
     var verified = await Pdf("killerpdf_verify_install", new { });
     Equal(false, verified.IsError);
@@ -407,6 +409,8 @@ try
     var recipientFile = Path.Combine(root, "recipient.cer");
     var macroFile = Path.Combine(root, "macro.json");
     foreach (var fixture in new[] { attachmentFile, officeFile, dataFile, formData, certificateFile, recipientFile, macroFile }) File.WriteAllText(fixture, "fixture");
+    foreach (var template in new[] { "../escaped", "..\\escaped", "C:\\escaped", "sub/name", ".." })
+        Equal(true, (await Pdf("killerpdf_data_merge", new { path = sourceOne, data = dataFile, outputFolder = Path.Combine(root, "unsafe-merge"), name = template })).IsError);
     string NewPdf(string name) => Path.Combine(root, name + ".pdf");
     Equal(false, (await Pdf("killerpdf_split", new { path = sourceOne, outputFolder = Path.Combine(root, "split-parts"), parts = 2, nameTemplate = "{name}-{index}" })).IsError);
     Equal(false, (await Pdf("killerpdf_flatten", new { path = sourceOne, output = NewPdf("scanned-look"), colorMode = "grayscale", compression = "jpeg", jpegQuality = 70, scannedLook = "tilt,grain" })).IsError);

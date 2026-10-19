@@ -211,6 +211,18 @@ public static partial class KillerPdfAdapter
         if (!ObjectWith(input, definition.Tool.InputSchema["properties"]!.AsObject().Select(item => item.Key).ToArray()) || !HasRequired(input, definition.Tool.InputSchema)) return "Expected PDF arguments";
         var pathProblem = definition.InputExtensions.Length == 0 ? null : definition.InputExtensions.SequenceEqual([".pdf"]) ? ValidatePdf(input) : ValidateInput(input, definition.InputExtensions);
         if (pathProblem is not null) return pathProblem;
+        foreach (var property in definition.Tool.Name switch
+        {
+            "killerpdf_split" => new[] { "nameTemplate" },
+            "killerpdf_data_merge" => new[] { "name" },
+            _ => Array.Empty<string>()
+        })
+        {
+            if (input.TryGetProperty(property, out var template) &&
+                (template.ValueKind != JsonValueKind.String || template.GetString() is not { } name ||
+                 name.Contains("..", StringComparison.Ordinal) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
+                return "File name templates must not contain parent paths or invalid file name characters";
+        }
         if (definition.Kind is OutputKind.File or OutputKind.Directory)
         {
             var name = definition.Kind == OutputKind.File ? "output" : "outputFolder";
