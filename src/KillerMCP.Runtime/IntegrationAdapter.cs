@@ -143,7 +143,7 @@ public static partial class IntegrationAdapter
         if (input.TryGetProperty("group", out var g) && (g.ValueKind != JsonValueKind.String || (group = g.GetString())!.Length > 240)) return Error("Group must be at most 240 characters");
         // A KillerPDF without --export would open its window with the file instead, so ask first.
         var help = await RunApp(pdf, ["--help"], 15, token).ConfigureAwait(false);
-        if (help.ExitCode != 0 || !help.StandardOutput.Contains("--export <in.pdf>", StringComparison.Ordinal)) return Error("KillerPDF 1.9 or later is needed to export a PDF's text");
+        if (help.ExitCode != 0 || !KillerPdfCapabilities.Supports(help.StandardOutput, "--export <in.pdf>")) return Error("KillerPDF 1.9 or later is needed to export a PDF's text");
         var temp = TempFolder();
         try
         {
@@ -179,7 +179,7 @@ public static partial class IntegrationAdapter
         if (input.TryGetProperty("group", out var g) && (g.ValueKind != JsonValueKind.String || (group = g.GetString())!.Length > 240)) return Error("Group must be at most 240 characters");
         // A KillerPDF without the report would open its window with the file instead, so ask first.
         var help = await RunApp(pdf, ["--help"], 15, token).ConfigureAwait(false);
-        if (help.ExitCode != 0 || !help.StandardOutput.Contains(report.Command + " <in.pdf>", StringComparison.Ordinal)) return Error($"This KillerPDF has no {report.Label.ToLowerInvariant()} report; KillerPDF 1.9 or later is needed");
+        if (help.ExitCode != 0 || !KillerPdfCapabilities.Supports(help.StandardOutput, report.Command + " <in.pdf>")) return Error($"This KillerPDF has no {report.Label.ToLowerInvariant()} report; KillerPDF 1.9 or later is needed");
         // The reports exit 3 when they have findings, which is still a finished report.
         var result = await RunApp(pdf, [report.Command, path!], 120, token).ConfigureAwait(false);
         if (result.ExitCode is not (0 or 3) || result.OutputExceeded || string.IsNullOrWhiteSpace(result.StandardOutput)) return Error(Limit(string.IsNullOrWhiteSpace(result.StandardOutput) ? "KillerPDF could not run the report" : result.StandardOutput.Trim()));

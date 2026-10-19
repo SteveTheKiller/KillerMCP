@@ -15,17 +15,17 @@ public static partial class KillerPdfAdapter
         if (help.ExitCode != 0) return [];
 
         var adapters = new List<AppAdapter>();
-        if (MergeMarker().IsMatch(help.StandardOutput)) adapters.Add(new AppAdapter(MergeTool(), (input, token) => Merge(path!, input, token)));
+        if (KillerPdfCapabilities.Supports(help.StandardOutput, "--merge <out.pdf>")) adapters.Add(new AppAdapter(MergeTool(), (input, token) => Merge(path!, input, token)));
         foreach (var definition in Operations())
         {
-            if (help.StandardOutput.Contains(definition.Marker, StringComparison.Ordinal))
+            if (KillerPdfCapabilities.Supports(help.StandardOutput, definition.Marker))
             {
                 adapters.Add(new AppAdapter(definition.Tool, (input, token) => RunOperation(path!, definition, input, token)));
             }
         }
         AddReport(help, path!, adapters, "--preflight", "killerpdf_preflight", "Check a local PDF with KillerPDF preflight and return findings without changing the file.", PreflightSchema());
         AddReport(help, path!, adapters, "--accessibility", "killerpdf_accessibility", "Check a local PDF for accessibility findings using KillerPDF without changing the file.", Schema(new JsonObject { ["path"] = PdfPath() }, "path"));
-        if (help.StandardOutput.Contains("--verify | /verify", StringComparison.Ordinal)) adapters.Add(new AppAdapter(VerifyTool(), (input, token) => Verify(path!, input, token)));
+        if (KillerPdfCapabilities.Supports(help.StandardOutput, "--verify | /verify")) adapters.Add(new AppAdapter(VerifyTool(), (input, token) => Verify(path!, input, token)));
         return adapters;
     }
 
@@ -296,7 +296,7 @@ public static partial class KillerPdfAdapter
 
     private static void AddReport(ProcessResult help, string path, List<AppAdapter> adapters, string command, string name, string description, JsonObject schema)
     {
-        if (help.StandardOutput.Contains($"{command} <in.pdf>", StringComparison.Ordinal)) adapters.Add(new AppAdapter(new RuntimeTool(name, description, schema), (input, token) => Report(path, command, input, token)));
+        if (KillerPdfCapabilities.Supports(help.StandardOutput, $"{command} <in.pdf>")) adapters.Add(new AppAdapter(new RuntimeTool(name, description, schema), (input, token) => Report(path, command, input, token)));
     }
 
     private static Operation FileOperation(string name, string marker, string description, JsonObject schema, Func<JsonElement, string, List<string>> args, int timeout = 180) => new(marker, OutputKind.File, new RuntimeTool(name, description, schema), args, timeout);
@@ -352,7 +352,6 @@ public static partial class KillerPdfAdapter
     }
     private enum OutputKind { File, Directory, Action, Report }
 
-    [GeneratedRegex("^\\s*--merge <out\\.pdf>", RegexOptions.Multiline | RegexOptions.CultureInvariant)] private static partial Regex MergeMarker();
     [GeneratedRegex("^\\d+(?:-\\d+)?(?:,\\d+(?:-\\d+)?)*$", RegexOptions.CultureInvariant)] private static partial Regex PageRangePattern();
     [GeneratedRegex("^[A-Za-z0-9_]+$", RegexOptions.CultureInvariant)] private static partial Regex LanguagePattern();
 }

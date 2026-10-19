@@ -87,6 +87,11 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     }
     if (arguments.SequenceEqual(["--help"]))
     {
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_HELP_STYLE") == "modern")
+        {
+            Console.WriteLine("KillerPDF command line usage\nExisting --command forms stay compatible.\n  killerpdf merge <out.pdf> <in1> <in2>\n  killerpdf optimize <in.pdf> <out.pdf>\n  killerpdf split <in.pdf> <outDir>\n  killerpdf export <in.pdf> <out.docx|.md>\n  killerpdf signatures <in.pdf> [--json]\n  killerpdf preflight <in.pdf> [--json]\n  killerpdf verify | /verify");
+            return;
+        }
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1") Console.WriteLine("  --merge <out.pdf>\n--extract-pages <in.pdf>\n--split <in.pdf>\n--decrypt <in.pdf>\n--to-image <in.pdf>\n--flatten <in.pdf>\n--print <in.pdf>\n--ocr <in.pdf>\n--batch-resave <in>\n--batch-render <in>\n--rotate-pages <in.pdf>\n--delete-pages <in.pdf>\n--move-pages <in.pdf>\n--insert-blank <in.pdf>\n--duplicate-page <in.pdf>\n--document-info <in.pdf>\n--search-text <in.pdf>\n--preflight <in.pdf>\n--accessibility <in.pdf>\n--optimize <in.pdf>\n--number-pages <in.pdf>\n--bates <outDir>\n--booklet <in.pdf>\n--nup <in.pdf>\n--auto-bookmarks <in.pdf>\n--scan-to-text <in.pdf>\n--reverse-pages <in.pdf>\n--fix-orientation <in.pdf>\n--straighten <in.pdf>\n--divide-spreads <in.pdf>\n--rasterize-region <in.pdf>\n--print-production <in.pdf>\n--signatures <in.pdf>\n--layers <in.pdf>\n--portfolio <in.pdf>\n--comments <in.pdf>\n--navigation-audit <in.pdf>\n--measurements <in.pdf>\n--separations <in.pdf>\n--compare-structure <original.pdf>\n--attachments <in.pdf>\n--recognize-fields <in.pdf>\n--set-layer <in.pdf>\n--portfolio-view <in.pdf>\n--add-attachment <in.pdf>\n--edit-attachment <in.pdf>\n--repair-links <in.pdf>\n--toc <in.pdf>\n--page-labels <in.pdf>\n--initial-view <in.pdf>\n--redact <in.pdf>\n--protect <in.pdf>\n--export <in.pdf>\n--convert-office <in.docx\n--data-merge <template.pdf>\n--replace-text <in.pdf>\n--export-form-data <in.pdf>\n--import-form-data <in.pdf>\n--xfa-to-acroform <in.pdf>\n--flatten-forms <in.pdf>\n--macro <in.pdf>\n--sign <in.pdf>\n--scan <out.pdf>\n  KillerPDF.exe --verify | /verify   verify every installed payload file");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>\ncreate --title title (--content markdown | --content-file absolute.md)");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>\ncreate <json>");
@@ -233,6 +238,13 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
 var root = Path.Combine(Path.GetTempPath(), "killermcp-discovery-" + Guid.NewGuid().ToString("N"));
 try
 {
+    if (args.Contains("--pdf-review-only", StringComparer.Ordinal))
+    {
+        Directory.CreateDirectory(root);
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
+        await PdfReviewChecks.RunAsync(Environment.ProcessPath!, root);
+        return;
+    }
     var local = Path.Combine(root, "Local");
     var machine = Path.Combine(root, "Machine");
     var expected = new Dictionary<string, string>
