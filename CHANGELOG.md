@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Added
 
+- Setup lets you choose whether updates are checked, downloaded, or installed automatically, and keeps your existing choice during upgrades.
 - KillerShot tools list monitors and windows, take screenshots of a monitor, every monitor, a window or a rectangle, record MP4 or GIF for a set time, list recent captures, open an image in the KillerShot editor, and read KillerShot's settings.
 - KillerPDF tools cover its 1.9 commands: optimize, page numbers and Bates stamps, booklets and n-up sheets, bookmarks from headings, Convert Scan to Text, reverse, upright, straighten and divide pages, partial rasterizing, redaction, protection, signing with a trusted timestamp, export to Word, Excel, PowerPoint, HTML, Markdown, text and JSON, Office to PDF, data merge, text replacement, form data, field recognition, XFA conversion, form flattening, macros, scanning, layers, attachments, portfolios, links, contents pages, page labels and the initial view.
 - KillerPDF reports cover print production, signatures, layers, portfolios, comments, navigation, measurements, separations, attachments, recognized fields and structural comparison.
@@ -23,8 +24,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
-- Reports saved as KillerNotes notes, and notes from killernotes_create and killernotes_update, no longer fail past about 30,000 characters. Longer text goes to KillerNotes in a file, up to the 500,000 characters a note holds.
 - Silent installs refuse a setup without a valid signature and return 1625 instead of installing.
+- Split and data merge reject file name templates that could write outside the output folder.
+- Keyboard focus stays visible on setup, update, and repair buttons.
+- The Claude plugin starts on Windows clients with the default PowerShell execution policy.
+- KillerPDF tools recognize current command help, preserve renamed macro PDFs, and write folder outputs across drives. Bates stamping rejects duplicate file names.
+- Reports and notes use a file when escaped text would exceed the command line, support up to 500,000 characters, and clean up failed handoffs.
+- KillerShot captures always save a file, and monitor, image, PDF, macro, and signature inputs match their advertised validation.
+- The startup update check honors the saved update behavior.
 
 ## [0.5.1] - 2026-10-14
 
