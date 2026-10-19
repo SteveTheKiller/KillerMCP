@@ -80,7 +80,8 @@ namespace KillerMCP.Setup
             catch (Exception exception)
             {
                 if (silent) Console.Error.WriteLine("KillerMCP setup failed: " + exception.Message);
-                else SetupDialog.ShowFailure(exception.Message);
+                // An update started from the update window or update check has no one reading its console.
+                if (!silent || notify) SetupDialog.ShowFailure(exception.Message);
                 return KillerFamily.Deployment.InstallerExitCodes.FromException(exception);
             }
         }
