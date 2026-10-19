@@ -79,8 +79,9 @@ public static class KillerShotAdapter
 
     private static Task<AppCallResult> OpenAsync(string path, JsonElement input, CancellationToken token)
     {
-        if (!Allowed(input, "path") || !RequiredString(input, "path", 1024, out var image) || !Path.IsPathFullyQualified(image!) || !File.Exists(image))
-            return Task.FromResult(Error("Expected the absolute path of an existing image file"));
+        if (!Allowed(input, "path") || !RequiredString(input, "path", 1024, out var image) || !Path.IsPathFullyQualified(image!) || !File.Exists(image)
+            || Path.GetExtension(image).ToLowerInvariant() is not (".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".tif" or ".tiff"))
+            return Task.FromResult(Error("Expected the absolute path of an existing PNG, JPEG, BMP, GIF or TIFF image"));
         return RunJsonAsync(path, ["open", image!, "--json"], "opened", 20, token);
     }
 
@@ -98,7 +99,7 @@ public static class KillerShotAdapter
             case "monitor":
                 if (input.TryGetProperty("monitor", out _))
                 {
-                    if (!Monitor(input, out var monitor)) return Task.FromResult(Error("Monitor must be primary or a number from 1 to 16"));
+                    if (!Monitor(input, out var monitor)) return Task.FromResult(Error("Monitor must be primary or a number from 1 to 99"));
                     arguments.AddRange(["--monitor", monitor!]);
                 }
                 break;
@@ -113,7 +114,7 @@ public static class KillerShotAdapter
         }
         var problem = CommonOptions(input, arguments, allowDelay: true);
         if (problem != null) return Task.FromResult(Error(problem));
-        arguments.AddRange(["--no-shutter", "--json"]);
+        arguments.AddRange(["--save", "--no-shutter", "--json"]);
         int delay = input.TryGetProperty("delay", out var d) && d.TryGetInt32(out int seconds) ? seconds : 0;
         return RunJsonAsync(path, arguments, "path", 45 + delay, token);
     }
@@ -134,7 +135,7 @@ public static class KillerShotAdapter
         switch (mode)
         {
             case "monitor" when input.TryGetProperty("monitor", out _):
-                if (!Monitor(input, out var monitor)) return Task.FromResult(Error("Monitor must be primary or a number from 1 to 16"));
+                if (!Monitor(input, out var monitor)) return Task.FromResult(Error("Monitor must be primary or a number from 1 to 99"));
                 arguments.AddRange(["--monitor", monitor!]);
                 break;
             case "window":
@@ -200,7 +201,8 @@ public static class KillerShotAdapter
             if (response.ExitCode != 0) return Error(ErrorText(response));
             if (response.OutputExceeded) return InvalidResponse();
             using var document = JsonDocument.Parse(response.StandardOutput);
-            if (document.RootElement.ValueKind != JsonValueKind.Object || !document.RootElement.TryGetProperty(property, out _)) return InvalidResponse();
+            if (document.RootElement.ValueKind != JsonValueKind.Object || !document.RootElement.TryGetProperty(property, out var value)) return InvalidResponse();
+            if (property == "path" && (value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString()))) return InvalidResponse();
             return new AppCallResult(document.RootElement.GetRawText());
         }
         catch (Exception exception) when (exception is JsonException or TimeoutException or InvalidOperationException)
@@ -258,7 +260,7 @@ public static class KillerShotAdapter
         monitor = null;
         if (!RequiredString(input, "monitor", 8, out var value)) return false;
         if (value!.Equals("primary", StringComparison.OrdinalIgnoreCase)) { monitor = "primary"; return true; }
-        if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int number) && number is >= 1 and <= 16) { monitor = Text(number); return true; }
+        if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int number) && number is >= 1 and <= 99) { monitor = Text(number); return true; }
         return false;
     }
 
@@ -287,7 +289,7 @@ public static class KillerShotAdapter
     private static JsonObject PathSchema() => new()
     {
         ["type"] = "object",
-        ["properties"] = new JsonObject { ["path"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024, ["description"] = "Absolute path of a PNG, JPEG, BMP, GIF or TIFF image" } },
+        ["properties"] = new JsonObject { ["path"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024, ["pattern"] = "\\.(?:[Pp][Nn][Gg]|[Jj][Pp][Ee]?[Gg]|[Bb][Mm][Pp]|[Gg][Ii][Ff]|[Tt][Ii][Ff][Ff]?)$", ["description"] = "Absolute path of a PNG, JPEG, BMP, GIF or TIFF image" } },
         ["required"] = new JsonArray("path"),
         ["additionalProperties"] = false,
     };

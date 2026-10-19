@@ -45,7 +45,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1")
     string? Option(string name) { int i = Array.IndexOf(shot, name); return i >= 0 && i + 1 < shot.Length ? shot[i + 1] : null; }
     if (shot.SequenceEqual(["monitors", "--json"])) { Console.Write(JsonSerializer.Serialize(new { monitors = new[] { new { index = 1, primary = true, left = 0, top = 0, width = 1920, height = 1080 } } })); return; }
     if (shot.Length == 4 && shot[0] == "windows") { Console.Write(JsonSerializer.Serialize(new { windows = new[] { new { handle = "0x10", title = "Fixture", process = "fixture", limit = shot[2] } }, limitReached = false })); return; }
-    if (shot.Length > 0 && shot[0] == "capture") { Console.Write(JsonSerializer.Serialize(new { path = "C:\\fixture.png", mode = Option("--mode"), args = shot })); return; }
+    if (shot.Length > 0 && shot[0] == "capture") { Console.Write(JsonSerializer.Serialize(new { path = Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_NULL_PATH") == "1" ? null : "C:\\fixture.png", mode = Option("--mode"), args = shot })); return; }
     if (shot.Length > 0 && shot[0] == "record") { Console.Write(JsonSerializer.Serialize(new { path = "C:\\fixture.mp4", mode = Option("--mode"), args = shot })); return; }
     if (shot.Length == 4 && shot[0] == "recent") { Console.Write(JsonSerializer.Serialize(new { folder = "C:\\Recent", items = Array.Empty<object>(), limit = shot[2] })); return; }
     if (shot.Length == 3 && shot[0] == "open") { Console.Write(JsonSerializer.Serialize(new { opened = shot[1] })); return; }
@@ -689,10 +689,10 @@ try
     var monitorShot = await Shot("killershot_capture_monitor", new { monitor = "2" });
     Equal(false, monitorShot.IsError);
     var monitorArgs = ShotArgs(monitorShot);
-    Equal(true, monitorArgs.SequenceEqual(["capture", "--mode", "monitor", "--monitor", "2", "--no-clipboard", "--no-shutter", "--json"]));
+    Equal(true, monitorArgs.SequenceEqual(["capture", "--mode", "monitor", "--monitor", "2", "--no-clipboard", "--save", "--no-shutter", "--json"]));
     Equal(true, (await Shot("killershot_capture_monitor", new { monitor = "0" })).IsError);
     var allArgs = ShotArgs(await Shot("killershot_capture_all", new { clipboard = true, cursor = false, delay = 2, output = root }));
-    Equal(true, allArgs.SequenceEqual(["capture", "--mode", "all", "--out", root, "--clipboard", "--no-cursor", "--delay", "2", "--no-shutter", "--json"]));
+    Equal(true, allArgs.SequenceEqual(["capture", "--mode", "all", "--out", root, "--clipboard", "--no-cursor", "--delay", "2", "--save", "--no-shutter", "--json"]));
     Equal(true, (await Shot("killershot_capture_all", new { output = "relative.png" })).IsError);
     Equal(true, ShotArgs(await Shot("killershot_capture_window", new { window = "Fixture" })).Contains("Fixture"));
     Equal(true, (await Shot("killershot_capture_window", new { })).IsError);
@@ -712,6 +712,10 @@ try
     Equal(false, (await Shot("killershot_settings", new { })).IsError);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT", null);
     Console.WriteLine("PASS native KillerShot adapters");
+    await KillerShotReviewChecks.RunAsync(Environment.ProcessPath!, root);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
+    try { await PdfReviewChecks.RunAsync(Environment.ProcessPath!, root); }
+    finally { Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", null); }
 }
 finally
 {
