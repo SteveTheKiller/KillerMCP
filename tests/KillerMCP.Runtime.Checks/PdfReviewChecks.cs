@@ -26,6 +26,11 @@ internal static class PdfReviewChecks
             finally { Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", previousNotes); }
         }
         finally { Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_HELP_STYLE", null); }
+        var adapters = (await KillerPdfAdapter.CreateAsync(executable)).ToDictionary(adapter => adapter.Tool.Name);
+        var sourcePdf = Path.Combine(root, "review-source.pdf");
+        File.WriteAllText(sourcePdf, "fixture");
+        using var invisible = JsonDocument.Parse(JsonSerializer.Serialize(new { path = sourcePdf, output = Path.Combine(root, "invisible-signature.pdf"), certificate = "fixture", appearanceCorner = "top-right" }));
+        Require((await adapters["killerpdf_sign"].CallAsync(invisible.RootElement, CancellationToken.None)).IsError, "Signature appearance requires a page");
         Console.WriteLine("PASS PDF review regressions");
     }
 

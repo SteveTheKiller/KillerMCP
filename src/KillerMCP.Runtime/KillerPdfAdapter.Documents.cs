@@ -180,7 +180,7 @@ public static partial class KillerPdfAdapter
         yield return Action("killerpdf_list_macros", "--macro <in.pdf>", "List the saved KillerPDF macros and the starter macros with their steps.",
             Schema(new JsonObject()), _ => ["--macro", "--list"]) with { InputExtensions = [] };
         yield return FileOperation("killerpdf_sign", "--sign <in.pdf>", "Digitally sign a local PDF into a new PDF with a .pfx certificate file or a certificate from the Windows personal store, optionally with a trusted timestamp from a timestamp server and a visible signature. Never changes the source.",
-            Schema(new JsonObject
+            SignatureSchema(new JsonObject
             {
                 ["path"] = PdfPath(), ["output"] = NewPdf(), ["pfx"] = FilePath("Absolute path to a .pfx or .p12 certificate file"), ["pfxPassword"] = Password(),
                 ["certificate"] = Text(256, null, "Thumbprint or name of a signing certificate in the Windows personal store"),
@@ -189,7 +189,7 @@ public static partial class KillerPdfAdapter
                 ["appearancePage"] = Integer(1, 100000), ["appearanceCorner"] = Choice("bottom-left", "bottom-right", "top-left", "top-right"),
                 ["appearanceText"] = Text(1024, null, "Visible signature text; {name}, {date}, {reason} and {location} are filled in"),
                 ["width"] = Range(72, 14400), ["height"] = Range(36, 14400), ["fontSize"] = Range(6, 72),
-            }, "path", "output"),
+            }),
             (input, output) => SignArguments(input, output), 120)
             with { ExtraFiles = ["pfx"] };
         yield return new Operation("--scan <out.pdf>", OutputKind.File, new RuntimeTool("killerpdf_scan", "Scan pages through a TWAIN scanner into a new local PDF. Uses the named scanner, or the last one used, or the first found.",
@@ -202,6 +202,16 @@ public static partial class KillerPdfAdapter
             Schema(new JsonObject { ["images"] = ListOf(FilePath("Absolute path to a local .png, .jpg, .jpeg, .tif, .tiff, .bmp or .gif image", "\\.(?:[Pp][Nn][Gg]|[Jj][Pp][Ee]?[Gg]|[Tt][Ii][Ff][Ff]?|[Bb][Mm][Pp]|[Gg][Ii][Ff])$"), 1, 50), ["output"] = NewPdf() }, "images", "output")),
             (input, output) => ["--merge", output, .. Strings(input, "images")], 300)
             with { InputExtensions = [], ExtraFiles = ["images"] };
+    }
+
+    private static JsonObject SignatureSchema(JsonObject properties)
+    {
+        var schema = Schema(properties, "path", "output");
+        var dependencies = new JsonObject();
+        foreach (var name in new[] { "appearanceCorner", "appearanceText", "width", "height", "fontSize" })
+            dependencies[name] = new JsonArray("appearancePage");
+        schema["dependentRequired"] = dependencies;
+        return schema;
     }
 
     private static List<string> SignArguments(JsonElement input, string output)
@@ -307,6 +317,12 @@ public static partial class KillerPdfAdapter
     // range and array items.
     private static string? ValidateValues(JsonElement input, JsonObject schema)
     {
+        if (schema["dependentRequired"] is JsonObject dependencies)
+            foreach (var (name, required) in dependencies)
+                if (input.TryGetProperty(name, out _) && required is JsonArray names)
+                    foreach (var dependency in names)
+                        if (!input.TryGetProperty(dependency!.GetValue<string>(), out _))
+                            return $"{name} requires {dependency.GetValue<string>()}";
         foreach (var (name, node) in schema["properties"]!.AsObject())
             if (node is JsonObject property && input.TryGetProperty(name, out var value) && !Matches(value, property))
                 return $"Invalid {name}";
