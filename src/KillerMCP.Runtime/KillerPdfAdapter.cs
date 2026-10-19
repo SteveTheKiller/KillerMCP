@@ -137,7 +137,9 @@ public static partial class KillerPdfAdapter
     {
         var problem = ValidateOperation(input, definition);
         if (problem is not null) return Error(problem);
-        var temporary = Path.Combine(Path.GetTempPath(), "killermcp-pdf-" + Guid.NewGuid().ToString("N"));
+        var stagingParent = definition.Kind == OutputKind.Directory
+            ? Path.GetDirectoryName(String(input, "outputFolder"))! : Path.GetTempPath();
+        var temporary = Path.Combine(stagingParent, "killermcp-pdf-" + Guid.NewGuid().ToString("N"));
         try
         {
             if (definition.Kind == OutputKind.Action)

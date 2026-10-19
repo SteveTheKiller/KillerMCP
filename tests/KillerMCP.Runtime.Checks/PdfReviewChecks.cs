@@ -31,6 +31,17 @@ internal static class PdfReviewChecks
         File.WriteAllText(sourcePdf, "fixture");
         using var invisible = JsonDocument.Parse(JsonSerializer.Serialize(new { path = sourcePdf, output = Path.Combine(root, "invisible-signature.pdf"), certificate = "fixture", appearanceCorner = "top-right" }));
         Require((await adapters["killerpdf_sign"].CallAsync(invisible.RootElement, CancellationToken.None)).IsError, "Signature appearance requires a page");
+        if (Environment.GetEnvironmentVariable("KILLERMCP_CHECK_SECOND_VOLUME") is { Length: > 0 } otherVolume)
+        {
+            string destination = Path.Combine(otherVolume, "split-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                using var split = JsonDocument.Parse(JsonSerializer.Serialize(new { path = sourcePdf, outputFolder = destination }));
+                var result = await adapters["killerpdf_split"].CallAsync(split.RootElement, CancellationToken.None);
+                Require(!result.IsError && File.Exists(Path.Combine(destination, "item-1.pdf")), "Directory output must publish across volume roots: " + result.Text);
+            }
+            finally { if (Directory.Exists(destination)) Directory.Delete(destination, true); }
+        }
         Console.WriteLine("PASS PDF review regressions");
     }
 
