@@ -39,6 +39,12 @@ internal static class PdfReviewChecks
         File.WriteAllText(Path.Combine(second, "DOCUMENT.PDF"), "fixture two");
         using var duplicateBates = JsonDocument.Parse(JsonSerializer.Serialize(new { inputs = new[] { Path.Combine(first, "document.pdf"), Path.Combine(second, "DOCUMENT.PDF") }, outputFolder = Path.Combine(root, "bates-collision") }));
         Require((await adapters["killerpdf_bates"].CallAsync(duplicateBates.RootElement, CancellationToken.None)).IsError, "Bates must reject case-insensitive duplicate output file names");
+        string otherFile = Path.Combine(root, "not-a-pdf-or-macro.txt");
+        File.WriteAllText(otherFile, "{}");
+        using var invalidMacro = JsonDocument.Parse(JsonSerializer.Serialize(new { path = sourcePdf, output = Path.Combine(root, "invalid-macro-extension.pdf"), macroFile = otherFile }));
+        Require((await adapters["killerpdf_run_macro"].CallAsync(invalidMacro.RootElement, CancellationToken.None)).IsError, "Exported macros must use the advertised JSON extension");
+        using var invalidBates = JsonDocument.Parse(JsonSerializer.Serialize(new { inputs = new[] { otherFile }, outputFolder = Path.Combine(root, "bates-invalid-extension") }));
+        Require((await adapters["killerpdf_bates"].CallAsync(invalidBates.RootElement, CancellationToken.None)).IsError, "Bates must accept only advertised PDF inputs");
         Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_RENAME", "1");
         try
         {

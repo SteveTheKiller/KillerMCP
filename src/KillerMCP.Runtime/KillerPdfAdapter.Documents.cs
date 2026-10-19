@@ -171,7 +171,7 @@ public static partial class KillerPdfAdapter
             {
                 ["path"] = PdfPath(), ["output"] = NewPdf(),
                 ["macro"] = Text(128, "^(?:starter:(?:archival|sharing|scanning|privacy)|(?!--)[^\\\\/:*?\"<>|]+)$", "A saved macro's name, or starter:archival, starter:sharing, starter:scanning or starter:privacy"),
-                ["macroFile"] = FilePath("Absolute path to an exported macro .json file"),
+                ["macroFile"] = FilePath("Absolute path to an exported macro .json file", "\\.[Jj][Ss][Oo][Nn]$"),
                 ["language"] = Language(), ["text"] = Text(512), ["terms"] = ListOf(Text(512), 1, 500), ["rasterize"] = Boolean(false),
             }, "path", "output"),
             (input, output) => Terms(Options(["--macro", String(input, "path"), input.TryGetProperty("macroFile", out var file) ? file.GetString()! : OptionalString(input, "macro", "starter:sharing"), output, "--lang", OptionalString(input, "language", "eng")],
