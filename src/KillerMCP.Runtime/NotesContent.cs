@@ -27,16 +27,25 @@ internal static class NotesContent
 
     // The arguments that carry the note text, and the temporary folder to delete afterward when
     // the text went into a file. Error is set when KillerNotes cannot take text this long.
-    internal static async Task<(string[] Arguments, string? Folder, string? Error)> ArgumentsAsync(string notes, string content, CancellationToken token)
+    internal static async Task<(string[] Arguments, string? Folder, string? Error)> ArgumentsAsync(string notes, string content, CancellationToken token, IEnumerable<string>? otherArguments = null)
     {
-        if (content.Length <= CommandLineLimit) return (["--content", content], null, null);
+        if (content.Length <= CommandLineLimit && ProcessRunner.FitsCommandLine(notes, Prefix(notes).Concat(otherArguments ?? []).Concat(["--content", content])))
+            return (["--content", content], null, null);
         if (content.Length > NoteLimit) return ([], null, "The note text is longer than the 500,000 characters a KillerNotes note holds");
-        if (!await SupportsFileAsync(notes, token).ConfigureAwait(false)) return ([], null, "This note is longer than 30,000 characters; update KillerNotes to save notes this long");
+        if (!await SupportsFileAsync(notes, token).ConfigureAwait(false)) return ([], null, "This note is too large for a command line; update KillerNotes to save it from a file");
         var folder = Path.Combine(Path.GetTempPath(), "killermcp-note-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(folder);
-        var file = Path.Combine(folder, "note.md");
-        await File.WriteAllTextAsync(file, content, new UTF8Encoding(false), token).ConfigureAwait(false);
-        return (["--content-file", file], folder, null);
+        try
+        {
+            Directory.CreateDirectory(folder);
+            var file = Path.Combine(folder, "note.md");
+            await File.WriteAllTextAsync(file, content, new UTF8Encoding(false), token).ConfigureAwait(false);
+            return (["--content-file", file], folder, null);
+        }
+        catch
+        {
+            Delete(folder);
+            throw;
+        }
     }
 
     internal static void Delete(string? folder)

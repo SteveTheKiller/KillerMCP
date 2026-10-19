@@ -10,6 +10,9 @@ internal static class ProcessRunner
     // CreateProcess rejects command lines longer than 32,767 characters.
     private const int MaximumCommandLineLength = 32_000;
 
+    internal static bool FitsCommandLine(string executable, IEnumerable<string> arguments) =>
+        executable.Length + 3 + arguments.Sum(EstimatedLength) <= MaximumCommandLineLength;
+
     private static int EstimatedLength(string argument)
     {
         var length = argument.Length + 3;

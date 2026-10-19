@@ -249,13 +249,13 @@ public static partial class IntegrationAdapter
     // KillerNotes in a file when it accepts one.
     private static async Task<AppCallResult> CreateNote(string notes, string title, string content, string? group, CancellationToken token)
     {
-        var (contentArguments, folder, problem) = await NotesContent.ArgumentsAsync(notes, content, token).ConfigureAwait(false);
+        var args = new List<string> { "create", "--title", title };
+        if (!string.IsNullOrWhiteSpace(group)) args.AddRange(["--group", group!]);
+        var (contentArguments, folder, problem) = await NotesContent.ArgumentsAsync(notes, content, token, args).ConfigureAwait(false);
         if (problem is not null) return Error(problem);
         try
         {
-            var args = new List<string> { "create", "--title", title };
             args.AddRange(contentArguments);
-            if (!string.IsNullOrWhiteSpace(group)) args.AddRange(["--group", group!]);
             var result = await RunApp(notes, args, 30, token).ConfigureAwait(false);
             return result.ExitCode == 0 && !result.OutputExceeded ? Ok(result.StandardOutput.Trim()) : ProcessError("KillerNotes", result);
         }

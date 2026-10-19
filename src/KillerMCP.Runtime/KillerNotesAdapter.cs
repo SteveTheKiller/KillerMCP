@@ -45,10 +45,14 @@ public static class KillerNotesAdapter
         try
         {
             // Text too long for a command line goes to KillerNotes in a file.
-            int index = arguments.IndexOf("--content");
-            if (index >= 0 && index + 1 < arguments.Count && arguments[index + 1].Length > NotesContent.CommandLineLimit)
+            int index = -1;
+            if (name is "killernotes_create" or "killernotes_update")
+                for (int flag = 1; flag + 1 < arguments.Count; flag += 2)
+                    if (arguments[flag] == "--content") { index = flag; break; }
+            if (index >= 0)
             {
-                var prepared = await NotesContent.ArgumentsAsync(path, arguments[index + 1], token).ConfigureAwait(false);
+                var prepared = await NotesContent.ArgumentsAsync(path, arguments[index + 1], token,
+                    arguments.Where((_, position) => position != index && position != index + 1)).ConfigureAwait(false);
                 if (prepared.Error is not null) return new AppCallResult(prepared.Error, true);
                 arguments.RemoveRange(index, 2);
                 arguments.InsertRange(index, prepared.Arguments);

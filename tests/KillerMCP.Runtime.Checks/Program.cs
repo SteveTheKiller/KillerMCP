@@ -284,8 +284,37 @@ try
     var longCreated = await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(longNote.RootElement, CancellationToken.None);
     Equal(false, longCreated.IsError);
     Equal(40000, JsonDocument.Parse(longCreated.Text).RootElement.GetProperty("characters").GetInt32());
+    using var quotedNote = JsonDocument.Parse(JsonSerializer.Serialize(new { title = "Quoted", content = new string('"', 20000) }));
+    var quotedCreated = await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(quotedNote.RootElement, CancellationToken.None);
+    Equal(false, quotedCreated.IsError);
+    Equal(20000, JsonDocument.Parse(quotedCreated.Text).RootElement.GetProperty("characters").GetInt32());
+    using var flagTitle = JsonDocument.Parse(JsonSerializer.Serialize(new { title = "--content", content = new string('x', 40000) }));
+    var flagTitleCreated = await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(flagTitle.RootElement, CancellationToken.None);
+    Equal(false, flagTitleCreated.IsError);
+    Equal(40000, JsonDocument.Parse(flagTitleCreated.Text).RootElement.GetProperty("characters").GetInt32());
+    var noteTemp = Path.Combine(root, "cancelled-note-temp");
+    Directory.CreateDirectory(noteTemp);
+    var previousTemp = Environment.GetEnvironmentVariable("TEMP");
+    var previousTmp = Environment.GetEnvironmentVariable("TMP");
+    try
+    {
+        Environment.SetEnvironmentVariable("TEMP", noteTemp);
+        Environment.SetEnvironmentVariable("TMP", noteTemp);
+        Equal(Path.GetFullPath(noteTemp), Path.TrimEndingDirectorySeparator(Path.GetTempPath()));
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        try { await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(longNote.RootElement, cancelled.Token); }
+        catch (OperationCanceledException) { }
+        Equal(0, Directory.GetFileSystemEntries(noteTemp).Length);
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("TEMP", previousTemp);
+        Environment.SetEnvironmentVariable("TMP", previousTmp);
+    }
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", null);
     Console.WriteLine("PASS native KillerNotes adapter");
+    if (args.Contains("--notes-only", StringComparer.Ordinal)) return;
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", "1");
     var calendarAdapter = await KillendarAdapter.CreateAsync(Environment.ProcessPath);
