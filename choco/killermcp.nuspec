@@ -9,7 +9,7 @@
     <authors>Steve the Killer</authors>
     <copyright>Copyright (c) 2026 Steve the Killer</copyright>
     <projectUrl>https://killertools.net/mcp</projectUrl>
-    <iconUrl>https://raw.githubusercontent.com/SteveTheKiller/KillerMCP/main/assets/KillerMCP.ico</iconUrl>
+    <iconUrl>https://cdn.jsdelivr.net/gh/SteveTheKiller/KillerMCP@vREPLACE_VERSION/assets/KillerMCP.ico</iconUrl>
     <licenseUrl>https://github.com/SteveTheKiller/KillerMCP/blob/main/LICENSE</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <projectSourceUrl>https://github.com/SteveTheKiller/KillerMCP</projectSourceUrl>
