@@ -31,6 +31,14 @@ internal static class PdfReviewChecks
         File.WriteAllText(sourcePdf, "fixture");
         using var invisible = JsonDocument.Parse(JsonSerializer.Serialize(new { path = sourcePdf, output = Path.Combine(root, "invisible-signature.pdf"), certificate = "fixture", appearanceCorner = "top-right" }));
         Require((await adapters["killerpdf_sign"].CallAsync(invisible.RootElement, CancellationToken.None)).IsError, "Signature appearance requires a page");
+        var first = Path.Combine(root, "first");
+        var second = Path.Combine(root, "second");
+        Directory.CreateDirectory(first);
+        Directory.CreateDirectory(second);
+        File.WriteAllText(Path.Combine(first, "document.pdf"), "fixture one");
+        File.WriteAllText(Path.Combine(second, "DOCUMENT.PDF"), "fixture two");
+        using var duplicateBates = JsonDocument.Parse(JsonSerializer.Serialize(new { inputs = new[] { Path.Combine(first, "document.pdf"), Path.Combine(second, "DOCUMENT.PDF") }, outputFolder = Path.Combine(root, "bates-collision") }));
+        Require((await adapters["killerpdf_bates"].CallAsync(duplicateBates.RootElement, CancellationToken.None)).IsError, "Bates must reject case-insensitive duplicate output file names");
         if (Environment.GetEnvironmentVariable("KILLERMCP_CHECK_SECOND_VOLUME") is { Length: > 0 } otherVolume)
         {
             string destination = Path.Combine(otherVolume, "split-" + Guid.NewGuid().ToString("N"));

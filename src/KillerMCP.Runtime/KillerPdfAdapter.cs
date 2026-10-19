@@ -238,6 +238,15 @@ public static partial class KillerPdfAdapter
         if (fileProblem is not null) return fileProblem;
         var valueProblem = ValidateValues(input, definition.Tool.InputSchema);
         if (valueProblem is not null) return valueProblem;
+        if (definition.Tool.Name == "killerpdf_bates")
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var source in Strings(input, "inputs"))
+            {
+                if (!source.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) return "Bates inputs must be PDF files";
+                if (!names.Add(Path.GetFileName(source))) return "Bates inputs must have different file names so every stamped PDF is preserved";
+            }
+        }
         if (!OptionalPageRange(input, "pages")) return "Invalid page range";
         if (!OptionalInteger(input, "dpi", 36, 1200)) return "DPI must be between 36 and 1200";
         if (!OptionalInteger(input, "copies", 1, 99)) return "Copies must be between 1 and 99";
