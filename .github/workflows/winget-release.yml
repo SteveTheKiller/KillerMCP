@@ -29,6 +29,10 @@ jobs:
           Install-Module Microsoft.WinGet.Client -Scope CurrentUser -Force -Repository PSGallery
           Repair-WinGetPackageManager -Latest
           winget --version
+        env:
+          # Without a token the module's GitHub release lookup is anonymous and shares the
+          # hosted runner's IP rate limit, which fails the job before anything is submitted.
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Install Komac
         run: |
