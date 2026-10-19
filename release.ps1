@@ -57,6 +57,12 @@ if ((git rev-parse HEAD).Trim() -ne (git rev-parse origin/main).Trim()) {
 if (-not (Test-Path -LiteralPath $engineProject -PathType Leaf)) {
     Fail 'The pinned KillerTools submodule is missing. Run git submodule update --init.'
 }
+# The Microsoft Store listing installs the versioned installer the Cloudflare Worker serves from
+# the GitHub release. Check the Store credentials and that no submission is in progress now, so a
+# problem stops the release before anything is built or published.
+$storeScript = Join-Path $PSScriptRoot 'store\Submit-StoreRelease.ps1'
+$storeArgs = @{ ProductId = 'XP8M0LV7XTWKG5'; PackageUrl = "https://killertools.net/store/killermcp/$Version/KillerMCP-Setup.exe" }
+& $storeScript @storeArgs -PreflightOnly
 $submoduleState = @(git submodule status --recursive)
 if ($LASTEXITCODE -ne 0 -or $submoduleState.Count -eq 0 -or @($submoduleState | Where-Object { $_ -match '^[+-]' }).Count) {
     Fail 'The KillerTools submodule is missing or differs from the pinned commit.'
@@ -160,6 +166,15 @@ if (-not $DryRun) {
     gh release create $Tag $installer $sumsFile --title "KillerMCP $Tag" --notes-file $notesFile --verify-tag
     if ($LASTEXITCODE -ne 0) { Fail 'GitHub release creation failed.' }
     gh release view $Tag --json url --jq '.url'
+    Step "Submitting $Tag to the Microsoft Store"
+    # The GitHub release is already published, so a Store failure is reported with the exact retry
+    # command rather than failing the release.
+    try { & $storeScript @storeArgs }
+    catch {
+        Write-Host "WARNING: The Microsoft Store submission did not finish: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "Retry only the Store step with:" -ForegroundColor Yellow
+        Write-Host "  & '$storeScript' -ProductId $($storeArgs.ProductId) -PackageUrl $($storeArgs.PackageUrl)" -ForegroundColor Yellow
+    }
 } else {
     Write-Host ''
     Write-Host 'DryRun: release artifacts are verified. Nothing was published.' -ForegroundColor Green
