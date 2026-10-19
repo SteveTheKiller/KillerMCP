@@ -66,10 +66,14 @@ namespace KillerMCP.Setup
                         return KillerFamily.Deployment.InstallerExitCodes.SecurityRejected;
                     }
                     if (!HasRuntime10(isolated)) return MissingRuntimeExitCode;
+                    int? detached = ClientJobEscape.RunOutsideClientJob(args);
+                    if (detached.HasValue) return detached.Value;
                     Install(destination);
                     if (notify) NotifySuccess(destination);
                     return 0;
                 }
+                int? detachedWizard = ClientJobEscape.RunOutsideClientJob(args);
+                if (detachedWizard.HasValue) return detachedWizard.Value;
                 TaskbarIdentity.UseInstaller();
                 return InstallerWizard.Run(destination, isolated);
             }
