@@ -34,9 +34,9 @@ Git $seed @('init', '--initial-branch=main', '--quiet')
 Git $seed @('config', 'user.name', $authorName)
 Git $seed @('config', 'user.email', $authorEmail)
 Copy-Item -LiteralPath (Join-Path $repository 'release.ps1') -Destination (Join-Path $seed 'release.ps1')
-FixtureFile (Join-Path $seed 'src\KillerMCP\KillerMCP.csproj') '<Project><PropertyGroup><Version>0.6.0</Version></PropertyGroup></Project>'
+FixtureFile (Join-Path $seed 'src\KillerMCP\KillerMCP.csproj') '<Project><PropertyGroup><Version>0.6.0</Version><ReleaseDate>2026-10-20</ReleaseDate></PropertyGroup></Project>'
 FixtureFile (Join-Path $seed 'scripts\Test-PluginVersion.ps1') "Write-Output 'Fixture plugin check'"
-FixtureFile (Join-Path $seed 'CHANGELOG.md') '## [0.6.0] - Unreleased'
+FixtureFile (Join-Path $seed 'CHANGELOG.md') '## [0.6.0] - 2026-10-20'
 # Store submission is deferred; even an unavailable Store must not block the build.
 FixtureFile (Join-Path $seed 'store\Submit-StoreRelease.ps1') "throw 'STORE_MUST_NOT_RUN'"
 Git $seed @('-c', 'protocol.file.allow=always', 'submodule', 'add', '--quiet', $engine, 'dependencies/KillerTools')
@@ -63,6 +63,22 @@ foreach ($mode in @('-DryRun', '-SkipSign')) {
 }
 $matched = Join-Path $scratch 'matched'
 Git $scratch @('-c', 'protocol.file.allow=always', 'clone', '--recurse-submodules', '--quiet', $remote, $matched)
+foreach ($mode in @('-DryRun', '-SkipSign', '')) {
+    foreach ($case in @(
+        @{ Heading = 'Unreleased'; Error = '*still marked Unreleased*' },
+        @{ Heading = '2026-10-19'; Error = '*ReleaseDate must match*' }
+    )) {
+        FixtureFile (Join-Path $matched 'CHANGELOG.md') ("## [0.6.0] - " + $case.Heading)
+        $command = "function global:dotnet { Write-Output 'BUILD_STARTED'; `$global:LASTEXITCODE = 17 }; & '$matched\release.ps1' $mode"
+        $output = & $hostExecutable -NoProfile -ExecutionPolicy Bypass -Command $command 2>&1
+        $text = $output -join "`n"
+        if ($LASTEXITCODE -ne 1 -or $text -notlike $case.Error -or $text -like '*BUILD_STARTED*') {
+            throw "Release date validation failed for '$mode' and '$($case.Heading)':`n$text`nFixture retained at $scratch"
+        }
+    }
+}
+FixtureFile (Join-Path $matched 'CHANGELOG.md') '## [0.6.0] - 2026-10-20'
+Write-Output 'PASS: dry runs and publishing reject unreleased or mismatched dates before building.'
 $command = "function global:dotnet { Write-Output 'BUILD_STARTED'; `$global:LASTEXITCODE = 17 }; & '$matched\release.ps1' -DryRun"
 $output = & $hostExecutable -NoProfile -ExecutionPolicy Bypass -Command $command 2>&1
 $text = $output -join "`n"

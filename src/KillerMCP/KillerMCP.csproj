@@ -4,7 +4,7 @@
     <AssemblyName>KillerMCP</AssemblyName>
     <RootNamespace>KillerMCP</RootNamespace>
     <Version>0.7.1</Version>
-    <ReleaseDate>2026-10-19</ReleaseDate>
+    <ReleaseDate>2026-10-20</ReleaseDate>
     <ApplicationIcon>..\..\assets\KillerMCP.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>

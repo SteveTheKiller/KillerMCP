@@ -77,13 +77,17 @@ if ($dashExit -eq 0) {
 }
 
 $changelog = Get-Content -LiteralPath $changelogFile -Raw
+if ($changelog -match "(?m)^## \[$([regex]::Escape($Version))\] - Unreleased\r?$") {
+    Fail "CHANGELOG.md section [$Version] is still marked Unreleased."
+}
+if ($changelog -notmatch "(?m)^## \[$([regex]::Escape($Version))\] - (\d{4}-\d{2}-\d{2})\r?$") {
+    Fail "CHANGELOG.md has no dated [$Version] section."
+}
+$changelogDate = $Matches[1]
+if ([string]$project.Project.PropertyGroup.ReleaseDate -cne $changelogDate) {
+    Fail "ReleaseDate must match the changelog date $changelogDate."
+}
 if (-not $DryRun) {
-    if ($changelog -match "(?m)^## \[$([regex]::Escape($Version))\] - Unreleased$") {
-        Fail "CHANGELOG.md section [$Version] is still marked Unreleased."
-    }
-    if ($changelog -notmatch "(?m)^## \[$([regex]::Escape($Version))\] - \d{4}-\d{2}-\d{2}$") {
-        Fail "CHANGELOG.md has no dated [$Version] section."
-    }
     $dirty = @(git status --porcelain)
     if ($dirty.Count) { Fail "The working tree is not clean:`n$($dirty -join "`n")" }
     if (git tag --list $Tag) { Fail "Tag $Tag already exists locally." }

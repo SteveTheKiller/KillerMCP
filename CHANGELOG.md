@@ -4,13 +4,14 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.1] - Unreleased
+## [0.7.1] - 2026-10-20
 
 ### Fixed
 
 - Setup releases its inherited installation-folder lock before replacing files during an update.
 - WinGet publishing registers PSGallery when the build runner is missing it.
 - Releases temporarily skip Microsoft Store checks and submission.
+- Dry runs reject an undated changelog or a mismatched release date before building.
 
 ## [0.7.0] - 2026-10-20
 
