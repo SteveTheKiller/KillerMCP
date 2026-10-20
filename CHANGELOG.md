@@ -8,6 +8,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
+- Setup registers agent clients all or nothing. A conflict in one client changes none, and a failure partway puts back the clients already changed. Uninstall removes KillerMCP from every client it can and lists the ones it could not change instead of stopping.
+- Client settings that are empty or have trailing commas are read normally. A settings file with comments, such as Gemini CLI's, is left untouched and setup shows the exact entry to add.
 - PDFs made from notes, reports and agent content render fully offline. A note with a refresh, base, frame, script or remote image can no longer redirect the page, reach a server or file share, or stop the PDF from being created.
 - File tools open network paths, mapped drives and links to them only on servers in the local network or listed in `%LOCALAPPDATA%\KillerMCP\network-servers.json`, so an agent cannot send your Windows sign-in to an outside server. Device paths are refused.
 - KillerMCP answers right away when it starts, even when a Killer app is slow, hung or broken. Apps are asked for their commands in parallel, and one that does not answer is left out instead of delaying or closing the server.

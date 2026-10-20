@@ -122,6 +122,63 @@ try
     Equal(7, ClientConfiguration.RemoveAll(executable, environment).Count);
     Equal(false, File.Exists(codexState));
     foreach (var name in clientNames) Equal(false, Read(environment[$"KILLERMCP_TEST_{name}_CONFIG"]!)["mcpServers"]!.AsObject().ContainsKey(name == "CLAUDE_DESKTOP" ? "KillerMCP" : "killermcp"));
+
+    // Registration is all or nothing. A conflict in any client leaves every client untouched, and a
+    // write that fails partway puts back the clients already changed, so no client is left pointing
+    // at a KillerMCP that setup then removes.
+    string ConfigPath(string name) => environment[$"KILLERMCP_TEST_{name}_CONFIG"]!;
+    foreach (var name in clientNames) File.WriteAllText(ConfigPath(name), new JsonObject { ["preservedSetting"] = "keep" }.ToJsonString());
+    File.WriteAllText(ConfigPath("CURSOR"), new JsonObject { ["mcpServers"] = new JsonObject { ["killermcp"] = new JsonObject { ["command"] = Path.Combine(root, "different-host"), ["args"] = new JsonArray() } } }.ToJsonString());
+    var untouched = clientNames.ToDictionary(name => name, name => File.ReadAllText(ConfigPath(name)));
+    Throws<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, environment));
+    foreach (var name in clientNames) Equal(untouched[name], File.ReadAllText(ConfigPath(name)));
+    Equal(false, File.Exists(codexState));
+    File.WriteAllText(ConfigPath("CURSOR"), new JsonObject { ["preservedSetting"] = "keep" }.ToJsonString());
+    var windsurf = ConfigPath("WINDSURF");
+    File.Delete(windsurf);
+    Directory.CreateDirectory(windsurf);
+    untouched = clientNames.Where(name => name != "WINDSURF").ToDictionary(name => name, name => File.ReadAllText(ConfigPath(name)));
+    Throws<Exception>(() => ClientConfiguration.RegisterAll(executable, environment));
+    foreach (var name in untouched.Keys) Equal(untouched[name], File.ReadAllText(ConfigPath(name)));
+    Equal(false, File.Exists(codexState));
+    Directory.Delete(windsurf);
+    File.WriteAllText(windsurf, "{}");
+
+    // Uninstall removes KillerMCP from every client it can and reports the ones it could not change.
+    ClientConfiguration.RegisterAll(executable, environment);
+    File.WriteAllText(ConfigPath("GEMINI"), "{ not json");
+    var removedWithWarning = ClientConfiguration.RemoveAll(executable, environment);
+    Equal(1, removedWithWarning.Count(message => message.StartsWith("Warning: Gemini CLI", StringComparison.Ordinal)));
+    foreach (var name in clientNames.Where(name => name != "GEMINI")) Equal(false, Read(ConfigPath(name))["mcpServers"]!.AsObject().ContainsKey(name == "CLAUDE_DESKTOP" ? "KillerMCP" : "killermcp"));
+    Equal(false, File.Exists(codexState));
+    Equal("{ not json", File.ReadAllText(ConfigPath("GEMINI")));
+
+    // An empty settings file is an empty object and trailing commas are accepted. A file with comments
+    // is never rewritten, because rewriting would drop them; setup names the exact entry to add instead.
+    var empty = Path.Combine(root, "empty.json");
+    File.WriteAllText(empty, "  \r\n");
+    Equal("KillerMCP was added to Cursor.", ClientRegistration.RegisterJsonClient(empty, "Cursor", executable));
+    Equal(executable, Read(empty)["mcpServers"]!["killermcp"]!["command"]!.GetValue<string>());
+    var trailing = Path.Combine(root, "trailing.json");
+    File.WriteAllText(trailing, "{ \"theme\": \"dark\", \"mcpServers\": { },\n}");
+    Equal("KillerMCP was added to Cursor.", ClientRegistration.RegisterJsonClient(trailing, "Cursor", executable));
+    Equal("dark", Read(trailing)["theme"]!.GetValue<string>());
+    var commented = Path.Combine(root, "commented.json");
+    var commentedText = "{\n  // keep this note\n  \"theme\": \"dark\"\n}";
+    File.WriteAllText(commented, commentedText);
+    var commentedError = Caught<CommentedSettingsException>(() => ClientRegistration.RegisterJsonClient(commented, "Gemini CLI", executable));
+    Equal(true, commentedError.Message.Contains(JsonValue.Create(executable)!.ToJsonString(), StringComparison.Ordinal));
+    Equal(commentedText, File.ReadAllText(commented));
+    File.WriteAllText(ConfigPath("GEMINI"), commentedText);
+    var withComments = ClientConfiguration.RegisterAll(executable, environment);
+    Equal(1, withComments.Count(message => message.StartsWith("Warning: Gemini CLI", StringComparison.Ordinal)));
+    Equal(commentedText, File.ReadAllText(ConfigPath("GEMINI")));
+    Equal(executable, Read(ConfigPath("CURSOR"))["mcpServers"]!["killermcp"]!["command"]!.GetValue<string>());
+    Equal(executable, Read(codexState)["transport"]!["command"]!.GetValue<string>());
+    Equal(0, ClientConfiguration.RemoveAll(executable, environment).Count(message => message.StartsWith("Warning: Gemini CLI", StringComparison.Ordinal)));
+    File.WriteAllText(ConfigPath("GEMINI"), "{\n  // keep this note\n  \"mcpServers\": { \"killermcp\": { \"command\": " + JsonValue.Create(executable)!.ToJsonString() + ", \"args\": [] } }\n}");
+    Equal(1, ClientConfiguration.RemoveAll(executable, environment).Count(message => message.StartsWith("Warning: Gemini CLI", StringComparison.Ordinal)));
+    Equal(true, File.ReadAllText(ConfigPath("GEMINI")).Contains("// keep this note", StringComparison.Ordinal));
     Console.WriteLine("PASS native KillerMCP client registration");
 }
 finally
@@ -139,6 +196,20 @@ static void Equal<T>(T expected, T actual)
     {
         throw new InvalidOperationException($"Expected {expected}, received {actual}.");
     }
+}
+
+static T Caught<T>(Action action) where T : Exception
+{
+    try
+    {
+        action();
+    }
+    catch (T exception)
+    {
+        return exception;
+    }
+
+    throw new InvalidOperationException($"Expected {typeof(T).Name}.");
 }
 
 static void Throws<T>(Action action) where T : Exception

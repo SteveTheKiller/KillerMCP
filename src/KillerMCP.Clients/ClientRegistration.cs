@@ -4,6 +4,9 @@ using System.Text.Json.Nodes;
 
 namespace KillerMCP.Clients;
 
+/// <summary>A client's settings file has comments, which rewriting would drop, so it was left unchanged.</summary>
+public sealed class CommentedSettingsException(string message) : IOException(message);
+
 public static class ClientRegistration
 {
     private const string ServerName = "killermcp";
@@ -11,9 +14,28 @@ public static class ClientRegistration
 
     public static string RegisterJsonClient(string configurationPath, string clientName, string executablePath, bool includeStdioType = false, string serverName = ServerName)
     {
+        var (root, message) = Plan(configurationPath, clientName, executablePath, includeStdioType, serverName);
+        if (root is not null) Write(configurationPath, root);
+        return message;
+    }
+
+    /// <summary>Throws the same errors RegisterJsonClient would, without writing anything, so setup can
+    /// check every client before it changes any.</summary>
+    public static void CheckJsonClient(string configurationPath, string clientName, string executablePath, bool includeStdioType = false, string serverName = ServerName) =>
+        Plan(configurationPath, clientName, executablePath, includeStdioType, serverName);
+
+    // Returns the settings to write, or null when the client already has the right connection.
+    private static (JsonObject? Root, string Message) Plan(string configurationPath, string clientName, string executablePath, bool includeStdioType, string serverName)
+    {
         ValidateArguments(configurationPath, clientName, executablePath);
-        var root = ReadRoot(configurationPath, clientName);
+        var root = ReadRoot(configurationPath, clientName, out var commented);
         var servers = ReadServers(root, clientName);
+        if (commented)
+        {
+            if (servers.TryGetPropertyValue(serverName, out var current) && Matches(current, executablePath, includeStdioType) && (serverName == ServerName || !servers.ContainsKey(ServerName)))
+                return (null, $"{clientName} already has the correct KillerMCP connection.");
+            throw new CommentedSettingsException($"{clientName} settings at {configurationPath} contain comments, so KillerMCP left them unchanged. Add this entry inside \"mcpServers\": \"{serverName}\": {Registration(executablePath, includeStdioType).ToJsonString()}");
+        }
         if (serverName != ServerName && servers.TryGetPropertyValue(ServerName, out var oldEntry))
         {
             if (!Matches(oldEntry, executablePath, includeStdioType) && !MatchesLegacy(oldEntry, executablePath, includeStdioType))
@@ -22,24 +44,21 @@ public static class ClientRegistration
                 throw new InvalidOperationException($"{clientName} has a different {serverName} connection. Its settings were left unchanged.");
             servers.Remove(ServerName);
             servers[serverName] = Registration(executablePath, includeStdioType);
-            Write(configurationPath, root);
-            return $"KillerMCP was renamed in {clientName}.";
+            return (root, $"KillerMCP was renamed in {clientName}.");
         }
         if (servers.TryGetPropertyValue(serverName, out var existing))
         {
             if (Matches(existing, executablePath, includeStdioType))
             {
-                return $"{clientName} already has the correct KillerMCP connection.";
+                return (null, $"{clientName} already has the correct KillerMCP connection.");
             }
             if (!MatchesLegacy(existing, executablePath, includeStdioType)) throw new InvalidOperationException($"{clientName} already has a different killermcp connection. Its settings were left unchanged.");
             servers[serverName] = Registration(executablePath, includeStdioType);
-            Write(configurationPath, root);
-            return $"KillerMCP was upgraded in {clientName}.";
+            return (root, $"KillerMCP was upgraded in {clientName}.");
         }
 
         servers[serverName] = Registration(executablePath, includeStdioType);
-        Write(configurationPath, root);
-        return $"KillerMCP was added to {clientName}.";
+        return (root, $"KillerMCP was added to {clientName}.");
     }
 
     public static bool RemoveJsonClient(string configurationPath, string clientName, string executablePath, bool includeStdioType = false, string serverName = ServerName)
@@ -50,7 +69,7 @@ public static class ClientRegistration
             return false;
         }
 
-        var root = ReadRoot(configurationPath, clientName);
+        var root = ReadRoot(configurationPath, clientName, out var commented);
         var servers = ReadServers(root, clientName);
         if (!servers.TryGetPropertyValue(serverName, out var existing))
         {
@@ -62,6 +81,7 @@ public static class ClientRegistration
             throw new InvalidOperationException($"{clientName} has a different killermcp connection. It was left unchanged.");
         }
 
+        if (commented) throw new CommentedSettingsException($"{clientName} settings at {configurationPath} contain comments, so KillerMCP left them unchanged.");
         servers.Remove(serverName);
         Write(configurationPath, root);
         return true;
@@ -104,17 +124,28 @@ public static class ClientRegistration
         return registration;
     }
 
-    private static JsonObject ReadRoot(string path, string clientName)
+    // An empty file is an empty object and trailing commas are accepted. A file that parses only when
+    // comments are skipped is reported as commented, so callers never write it back without them.
+    private static JsonObject ReadRoot(string path, string clientName, out bool commented)
     {
-        if (!File.Exists(path))
-        {
-            return new JsonObject();
-        }
-
+        commented = false;
+        if (!File.Exists(path)) return new JsonObject();
+        var text = File.ReadAllText(path);
+        if (string.IsNullOrWhiteSpace(text)) return new JsonObject();
         try
         {
-            return JsonNode.Parse(File.ReadAllText(path)) as JsonObject
+            return JsonNode.Parse(text, documentOptions: new JsonDocumentOptions { AllowTrailingCommas = true }) as JsonObject
                 ?? throw new InvalidDataException($"{clientName} MCP configuration is invalid.");
+        }
+        catch (JsonException)
+        {
+        }
+        try
+        {
+            var root = JsonNode.Parse(text, documentOptions: new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip }) as JsonObject
+                ?? throw new InvalidDataException($"{clientName} MCP configuration is invalid.");
+            commented = true;
+            return root;
         }
         catch (JsonException exception)
         {

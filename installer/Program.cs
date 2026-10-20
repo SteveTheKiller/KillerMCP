@@ -53,8 +53,10 @@ namespace KillerMCP.Setup
                 {
                     TaskbarIdentity.UseUninstall();
                     if (!silent && !SetupDialog.ConfirmUninstall()) return 0;
-                    Uninstall(destination, removeRegistration: true);
+                    IReadOnlyList<string> warnings = Uninstall(destination, removeRegistration: true);
                     RemoveInstalledApp(destination);
+                    foreach (string warning in warnings) Console.Error.WriteLine(warning);
+                    if (!silent && warnings.Count > 0) SetupDialog.ShowFailure(ClientWarningText(warnings));
                     return 0;
                 }
                 if (silent)
@@ -123,7 +125,12 @@ namespace KillerMCP.Setup
                 if (Directory.Exists(destination)) { Directory.Move(destination, backup); movedPrevious = true; }
                 try { Directory.Move(staging, destination); }
                 catch { if (movedPrevious) Directory.Move(backup, destination); throw; }
-                try { Configure(destination, "register"); }
+                try
+                {
+                    // Clients with commented settings are left for the user, with the exact entry to add.
+                    InstallWarnings = Configure(destination, "register").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Where(line => line.StartsWith("Warning: ", StringComparison.Ordinal)).ToArray();
+                    foreach (string warning in InstallWarnings) Console.Error.WriteLine(warning);
+                }
                 catch
                 {
                     DeleteVerifiedInstallation(destination);
@@ -140,27 +147,37 @@ namespace KillerMCP.Setup
             }
         }
 
-        internal static void Uninstall(string destination, bool removeRegistration)
+        // Returns the agent clients that still list KillerMCP because they could not be changed.
+        internal static IReadOnlyList<string> Uninstall(string destination, bool removeRegistration)
         {
+            var warnings = new List<string>();
             RemoveInterruptedRemovals(destination);
-            if (!Directory.Exists(destination)) return;
-            if (!ContainsFiles(destination)) { Directory.Delete(destination, true); return; }
+            if (!Directory.Exists(destination)) return warnings;
+            if (!ContainsFiles(destination)) { Directory.Delete(destination, true); return warnings; }
             ValidateInstalled(destination, allowMissing: true);
             if (removeRegistration)
             {
-                if (File.Exists(Path.Combine(destination, "KillerMCP.Configure.exe"))) Configure(destination, "unregister");
-                else Console.Error.WriteLine("KillerMCP.Configure.exe is missing, so agent clients still list KillerMCP. Remove the killermcp entry from their MCP settings.");
+                if (File.Exists(Path.Combine(destination, "KillerMCP.Configure.exe")))
+                    warnings.AddRange(Configure(destination, "unregister").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Where(line => line.StartsWith("Warning: ", StringComparison.Ordinal)));
+                else warnings.Add("Warning: KillerMCP.Configure.exe is missing, so agent clients still list KillerMCP. Remove the killermcp entry from their MCP settings.");
             }
             // Agent clients keep the host running; deleting around it would strand a partial folder.
             CloseRunningProcesses(destination);
             DeleteVerifiedInstallation(destination, allowMissing: true);
+            return warnings;
         }
 
-        internal static void UninstallRegistered(string destination)
+        internal static IReadOnlyList<string> InstallWarnings { get; private set; } = Array.Empty<string>();
+
+        internal static IReadOnlyList<string> UninstallRegistered(string destination)
         {
-            Uninstall(destination, removeRegistration: true);
+            IReadOnlyList<string> warnings = Uninstall(destination, removeRegistration: true);
             RemoveInstalledApp(destination);
+            return warnings;
         }
+
+        internal static string ClientWarningText(IReadOnlyList<string> warnings) =>
+            "KillerMCP was removed, but these agent clients could not be updated:" + Environment.NewLine + string.Join(Environment.NewLine, warnings.Select(warning => warning.Substring("Warning: ".Length)));
 
         internal static string? InstalledVersion(string destination)
         {
@@ -175,7 +192,7 @@ namespace KillerMCP.Setup
             return File.Exists(executable) ? FileVersionInfo.GetVersionInfo(executable).FileVersion : "installed";
         }
 
-        private static void Configure(string destination, string action)
+        private static string Configure(string destination, string action)
         {
             string executable = Path.Combine(destination, "KillerMCP.exe");
             string configurator = Path.Combine(destination, "KillerMCP.Configure.exe");
@@ -195,6 +212,7 @@ namespace KillerMCP.Setup
                 string error = process.StandardError.ReadToEnd();
                 if (!process.WaitForExit(60000)) { process.Kill(); throw new TimeoutException("KillerMCP client configuration timed out."); }
                 if (process.ExitCode != 0) throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? output.Trim() : error.Trim());
+                return output;
             }
         }
 

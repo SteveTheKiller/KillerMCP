@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Windows.Controls;
 using System.Threading.Tasks;
 using System.Windows;
@@ -84,7 +85,8 @@ namespace KillerMCP.Setup
                 UpdatePreferences.Save(_preferencesPath, behavior, _initialBehavior);
                 _installed = true;
                 Heading.Text = "KillerMCP is installed";
-                Status.Text = "Installed. Restart your agent client, then start a new chat to load KillerMCP tools.";
+                Status.Text = "Installed. Restart your agent client, then start a new chat to load KillerMCP tools."
+                    + (Program.InstallWarnings.Count == 0 ? string.Empty : Environment.NewLine + string.Join(Environment.NewLine, Program.InstallWarnings.Select(warning => warning.Substring("Warning: ".Length))));
                 Status.Foreground = (Brush)FindResource("Accent");
                 InstallButton.Content = "Done";
                 InstallButton.IsEnabled = true;
@@ -108,10 +110,11 @@ namespace KillerMCP.Setup
                 UninstallButton.IsEnabled = false;
                 Heading.Text = "Uninstalling KillerMCP";
                 Status.Text = "Removing the native runtime and agent connections...";
-                await Task.WhenAll(Task.Run(() => Program.UninstallRegistered(_destination)), Task.Delay(700));
+                var uninstall = Task.Run(() => Program.UninstallRegistered(_destination));
+                await Task.WhenAll(uninstall, Task.Delay(700));
                 _installed = true;
                 Heading.Text = "KillerMCP was uninstalled";
-                Status.Text = "KillerMCP and its agent connections were removed.";
+                Status.Text = uninstall.Result.Count == 0 ? "KillerMCP and its agent connections were removed." : Program.ClientWarningText(uninstall.Result);
                 Status.Foreground = (Brush)FindResource("Accent");
                 InstallButton.Content = "Done";
                 InstallButton.IsEnabled = true;

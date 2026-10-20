@@ -14,23 +14,109 @@ public static class ClientConfiguration
         if (!Path.IsPathFullyQualified(executablePath)) throw new ArgumentException("KillerMCP executable path must be absolute.");
         var values = environment ?? Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>()
             .ToDictionary(item => (string)item.Key, item => item.Value?.ToString(), StringComparer.OrdinalIgnoreCase);
-        var messages = new List<string>();
-
         var codex = FindCodex(values);
-        if (codex is not null) messages.Add(remove ? RemoveCodex(codex, executablePath) : RegisterCodex(codex, executablePath));
+        var clients = JsonClients(values);
+        return remove ? RemoveEverywhere(codex, clients, executablePath) : RegisterEverywhere(codex, clients, executablePath);
+    }
 
-        foreach (var client in JsonClients(values))
+    private static string ServerName(JsonClient client) => client.Name == "Claude Desktop" ? "KillerMCP" : "killermcp";
+
+    // Every client is checked before any is changed, and a change that fails puts the clients already
+    // changed back, so setup never leaves a client pointing at a KillerMCP it then removes. Codex goes
+    // last because its command line cannot be put back as exactly as a settings file.
+    private static IReadOnlyList<string> RegisterEverywhere(string? codex, IReadOnlyList<JsonClient> clients, string executablePath)
+    {
+        var messages = new List<string>();
+        var writable = new List<JsonClient>();
+        foreach (var client in clients)
         {
-            if (remove)
+            try
             {
-                if (ClientRegistration.RemoveJsonClient(client.Path, client.Name, executablePath, client.IncludeStdioType, client.Name == "Claude Desktop" ? "KillerMCP" : "killermcp")) messages.Add($"KillerMCP was removed from {client.Name}.");
+                ClientRegistration.CheckJsonClient(client.Path, client.Name, executablePath, client.IncludeStdioType, ServerName(client));
+                writable.Add(client);
             }
-            else
+            catch (CommentedSettingsException exception)
             {
-                messages.Add(ClientRegistration.RegisterJsonClient(client.Path, client.Name, executablePath, client.IncludeStdioType, client.Name == "Claude Desktop" ? "KillerMCP" : "killermcp"));
+                // Comments would be lost on rewrite, so the user adds the entry and the other clients go ahead.
+                messages.Add("Warning: " + exception.Message);
+            }
+        }
+        if (codex is not null) CheckCodex(codex, executablePath);
+        var changed = new List<(string Path, byte[]? Original)>();
+        try
+        {
+            foreach (var client in writable)
+            {
+                var original = File.Exists(client.Path) ? File.ReadAllBytes(client.Path) : null;
+                messages.Add(ClientRegistration.RegisterJsonClient(client.Path, client.Name, executablePath, client.IncludeStdioType, ServerName(client)));
+                var current = File.Exists(client.Path) ? File.ReadAllBytes(client.Path) : null;
+                if (original is null ? current is not null : current is null || !original.AsSpan().SequenceEqual(current)) changed.Add((client.Path, original));
+            }
+            if (codex is not null) messages.Add(RegisterCodex(codex, executablePath));
+        }
+        catch
+        {
+            for (var index = changed.Count - 1; index >= 0; index--) Restore(changed[index].Path, changed[index].Original);
+            throw;
+        }
+        return messages;
+    }
+
+    // Uninstall removes KillerMCP from every client it can. A client it cannot change is reported
+    // instead of stopping the rest.
+    private static IReadOnlyList<string> RemoveEverywhere(string? codex, IReadOnlyList<JsonClient> clients, string executablePath)
+    {
+        var messages = new List<string>();
+        if (codex is not null)
+        {
+            try { messages.Add(RemoveCodex(codex, executablePath)); }
+            catch (Exception exception) when (exception is InvalidOperationException or TimeoutException or IOException or System.ComponentModel.Win32Exception)
+            {
+                messages.Add("Warning: Codex was left unchanged. " + exception.Message + " Remove its killermcp server with: codex mcp remove killermcp");
+            }
+        }
+        foreach (var client in clients)
+        {
+            try
+            {
+                if (ClientRegistration.RemoveJsonClient(client.Path, client.Name, executablePath, client.IncludeStdioType, ServerName(client))) messages.Add($"KillerMCP was removed from {client.Name}.");
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or InvalidDataException or IOException or UnauthorizedAccessException)
+            {
+                messages.Add($"Warning: {client.Name} was left unchanged. {exception.Message} Remove the {ServerName(client)} entry from {client.Path} if it is still there.");
             }
         }
         return messages;
+    }
+
+    private static void Restore(string path, byte[]? original)
+    {
+        try
+        {
+            if (original is null)
+            {
+                if (File.Exists(path)) File.Delete(path);
+                return;
+            }
+            var temporary = path + ".restore-" + Guid.NewGuid().ToString("N");
+            File.WriteAllBytes(temporary, original);
+            File.Move(temporary, path, true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The failure that started the rollback is the one reported.
+        }
+    }
+
+    private static void CheckCodex(string codex, string executablePath)
+    {
+        var existing = Run(codex, ["mcp", "get", "killermcp", "--json"]);
+        if (existing.ExitCode == 0)
+        {
+            if (MatchesCodex(existing.StandardOutput, executablePath) || TryReadLegacyCodex(existing.StandardOutput, executablePath, out _, out _)) return;
+            throw new InvalidOperationException("Codex already has a different killermcp connection. Its settings were left unchanged.");
+        }
+        if (!existing.StandardError.Contains("No MCP server named", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Codex could not read its MCP configuration: " + existing.StandardError.Trim());
     }
 
     public static IReadOnlyList<JsonClient> JsonClients(IReadOnlyDictionary<string, string?>? environment = null)
