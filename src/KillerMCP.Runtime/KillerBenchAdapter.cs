@@ -15,6 +15,25 @@ public sealed record KillerBenchRun(int ExitCode, string Output, string Error, b
 /// <summary>What the desktop confirmation shows for a disruptive repair.</summary>
 public sealed record KillerBenchConfirmation(string Action, string Title, string Tier, string Effects, string Target, string Command);
 
+/// <summary>KillerBench repairs that are still running, for the host to wait for before it exits.</summary>
+public static class KillerBenchRepairJobs
+{
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Task, byte> Running = new();
+
+    internal static void Track(Task repair)
+    {
+        Running.TryAdd(repair, 0);
+        repair.ContinueWith(done => Running.TryRemove(done, out _), TaskScheduler.Default);
+    }
+
+    /// <summary>Waits until no repair is running. Returns false when one is still running at the timeout.</summary>
+    public static bool WaitForRunning(TimeSpan timeout)
+    {
+        try { return Task.WaitAll(Running.Keys.ToArray(), timeout); }
+        catch (AggregateException) { return true; }
+    }
+}
+
 /// <summary>Replaceable pieces of the KillerBench integration. Tests supply fakes; the server uses the defaults.</summary>
 public sealed class KillerBenchOptions
 {
@@ -369,12 +388,15 @@ public static partial class KillerBenchAdapter
             }
 
             job.Status = "running";
+            // Once a repair starts it runs to its own time limit. Cancelling the request that started it,
+            // for example because the agent client closed, would stop it partway and leave the PC in an
+            // unknown state, so the repair does not take the request's cancellation. The host waits for it.
             KillerBenchRun run;
             try
             {
                 run = plan.Elevate
-                    ? await Elevated(path, plan.ExecuteArguments, TimeSpan.FromSeconds(plan.ExecuteSeconds), token).ConfigureAwait(false)
-                    : await Direct(plan.ExecuteArguments, plan.ExecuteSeconds, token).ConfigureAwait(false);
+                    ? await Elevated(path, plan.ExecuteArguments, TimeSpan.FromSeconds(plan.ExecuteSeconds), CancellationToken.None).ConfigureAwait(false)
+                    : await Direct(plan.ExecuteArguments, plan.ExecuteSeconds, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Win32Exception exception) when (exception.NativeErrorCode == 1223)
             {
@@ -491,6 +513,7 @@ public static partial class KillerBenchAdapter
                 }
             }, CancellationToken.None);
             jobs[job.Id] = job;
+            if (kind == "repair") KillerBenchRepairJobs.Track(job.Work);
             await Task.WhenAny(job.Work, Task.Delay(options.Wait, token)).ConfigureAwait(false);
             return Ok(Describe(job));
         }

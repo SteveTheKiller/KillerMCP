@@ -30,6 +30,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH") == "1")
     if (bench.Length > 0 && bench[0] is "dns-cache" or "repair" or "privacy-setting")
     {
         Console.WriteLine("Fixture preamble line.");
+        if (execute && Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW_REPAIR") == "1") Thread.Sleep(3000);
         if (execute && int.TryParse(Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH_EXIT"), out var exit) && exit != 0)
         {
             Console.Write(JsonSerializer.Serialize(new { outcome = "Failed" }));
@@ -900,6 +901,26 @@ try
     Directory.Delete(KillerBenchSettings.RepairHoldPath);
     var afterUnopened = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
     Equal("Completed", Finished(await Bench("killerbench_repair_execute", new { token = afterUnopened.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
+
+    // A repair that has started runs to its end even when the request that started it is cancelled, for
+    // example because the agent client closed, so the PC is not left half repaired. The host can wait for it.
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW_REPAIR", "1");
+    var unattended = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
+    using (var closing = new CancellationTokenSource())
+    using (var unattendedRequest = JsonDocument.Parse(JsonSerializer.Serialize(new { token = unattended.GetProperty("token").GetString() })))
+    {
+        var call = benchByName["killerbench_repair_execute"].CallAsync(unattendedRequest.RootElement, closing.Token);
+        await Task.Delay(1000);
+        closing.Cancel();
+        var accepted = JsonDocument.Parse((await call).Text).RootElement.Clone();
+        Equal("running", accepted.GetProperty("status").GetString());
+        Equal(true, KillerBenchRepairJobs.WaitForRunning(TimeSpan.FromSeconds(30)));
+        using var repairPoll = JsonDocument.Parse(JsonSerializer.Serialize(new { jobId = accepted.GetProperty("jobId").GetString() }));
+        var unattendedResult = JsonDocument.Parse((await benchByName["killerbench_job"].CallAsync(repairPoll.RootElement, CancellationToken.None)).Text).RootElement.Clone();
+        Equal("Completed", unattendedResult.GetProperty("result").GetProperty("outcome").GetString());
+    }
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW_REPAIR", null);
+    Equal(null, KillerBenchSettings.ReadLock());
 
     // A repair lock that cannot be saved still blocks repairs in this host, and the result says so.
     Directory.CreateDirectory(KillerBenchSettings.LockPath);
