@@ -288,6 +288,21 @@ try
     Equal(downloads, Path.GetDirectoryName(nextDownload));
     Equal(true, Path.GetFileName(nextDownload).StartsWith("KillerMCP-Setup-0.7.0-", StringComparison.Ordinal));
     Console.WriteLine("PASS downloaded update cleanup");
+
+    // The update window keeps the other keys in the preferences file it shares with setup and replaces the
+    // file whole; a file it cannot read is treated as the default choice.
+    var preferences = Path.Combine(root, "preferences", "update-preferences.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(preferences)!);
+    File.WriteAllText(preferences, "{ \"Behavior\": \"check\", \"Other\": \"keep\" }");
+    KillerMCP.Notify.BehaviorPreference.Write(preferences, "download");
+    Equal("keep", Read(preferences)["Other"]!.GetValue<string>());
+    Equal("download", KillerMCP.Notify.BehaviorPreference.Read(preferences));
+    Equal(1, Directory.GetFiles(Path.GetDirectoryName(preferences)!).Length);
+    File.WriteAllText(preferences, "[]");
+    Equal("check", KillerMCP.Notify.BehaviorPreference.Read(preferences));
+    KillerMCP.Notify.BehaviorPreference.Write(preferences, "off");
+    Equal("off", KillerMCP.Notify.BehaviorPreference.Read(preferences));
+    Console.WriteLine("PASS update preference file");
 }
 finally
 {

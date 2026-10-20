@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -21,6 +20,8 @@ public partial class UpdateWindow : Window
     private bool _updated;
     private bool _loadingPreferences = true;
     private bool _busy;
+    // Set when the automatic download failed: the button then opens the release page, as its label says.
+    private bool _openReleaseOnClick;
     private string? _downloadedInstaller;
     private string _statusPath = string.Empty;
     private bool _exiting;
@@ -80,6 +81,7 @@ public partial class UpdateWindow : Window
         _updated = Has(args, "--updated");
         _statusPath = Value(args, "--status") ?? ReleaseNotes.DefaultStatusPath();
         _downloadedInstaller = null;
+        _openReleaseOnClick = false;
         _loadingPreferences = true;
         SelectBehavior(ReadBehavior());
         _loadingPreferences = false;
@@ -122,6 +124,7 @@ public partial class UpdateWindow : Window
         string? version = _latestVersion;
         if (version is null) return;
         _busy = true;
+        UpdateButton.IsEnabled = false;
         UpdateStateChanged?.Invoke();
         try
         {
@@ -147,11 +150,13 @@ public partial class UpdateWindow : Window
             BodyText.Text = "KillerMCP could not download and verify the update automatically.";
             SetStatus(exception.Message);
             UpdateButton.Content = "Open release";
+            _openReleaseOnClick = true;
             ShowFront();
         }
         finally
         {
             _busy = false;
+            UpdateButton.IsEnabled = true;
             UpdateStateChanged?.Invoke();
         }
     }
@@ -159,6 +164,9 @@ public partial class UpdateWindow : Window
     private async void Update_Click(object sender, RoutedEventArgs e)
     {
         if (_updated || _latestVersion is null) { Close(); return; }
+        // The background download is still running; a second one would start a second installer.
+        if (_busy) return;
+        if (_openReleaseOnClick) { OpenUrl(_releaseUrl); return; }
         UpdateButton.IsEnabled = false;
         _busy = true;
         try
@@ -228,7 +236,11 @@ public partial class UpdateWindow : Window
     private void BehaviorBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loadingPreferences || BehaviorBox.SelectedItem is not ComboBoxItem item || item.Tag is not string behavior) return;
-        WriteBehavior(behavior);
+        try { BehaviorPreference.Write(PreferencesPath(), behavior); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            SetStatus("Your update choice could not be saved: " + exception.Message);
+        }
     }
 
     private void SelectBehavior(string behavior)
@@ -244,23 +256,7 @@ public partial class UpdateWindow : Window
         BehaviorBox.SelectedIndex = 1;
     }
 
-    private static string ReadBehavior()
-    {
-        try
-        {
-            var preferences = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(PreferencesPath()));
-            if (preferences?.Behavior is "off" or "check" or "download" or "install") return preferences.Behavior;
-        }
-        catch { }
-        return "check";
-    }
-
-    private static void WriteBehavior(string behavior)
-    {
-        string path = PreferencesPath();
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, JsonSerializer.Serialize(new Preferences(behavior)) + Environment.NewLine);
-    }
+    private static string ReadBehavior() => BehaviorPreference.Read(PreferencesPath());
 
     private static string PreferencesPath() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerMCP", "update-preferences.json");
@@ -381,5 +377,4 @@ public partial class UpdateWindow : Window
         };
     }
 
-    private sealed record Preferences(string Behavior);
 }

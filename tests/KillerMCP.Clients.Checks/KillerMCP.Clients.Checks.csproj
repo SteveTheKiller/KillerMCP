@@ -6,5 +6,6 @@
     <ProjectReference Include="../../src/KillerMCP.Clients/KillerMCP.Clients.csproj" />
     <Compile Include="../../installer/ReleaseSignature.cs" Link="ReleaseSignature.cs" />
     <Compile Include="../../installer/DownloadedSetups.cs" Link="DownloadedSetups.cs" />
+    <Compile Include="../../src/KillerMCP.Notify/BehaviorPreference.cs" Link="BehaviorPreference.cs" />
   </ItemGroup>
 </Project>
