@@ -6,7 +6,7 @@
     <AssemblyName>KillerMCP.Notify</AssemblyName>
     <RootNamespace>KillerMCP.Notify</RootNamespace>
     <ApplicationIcon>..\..\assets\KillerMCP.ico</ApplicationIcon>
-    <Version>0.6.2</Version>
+    <Version>0.7.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Assets\mcp.png" />

@@ -75,7 +75,7 @@ function request(method, params = {}) {
 
 const initialized = await request('initialize', { protocolVersion: '2025-06-18' });
 assert.equal(initialized.serverInfo.name, 'KillerMCP');
-assert.equal(initialized.serverInfo.version, '0.6.2');
+assert.equal(initialized.serverInfo.version, '0.7.0');
 assert.match(initialized.instructions, /KillerMCP 99\.0\.0 is available/);
 const cachedStatus = JSON.parse(await readFile(join(updateDirectory, 'status.json'), 'utf8'));
 assert.equal(cachedStatus.LatestVersion, '99.0.0');
