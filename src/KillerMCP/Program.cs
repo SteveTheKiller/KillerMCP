@@ -289,12 +289,34 @@ static class ToolRegistry
     // before any tool runs, so no tool can write into the KillerMCP or KillerBench settings folders.
     private static readonly HashSet<string> OutputArguments = new(StringComparer.Ordinal) { "output", "outputFolder", "reviewFolder" };
 
-    private static string? WriteRefusal(string name, JsonElement arguments)
+    // Arguments of app tools that name a file or folder to open, alone or in a list. Core tools other
+    // than the local file tools take text, so their arguments are never read as paths.
+    private static readonly HashSet<string> PathArguments = new(StringComparer.Ordinal)
     {
+        "path", "inputs", "images", "files", "data", "pfx", "recipients", "changed", "macroFile", "root", "folder",
+        "output", "outputFolder", "reviewFolder",
+    };
+
+    private static readonly HashSet<string> LocalFileTools = new(StringComparer.Ordinal)
+    {
+        "encode_file_base64_local", "decode_file_base64_local", "check_pdf_signatures_local",
+    };
+
+    private static string? PathRefusal(string name, JsonElement arguments)
+    {
+        if (!Adapters.ContainsKey(name) && !LocalFileTools.Contains(name)) return null;
         foreach (var property in arguments.EnumerateObject())
         {
-            var writes = OutputArguments.Contains(property.Name) || name == "decode_file_base64_local" && property.Name == "path";
-            if (writes && property.Value.ValueKind == JsonValueKind.String && AgentPaths.WriteRefusal(property.Value.GetString()!) is { } refusal) return refusal;
+            if (!PathArguments.Contains(property.Name)) continue;
+            var values = property.Value.ValueKind == JsonValueKind.Array ? property.Value.EnumerateArray().ToArray() : [property.Value];
+            foreach (var value in values)
+            {
+                if (value.ValueKind != JsonValueKind.String) continue;
+                var path = value.GetString()!;
+                if (AgentPaths.AccessRefusal(path) is { } network) return network;
+                var writes = OutputArguments.Contains(property.Name) || name == "decode_file_base64_local" && property.Name == "path";
+                if (writes && AgentPaths.WriteRefusal(path) is { } refusal) return refusal;
+            }
         }
         return null;
     }
@@ -319,7 +341,7 @@ static class ToolRegistry
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            if (name is not null && WriteRefusal(name, arguments) is { } refusal)
+            if (name is not null && PathRefusal(name, arguments) is { } refusal)
             {
                 ToolCallLog.Record(loggedName, "error", stopwatch.ElapsedMilliseconds);
                 return new { content = new[] { new { type = "text", text = refusal } }, isError = true };

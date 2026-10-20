@@ -404,6 +404,30 @@ const scan = await request('tools/call', { name: 'killerscan_scan_network', argu
 assert.equal(JSON.parse(scan.content[0].text)[0].IpAddress, '192.0.2.10');
 const preflight = await request('tools/call', { name: 'killerpdf_preflight', arguments: { path: pdfSourceOne, profile: 'print' } });
 assert.equal(JSON.parse(preflight.content[0].text).valid, true);
+// Opening a file on a server sends the user's Windows sign-in to it, so servers outside the local
+// network are refused before anything contacts them unless the user listed them, and device paths
+// are refused outright. 203.0.113.0/24 is a documentation range that no one owns.
+const networkMessage = /local network or listed in network-servers\.json/;
+for (const path of ['\\\\203.0.113.5\\share\\a.pdf', '//203.0.113.5/share/a.pdf', '\\\\?\\UNC\\203.0.113.5\\share\\a.pdf', '\\\\203.0.113.5@SSL\\DavWWWRoot\\a.pdf']) {
+  const refused = await request('tools/call', { name: 'killerpdf_document_info', arguments: { path } });
+  assert.equal(refused.isError, true, path);
+  assert.match(refused.content[0].text, networkMessage, path);
+}
+const mergedRemote = await request('tools/call', { name: 'killerpdf_merge', arguments: { inputs: [pdfSourceOne, '\\\\203.0.113.5\\share\\b.pdf'], output: join(updateDirectory, 'remote-merge.pdf') } });
+assert.match(mergedRemote.content[0].text, networkMessage);
+const decodedRemote = await request('tools/call', { name: 'decode_file_base64_local', arguments: { path: '\\\\203.0.113.5\\share\\x.bin', base64: 'AA==' } });
+assert.match(decodedRemote.content[0].text, networkMessage);
+const device = await request('tools/call', { name: 'encode_file_base64_local', arguments: { path: '\\\\.\\PhysicalDrive0' } });
+assert.match(device.content[0].text, /Device paths are not accepted/);
+// Address ranges are covered in the runtime checks; here a loopback server shows the rule lets local servers through.
+const loopback = await request('tools/call', { name: 'killerpdf_document_info', arguments: { path: '\\\\127.0.0.1\\no-such-share\\a.pdf' } });
+assert.doesNotMatch(loopback.content[0].text, networkMessage);
+await mkdir(environment.KILLERMCP_STATE_DIR, { recursive: true });
+await writeFile(join(environment.KILLERMCP_STATE_DIR, 'network-servers.json'), JSON.stringify({ servers: ['files.invalid'] }));
+const allowlisted = await request('tools/call', { name: 'killerpdf_document_info', arguments: { path: '\\\\files.invalid\\share\\a.pdf' } });
+assert.doesNotMatch(allowlisted.content[0].text, networkMessage);
+const unlisted = await request('tools/call', { name: 'killerpdf_document_info', arguments: { path: '\\\\other.invalid\\share\\a.pdf' } });
+assert.match(unlisted.content[0].text, networkMessage);
 const mergedPath = join(updateDirectory, 'merged.pdf');
 const merged = await request('tools/call', { name: 'killerpdf_merge', arguments: { inputs: [pdfSourceOne, pdfSourceTwo], output: mergedPath } });
 assert.equal(JSON.parse(merged.content[0].text).inputCount, 2);

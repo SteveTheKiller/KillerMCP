@@ -35,6 +35,8 @@ The 81 KillerTools utilities include calculations, lookups, and generated output
 
 Tool availability depends on the supported apps installed on the computer. Review a client's proposed tool call, especially its arguments, before approving access to sensitive data, network targets, printers, or local output paths.
 
+Opening a file on a network server sends your Windows sign-in to that server, so file tools accept network paths, mapped network drives and links to them only for servers on the local network: loopback, private (10.x, 172.16 to 172.31, 192.168.x), link-local, and IPv6 unique local addresses. To allow another server, list it in `%LOCALAPPDATA%\KillerMCP\network-servers.json`, for example `{"servers": ["files.example.com"]}`. Device paths such as `\\.\PhysicalDrive0` are refused. No tool may write into the KillerMCP or KillerBench settings folders, so an agent cannot change this list or the KillerBench repair setting.
+
 ### Tool call history
 
 On Windows, KillerMCP writes a local JSON Lines log at `%LOCALAPPDATA%\KillerMCP\tool-calls.jsonl`. Each entry records the UTC time, tool name, whether the call started, completed, or returned an error, and how long a finished call took. Arguments and results are not logged, so passwords, note content, and other tool data are not copied into this file. A call interrupted by a crash may have only a `started` entry. The file is stored under the current user's profile. KillerMCP does not upload it. When the log reaches 5 MB, it is renamed to `tool-calls.1.jsonl`, replacing any earlier copy, and a new log begins.

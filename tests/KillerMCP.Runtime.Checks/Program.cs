@@ -288,6 +288,18 @@ try
     Throws<ArgumentException>(() => AppDiscovery.Discover("unknown", environment));
     Console.WriteLine("PASS native KillerMCP app discovery");
 
+    // Servers on the local network are allowed for network paths; everything else needs the user's list.
+    foreach (var localAddress in new[] { "10.1.2.3", "172.16.0.1", "172.31.255.254", "192.168.1.20", "169.254.10.10", "127.0.0.1", "::1", "fe80::1", "fd12:3456::1", "::ffff:192.168.0.5" })
+        Equal(true, AgentPaths.IsLocalNetwork(System.Net.IPAddress.Parse(localAddress)));
+    foreach (var remoteAddress in new[] { "203.0.113.5", "8.8.8.8", "172.32.0.1", "100.64.0.1", "2001:db8::1", "::ffff:8.8.8.8" })
+        Equal(false, AgentPaths.IsLocalNetwork(System.Net.IPAddress.Parse(remoteAddress)));
+    Equal<string?>(null, AgentPaths.AccessRefusal(@"\\192.168.1.20\share\a.pdf"));
+    Equal<string?>(null, AgentPaths.AccessRefusal(@"\\[fe80::1]\share\a.pdf"));
+    Equal(AgentPaths.NetworkMessage, AgentPaths.AccessRefusal(@"\\8.8.8.8\share\a.pdf"));
+    Equal(AgentPaths.DeviceMessage, AgentPaths.AccessRefusal(@"\\?\GLOBALROOT\Device\HarddiskVolume1\a.pdf"));
+    Equal<string?>(null, AgentPaths.AccessRefusal(Path.Combine(root, "a.pdf")));
+    Console.WriteLine("PASS network path rule");
+
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", "1");
     var notesAdapters = await KillerNotesAdapter.CreateAsync(Environment.ProcessPath);
     var adapter = notesAdapters.FirstOrDefault(item => item.Tool.Name == "killernotes_search");
