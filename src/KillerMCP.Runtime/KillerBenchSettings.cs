@@ -131,7 +131,36 @@ public static class KillerBenchSettings
     public static void WriteLock(RepairLock repairLock)
     {
         Directory.CreateDirectory(BenchFolder);
-        File.WriteAllText(LockPath, JsonSerializer.Serialize(repairLock) + Environment.NewLine);
+        var temporary = LockPath + ".tmp-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            File.WriteAllText(temporary, JsonSerializer.Serialize(repairLock) + Environment.NewLine);
+            File.Move(temporary, LockPath, true);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
+    }
+
+    public static string RepairHoldPath => Path.Combine(Folder, "killerbench-repair.hold");
+
+    /// <summary>
+    /// Claims the one repair that may run on this PC at a time, across every KillerMCP host. Returns
+    /// null when another host holds it. Disposing the result releases it, and Windows releases it if
+    /// the host ends.
+    /// </summary>
+    public static IDisposable? HoldRepair()
+    {
+        try
+        {
+            Directory.CreateDirectory(Folder);
+            return new FileStream(RepairHoldPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
     }
 
     public static bool ClearLock()

@@ -731,6 +731,27 @@ try
     Equal(true, KillerBenchSettings.ClearLock());
     Equal(3, File.ReadAllLines(KillerBenchSettings.AuditPath).Count(line => line.Contains("\"completed\"")));
 
+    // A repair running in another KillerMCP host blocks this one; the hold is a file in the KillerMCP state folder.
+    var otherHost = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
+    using (var held = KillerBenchSettings.HoldRepair())
+    {
+        Equal(true, held is not null);
+        await Bench("killerbench_repair_execute", new { token = otherHost.GetProperty("token").GetString() }, true);
+    }
+    var afterOtherHost = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
+    Equal("Completed", Finished(await Bench("killerbench_repair_execute", new { token = afterOtherHost.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
+
+    // A repair lock that cannot be saved still blocks repairs in this host, and the result says so.
+    Directory.CreateDirectory(KillerBenchSettings.LockPath);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_EXIT", "3");
+    var unsaved = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
+    var unsavedRun = Finished(await Bench("killerbench_repair_execute", new { token = unsaved.GetProperty("token").GetString() }));
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_EXIT", null);
+    Equal("Uncertain", unsavedRun.GetProperty("outcome").GetString());
+    Equal(true, unsavedRun.GetProperty("detail").GetString()!.Contains("could not be saved", StringComparison.Ordinal));
+    Equal(false, Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } })).GetProperty("canExecute").GetBoolean());
+    Directory.Delete(KillerBenchSettings.LockPath);
+
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW", "1");
     var slowAdapters = (await KillerBenchAdapter.CreateAsync(Environment.ProcessPath, Environment.ProcessPath, new KillerBenchOptions { Wait = TimeSpan.FromMilliseconds(100) })).ToDictionary(item => item.Tool.Name);
     using var scopes = JsonDocument.Parse("{\"scopes\":[\"PrintingReadiness\"]}");

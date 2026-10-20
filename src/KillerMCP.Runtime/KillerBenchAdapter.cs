@@ -75,6 +75,8 @@ public static partial class KillerBenchAdapter
         private readonly ConcurrentDictionary<string, Job> jobs = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, Ticket> tickets = new(StringComparer.Ordinal);
         private readonly SemaphoreSlim mutation = new(1, 1);
+        // A lock this host could not save to disk still blocks repairs for as long as the host runs.
+        private RepairLock? unsavedLock;
         private DateTimeOffset Now => options.Now?.Invoke() ?? DateTimeOffset.UtcNow;
 
         public IReadOnlyList<AppAdapter> Adapters()
@@ -284,6 +286,13 @@ public static partial class KillerBenchAdapter
             var problem = Permission(plan, KillerBenchSettings.ReadLevel());
             if (problem is not null) return Error(problem);
             if (!await mutation.WaitAsync(0, token).ConfigureAwait(false)) return Error("Another KillerBench repair is running. Wait for it to finish.");
+            // Each agent client runs its own KillerMCP host, so the one-repair rule also holds across hosts.
+            var hold = KillerBenchSettings.HoldRepair();
+            if (hold is null)
+            {
+                mutation.Release();
+                return Error("Another KillerMCP window is running a KillerBench repair. Wait for it to finish.");
+            }
             try
             {
                 return await StartJob("repair", plan.Action, async job =>
@@ -294,12 +303,14 @@ public static partial class KillerBenchAdapter
                     }
                     finally
                     {
+                        hold.Dispose();
                         mutation.Release();
                     }
                 }, token).ConfigureAwait(false);
             }
             catch
             {
+                hold.Dispose();
                 mutation.Release();
                 throw;
             }
@@ -364,11 +375,11 @@ public static partial class KillerBenchAdapter
                 result["detail"] = "Windows administrator approval was declined, so nothing changed.";
                 return result;
             }
-            catch (Exception exception) when (exception is TimeoutException or IOException or InvalidOperationException or Win32Exception or ArgumentException)
+            catch (Exception exception) when (exception is TimeoutException or IOException or InvalidOperationException or Win32Exception or ArgumentException or OperationCanceledException)
             {
-                Lock(plan, "The repair did not report a result: " + exception.Message, null);
+                var saved = Lock(plan, "The repair did not report a result: " + exception.Message, null);
                 result["outcome"] = "Uncertain";
-                result["detail"] = "KillerBench did not report a result. Repairs are locked until the user checks this PC with killerbench_repair_recover and clears the lock in the KillerMCP section of the KillerBench About window.";
+                result["detail"] = "KillerBench did not report a result. Repairs are locked until the user checks this PC with killerbench_repair_recover and clears the lock in the KillerMCP section of the KillerBench About window." + UnsavedNote(saved);
                 return result;
             }
 
@@ -388,9 +399,9 @@ public static partial class KillerBenchAdapter
             }
             else
             {
-                Lock(plan, "KillerBench exited with code " + run.ExitCode + (outcome is null ? string.Empty : " and outcome " + outcome), run.ExitCode);
+                var saved = Lock(plan, "KillerBench exited with code " + run.ExitCode + (outcome is null ? string.Empty : " and outcome " + outcome), run.ExitCode);
                 result["outcome"] = "Uncertain";
-                result["detail"] = "KillerBench could not verify the result. Repairs are locked until the user checks this PC with killerbench_repair_recover and clears the lock in the KillerMCP section of the KillerBench About window.";
+                result["detail"] = "KillerBench could not verify the result. Repairs are locked until the user checks this PC with killerbench_repair_recover and clears the lock in the KillerMCP section of the KillerBench About window." + UnsavedNote(saved);
             }
             return result;
         }
@@ -438,8 +449,9 @@ public static partial class KillerBenchAdapter
             return await definition.Build(options, Recipes, token).ConfigureAwait(false);
         }
 
-        private static string? Permission(KillerBenchRepairPlan plan, KillerBenchRepairLevel level)
+        private string? Permission(KillerBenchRepairPlan plan, KillerBenchRepairLevel level)
         {
+            if (unsavedLock is { } held) return $"Repairs are locked because {held.Title ?? held.Action} ended with an uncertain result ({held.Reason}), and the lock could not be saved. Check it with killerbench_repair_recover, then restart the agent client.";
             if (level == KillerBenchRepairLevel.Off) return "KillerBench repairs through KillerMCP are off. The user can turn them on in the KillerMCP section of the KillerBench About window.";
             if (plan.Tier == KillerBenchTier.B && level != KillerBenchRepairLevel.All) return "This is a disruptive repair. The user allowed safe repairs only. Disruptive repairs also need the second checkbox in the KillerMCP section of the KillerBench About window, and each one is approved on the desktop.";
             if (KillerBenchSettings.ReadLock() is { } repairLock) return $"Repairs are locked because {repairLock.Title ?? repairLock.Action} ended with an uncertain result ({repairLock.Reason}). Check it with killerbench_repair_recover, then the user clears the lock in the KillerMCP section of the KillerBench About window.";
@@ -463,6 +475,11 @@ public static partial class KillerBenchAdapter
                 {
                     job.Status = "failed";
                     return new JsonObject { ["error"] = exception.Message };
+                }
+                catch (OperationCanceledException)
+                {
+                    job.Status = "cancelled";
+                    return new JsonObject { ["error"] = "The request that started this job was cancelled." };
                 }
             }, CancellationToken.None);
             jobs[job.Id] = job;
@@ -508,11 +525,24 @@ public static partial class KillerBenchAdapter
         private static void Audit(KillerBenchRepairPlan plan, string stage, int? exitCode) =>
             KillerBenchSettings.Audit(new { atUtc = DateTimeOffset.UtcNow, action = plan.Action, tier = TierName(plan.Tier), target = plan.Target, stage, exitCode });
 
-        private static void Lock(KillerBenchRepairPlan plan, string reason, int? exitCode)
+        // Returns false when the lock could not be written; this host then keeps it in memory.
+        private bool Lock(KillerBenchRepairPlan plan, string reason, int? exitCode)
         {
-            KillerBenchSettings.WriteLock(new RepairLock(plan.Action, reason, DateTimeOffset.UtcNow, exitCode, plan.Title));
+            var repairLock = new RepairLock(plan.Action, reason, DateTimeOffset.UtcNow, exitCode, plan.Title);
             Audit(plan, "uncertain", exitCode);
+            try
+            {
+                KillerBenchSettings.WriteLock(repairLock);
+                return true;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                unsavedLock = repairLock;
+                return false;
+            }
         }
+
+        private static string UnsavedNote(bool saved) => saved ? string.Empty : " The lock could not be saved, so it holds only until this agent client restarts.";
     }
 
     private static JsonObject Parse(KillerBenchRun run)
