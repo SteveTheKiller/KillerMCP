@@ -28,7 +28,7 @@ jobs:
           # The tag comes from the release or from whoever runs the workflow, so it reaches this script
           # only through env and has to be a version tag before anything uses it.
           $releaseTag = $env:RELEASE_TAG
-          if ($releaseTag -notmatch '^v\d+\.\d+\.\d+$') { throw "Release tag '$releaseTag' is not a version tag such as v1.2.3." }
+          if ($releaseTag -cnotmatch '^v[0-9]+\.[0-9]+\.[0-9]+\z') { throw "Release tag '$releaseTag' is not a version tag such as v1.2.3." }
           $version = $releaseTag.TrimStart('v')
           $exeUrl  = "https://github.com/SteveTheKiller/KillerMCP/releases/download/$releaseTag/KillerMCP-Setup.exe"
 

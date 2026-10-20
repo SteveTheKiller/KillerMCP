@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Package,
     [int]$PollSeconds = 300,
     [int]$Polls = 32,
+    [int]$Minutes = 155,
     [int]$ConfirmFailPolls = 6,
     [scriptblock]$ReadState,
     [scriptblock]$Push
@@ -31,11 +32,15 @@ if (-not $Push) {
     }.GetNewClosure()
 }
 
+# Feed reads and a re-push take time on top of the sleeps, so the wait also stops at a clock deadline
+# that leaves room inside the step's timeout-minutes for the outcome to be reported.
+$deadline = (Get-Date).AddMinutes($Minutes)
 $repushed = $false
 $pendingSinceRepush = $false
 $failStreak = 0
 $last = ''
 for ($poll = 1; $poll -le $Polls; $poll++) {
+    if ((Get-Date).AddSeconds($PollSeconds + 90) -gt $deadline) { break }
     Start-Sleep -Seconds $PollSeconds
     $state = & $ReadState
     if ($null -eq $state) { continue }
@@ -52,6 +57,8 @@ for ($poll = 1; $poll -le $Polls; $poll++) {
         Write-Host 'Validation failed. Pushing the same package again as Chocolatey instructs.'
         & $Push
         $repushed = $true
+        # The failure belongs to the package before the re-push, so it says nothing yet about the new one.
+        $last = ''
         continue
     }
     # The feed can keep showing the first failure for a while after the re-push. A failure counts as the
