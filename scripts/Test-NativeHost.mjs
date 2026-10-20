@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { brotliDecompressSync } from 'node:zlib';
 
 const updateDirectory = await mkdtemp(join(tmpdir(), 'killermcp-update-'));
@@ -100,6 +100,7 @@ assert.equal(safety('killerbench_check').readOnlyHint, true);
 assert.equal(safety('killerbench_check').openWorldHint, true);
 assert.equal(safety('killerbench_repair_preview').readOnlyHint, true);
 assert.equal(safety('killerbench_repair_execute').destructiveHint, true);
+assert.equal(safety('decode_file_base64_local').destructiveHint, true);
 assert.equal(safety('killerbench_save_scan_note').destructiveHint, false);
 assert.equal(safety('killershot_list_windows').readOnlyHint, true);
 assert.equal(safety('killershot_capture_monitor').readOnlyHint, false);
@@ -300,6 +301,29 @@ try {
   assert.deepEqual(await readFile(destination), Buffer.from([0, 1, 2, 254, 255]));
   const overwrite = await request('tools/call', { name: 'decode_file_base64_local', arguments: { path: destination, base64: 'AAEC/v8=' } });
   assert.equal(overwrite.isError, true);
+  // Agents must not write the files that decide what KillerMCP and KillerBench let them do,
+  // whether the path names the folder directly, takes a detour or goes through a link.
+  const benchState = environment.KILLERBENCH_STATE_DIR;
+  const mcpState = environment.KILLERMCP_STATE_DIR;
+  await mkdir(join(benchState, 'nested'), { recursive: true });
+  await mkdir(mcpState, { recursive: true });
+  const link = join(directory, 'bench-link');
+  await symlink(benchState, link, 'junction');
+  const forged = Buffer.from(JSON.stringify({ level: 'all' })).toString('base64');
+  const protectedTargets = [
+    join(benchState, 'agent-repairs.json'),
+    `${benchState}${sep}nested${sep}..${sep}agent-repair-lock.json`,
+    join(link, 'agent-repairs.json'),
+    join(mcpState, 'killerbench-settings-approved.json'),
+  ];
+  if (process.platform === 'win32') protectedTargets.push(join(benchState.toUpperCase(), 'agent-repairs.json'));
+  for (const target of protectedTargets) {
+    const refused = await request('tools/call', { name: 'decode_file_base64_local', arguments: { path: target, base64: forged } });
+    assert.equal(refused.isError, true, target);
+  }
+  await assert.rejects(readFile(join(benchState, 'agent-repairs.json')));
+  await assert.rejects(readFile(join(benchState, 'agent-repair-lock.json')));
+  await assert.rejects(readFile(join(mcpState, 'killerbench-settings-approved.json')));
 } finally {
   await rm(directory, { recursive: true, force: true });
 }

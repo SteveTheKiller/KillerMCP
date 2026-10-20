@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace KillerMCP.Runtime;
@@ -29,24 +30,66 @@ public static class KillerBenchSettings
     public static string SettingsPath => Path.Combine(BenchFolder, "agent-repairs.json");
     public static string LockPath => Path.Combine(BenchFolder, "agent-repair-lock.json");
     public static string AuditPath => Path.Combine(Folder, "killerbench-actions.jsonl");
+    public static string ApprovalPath => Path.Combine(Folder, "killerbench-settings-approved.json");
 
-    public static KillerBenchRepairLevel ReadLevel()
+    public static KillerBenchRepairLevel ReadLevel() => ReadSettings().Level;
+
+    /// <summary>The repair level and the SHA-256 of the setting file it came from, read in one pass.
+    /// The hash is null when the file is missing or unreadable.</summary>
+    public static (KillerBenchRepairLevel Level, string? Hash) ReadSettings()
     {
         try
         {
             var file = new FileInfo(SettingsPath);
-            if (!file.Exists || file.Length > FileLimit) return KillerBenchRepairLevel.Off;
-            using var document = JsonDocument.Parse(File.ReadAllText(file.FullName));
+            if (!file.Exists || file.Length > FileLimit) return (KillerBenchRepairLevel.Off, null);
+            var bytes = File.ReadAllBytes(file.FullName);
+            if (bytes.Length > FileLimit) return (KillerBenchRepairLevel.Off, null);
+            var hash = Convert.ToHexString(SHA256.HashData(bytes));
+            using var document = JsonDocument.Parse(bytes);
             if (document.RootElement.ValueKind == JsonValueKind.Object
                 && document.RootElement.TryGetProperty("level", out var value) && value.ValueKind == JsonValueKind.String)
             {
-                return Parse(value.GetString()) ?? KillerBenchRepairLevel.Off;
+                return (Parse(value.GetString()) ?? KillerBenchRepairLevel.Off, hash);
             }
+            return (KillerBenchRepairLevel.Off, hash);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
         }
-        return KillerBenchRepairLevel.Off;
+        return (KillerBenchRepairLevel.Off, null);
+    }
+
+    /// <summary>True when a person at the desktop approved a repair while the setting file had this hash.</summary>
+    public static bool IsApproved(string hash)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(ApprovalPath));
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("settingsSha256", out var value) && value.ValueKind == JsonValueKind.String
+                && string.Equals(value.GetString(), hash, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Remembers that a person approved the setting file with this hash. A failure only means
+    /// the next repair asks again.</summary>
+    public static void Approve(string hash)
+    {
+        try
+        {
+            Directory.CreateDirectory(Folder);
+            var temporary = ApprovalPath + ".tmp";
+            File.WriteAllText(temporary, JsonSerializer.Serialize(new { settingsSha256 = hash }) + Environment.NewLine);
+            File.Move(temporary, ApprovalPath, true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine("KillerMCP could not remember the approved KillerBench setting.");
+        }
     }
 
     public static KillerBenchRepairLevel? Parse(string? value) => value?.Trim().ToLowerInvariant() switch

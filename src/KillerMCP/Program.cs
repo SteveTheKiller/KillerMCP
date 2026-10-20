@@ -203,6 +203,20 @@ static class ToolRegistry
 
     private static readonly JsonElement EmptyArguments = JsonDocument.Parse("{}").RootElement.Clone();
 
+    // Arguments that name a file or folder a tool creates. Each one is checked against AgentPaths
+    // before any tool runs, so no tool can write into the KillerMCP or KillerBench settings folders.
+    private static readonly HashSet<string> OutputArguments = new(StringComparer.Ordinal) { "output", "outputFolder", "reviewFolder" };
+
+    private static string? WriteRefusal(string name, JsonElement arguments)
+    {
+        foreach (var property in arguments.EnumerateObject())
+        {
+            var writes = OutputArguments.Contains(property.Name) || name == "decode_file_base64_local" && property.Name == "path";
+            if (writes && property.Value.ValueKind == JsonValueKind.String && AgentPaths.WriteRefusal(property.Value.GetString()!) is { } refusal) return refusal;
+        }
+        return null;
+    }
+
     public static void SetAdapters(IEnumerable<AppAdapter> adapters) => Adapters = adapters.ToDictionary(adapter => adapter.Tool.Name, StringComparer.Ordinal);
 
     public static object Call(JsonElement parameters, JsonSerializerOptions json)
@@ -223,6 +237,11 @@ static class ToolRegistry
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
+            if (name is not null && WriteRefusal(name, arguments) is { } refusal)
+            {
+                ToolCallLog.Record(loggedName, "error", stopwatch.ElapsedMilliseconds);
+                return new { content = new[] { new { type = "text", text = refusal } }, isError = true };
+            }
             if (name is not null && Adapters.TryGetValue(name, out var adapter))
             {
                 var adapterResult = adapter.CallAsync(arguments, CancellationToken.None).GetAwaiter().GetResult();

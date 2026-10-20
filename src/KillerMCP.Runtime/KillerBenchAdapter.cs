@@ -310,13 +310,31 @@ public static partial class KillerBenchAdapter
             var command = "killerbench-cli " + string.Join(" ", plan.ExecuteArguments.Select(argument => argument.Contains(' ') ? "\"" + argument + "\"" : argument));
             var result = new JsonObject { ["action"] = plan.Action, ["tier"] = TierName(plan.Tier), ["target"] = plan.Target };
             Audit(plan, "requested", null);
-            if (plan.Tier == KillerBenchTier.B)
+            // Any program that can write a file can write the repair setting, so the first repair after
+            // it appears or changes needs a person at the desktop, even a safe one. The approval is
+            // remembered by the setting's hash in the KillerMCP state folder, where agents cannot write.
+            var (level, settingsHash) = KillerBenchSettings.ReadSettings();
+            var problem = Permission(plan, level);
+            if (problem is not null)
+            {
+                Audit(plan, "denied", null);
+                result["outcome"] = "NotApproved";
+                result["detail"] = problem;
+                return result;
+            }
+            var settingChanged = settingsHash is null || !KillerBenchSettings.IsApproved(settingsHash);
+            if (plan.Tier == KillerBenchTier.B || settingChanged)
             {
                 job.Status = "waiting for approval on the desktop";
+                var effects = settingChanged
+                    ? plan.Effects + " The KillerBench agent repair setting is new or has changed since a repair was last approved here. It now allows "
+                        + (level == KillerBenchRepairLevel.All ? "safe and disruptive" : "safe") + " repairs. Approving also accepts that setting."
+                    : plan.Effects;
                 bool approved;
                 try
                 {
-                    approved = await Confirm(new KillerBenchConfirmation(plan.Action, plan.Title, "Disruptive", plan.Effects, plan.Target, command), token).ConfigureAwait(false);
+                    approved = await Confirm(new KillerBenchConfirmation(plan.Action, plan.Title, plan.Tier == KillerBenchTier.B ? "Disruptive" : "Safe", effects, plan.Target, command), token).ConfigureAwait(false);
+                    if (approved && settingChanged) KillerBenchSettings.Approve(settingsHash!);
                 }
                 catch (Exception exception) when (exception is IOException or InvalidOperationException or Win32Exception or TimeoutException)
                 {

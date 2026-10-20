@@ -606,17 +606,28 @@ try
     KillerBenchSettings.WriteLevel(KillerBenchRepairLevel.Safe);
     Equal(KillerBenchRepairLevel.Safe, KillerBenchSettings.ReadLevel());
     Equal(false, Finished(await Bench("killerbench_repair_preview", new { action = "dhcp_renew" })).GetProperty("canExecute").GetBoolean());
+    // Anything that can write a file can write the setting, so the first repair after the setting
+    // appears or changes waits for a person at the desktop, even a safe one.
+    var unconfirmed = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
+    Equal("NotApproved", Finished(await Bench("killerbench_repair_execute", new { token = unconfirmed.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
+    Equal(1, confirmations.Count);
+    Equal(true, confirmations[0].Effects.Contains("repair setting is new or has changed", StringComparison.Ordinal));
+    Equal("Safe", confirmations[0].Tier);
+    Equal(0, elevated.Count);
+    approve = true;
     var safePreview = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
     var safeToken = safePreview.GetProperty("token").GetString()!;
     var safeRun = Finished(await Bench("killerbench_repair_execute", new { token = safeToken }));
     Equal("Completed", safeRun.GetProperty("outcome").GetString());
     Equal("dns-cache missing.example --execute", elevated.Single());
-    Equal(0, confirmations.Count);
+    Equal(2, confirmations.Count);
+    approve = false;
     await Bench("killerbench_repair_execute", new { token = safeToken }, true);
 
     var privacy = Finished(await Bench("killerbench_repair_preview", new { action = "privacy_setting", options = new { key = "camera-access", state = "off" } }));
     Equal("Completed", Finished(await Bench("killerbench_repair_execute", new { token = privacy.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
     Equal(1, elevated.Count);
+    Equal(2, confirmations.Count);
 
     var expiring = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
     clock = clock.AddMinutes(11);
@@ -630,7 +641,7 @@ try
     KillerBenchSettings.WriteLevel(KillerBenchRepairLevel.All);
     var dism = Finished(await Bench("killerbench_repair_preview", new { action = "system_image_repair", options = new { tool = "dism" } }));
     Equal("NotApproved", Finished(await Bench("killerbench_repair_execute", new { token = dism.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
-    Equal(1, confirmations.Count);
+    Equal(3, confirmations.Count);
     Equal(1, elevated.Count);
     approve = true;
     dism = Finished(await Bench("killerbench_repair_preview", new { action = "system_image_repair", options = new { tool = "dism" } }));
@@ -641,6 +652,7 @@ try
     var failing = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
     Equal("Uncertain", Finished(await Bench("killerbench_repair_execute", new { token = failing.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_EXIT", null);
+    Equal(4, confirmations.Count);
     Equal("dns_cache_flush", KillerBenchSettings.ReadLock()!.Action);
     Equal("Flush one hostname from the DNS cache", KillerBenchSettings.ReadLock()!.Title);
     Equal(true, File.Exists(Path.Combine(root, "bench-state", "agent-repair-lock.json")));

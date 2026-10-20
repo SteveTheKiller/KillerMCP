@@ -46,6 +46,8 @@ internal static class ToolSafety
     {
         "killernotes_update", "killernotes_set_group_color", "killernotes_set_title_color",
         "killerpdf_print", "killerbench_repair_execute",
+        // Writes any bytes to any new path the agent names.
+        "decode_file_base64_local",
     };
 
     private static readonly HashSet<string> NetworkTools = new(StringComparer.Ordinal)
@@ -89,7 +91,7 @@ internal static class ToolSafety
     }
 
     private static bool IsKnownAdditive(string name) =>
-        name is "decode_file_base64_local" or "killer_create_pdf" or "killendar_create_appointment"
+        name is "killer_create_pdf" or "killendar_create_appointment"
         or "killernotes_create" or "killernotes_create_group" or "killernotes_import_image"
         or "killernotes_export" or "killernotes_export_pdf" or "killendar_export_agenda_pdf"
         or "killendar_save_agenda_note" or "killerscan_export_report_pdf"
