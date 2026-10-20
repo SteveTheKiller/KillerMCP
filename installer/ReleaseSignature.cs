@@ -9,25 +9,55 @@ namespace KillerMCP.Signing
     /// Decides whether a setup file is a KillerMCP release: Windows trusts its Authenticode signature,
     /// no certificate in the chain is revoked, and the signer is the KillerMCP publisher. Setup and the
     /// update window both compile this file, so both paths apply the same rule. The publisher is pinned
-    /// by subject rather than thumbprint so a renewed certificate keeps working.
+    /// by its name and by the organization of the certificate authority that issued it, rather than by
+    /// thumbprint, so a renewed certificate keeps working while a certificate another authority issued
+    /// under the same name does not.
     /// </summary>
     internal static class ReleaseSignature
     {
         internal const string Publisher = "Open Source Developer Stephen Riley";
 
-        internal static bool IsKillerMcpRelease(string path) => HasTrustedSignature(path) && SignedBy(path) == Publisher;
+        /// <summary>The organization behind the certificate authority that issues the publisher's certificates.</summary>
+        internal const string IssuerOrganization = "Asseco Data Systems S.A.";
+
+        internal static bool IsKillerMcpRelease(string path)
+        {
+            if (!HasTrustedSignature(path)) return false;
+            using (var certificate = SignerCertificate(path))
+                return certificate != null && IsPublisherCertificate(certificate);
+        }
+
+        /// <summary>Whether a signer certificate names the KillerMCP publisher and comes from its certificate authority.</summary>
+        internal static bool IsPublisherCertificate(X509Certificate2 certificate) =>
+            certificate.GetNameInfo(X509NameType.SimpleName, false) == Publisher
+            && Organization(certificate.IssuerName) == IssuerOrganization;
+
+        private static string? Organization(X500DistinguishedName name)
+        {
+            foreach (var part in name.Decode(X500DistinguishedNameFlags.UseNewLines).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var line = part.Trim();
+                if (line.StartsWith("O=", StringComparison.Ordinal)) return line.Substring(2).Trim('"');
+            }
+            return null;
+        }
 
         /// <summary>The signer's common name, or null when the file has no readable signature.</summary>
         internal static string? SignedBy(string path)
         {
+            using (var certificate = SignerCertificate(path))
+                return certificate?.GetNameInfo(X509NameType.SimpleName, false);
+        }
+
+        private static X509Certificate2? SignerCertificate(string path)
+        {
             try
             {
-                // .NET has no other way to read an Authenticode signer. This only reads the name;
+                // .NET has no other way to read an Authenticode signer. This only reads the certificate;
                 // WinVerifyTrust is what decides whether the signature is trusted.
 #pragma warning disable SYSLIB0057
-                using (var certificate = new X509Certificate2(X509Certificate.CreateFromSignedFile(path)))
+                return new X509Certificate2(X509Certificate.CreateFromSignedFile(path));
 #pragma warning restore SYSLIB0057
-                    return certificate.GetNameInfo(X509NameType.SimpleName, false);
             }
             catch (CryptographicException)
             {

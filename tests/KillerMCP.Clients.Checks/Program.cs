@@ -278,6 +278,14 @@ try
         Equal(false, KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(unsigned));
         var released = Environment.GetEnvironmentVariable("KILLERMCP_SIGNED_SETUP");
         if (!string.IsNullOrWhiteSpace(released)) Equal(true, KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(released));
+        // The publisher's name alone is not enough: the certificate must also come from the publisher's
+        // certificate authority.
+        using (var key = System.Security.Cryptography.RSA.Create(2048))
+        {
+            var request = new System.Security.Cryptography.X509Certificates.CertificateRequest("CN=" + KillerMCP.Signing.ReleaseSignature.Publisher + ", O=Open Source Developer, C=US", key, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+            using var lookalike = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+            Equal(false, KillerMCP.Signing.ReleaseSignature.IsPublisherCertificate(lookalike));
+        }
         Console.WriteLine("PASS update publisher check");
     }
 
