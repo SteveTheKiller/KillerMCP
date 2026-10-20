@@ -37,6 +37,8 @@ Copy-Item -LiteralPath (Join-Path $repository 'release.ps1') -Destination (Join-
 FixtureFile (Join-Path $seed 'src\KillerMCP\KillerMCP.csproj') '<Project><PropertyGroup><Version>0.6.0</Version></PropertyGroup></Project>'
 FixtureFile (Join-Path $seed 'scripts\Test-PluginVersion.ps1') "Write-Output 'Fixture plugin check'"
 FixtureFile (Join-Path $seed 'CHANGELOG.md') '## [0.6.0] - Unreleased'
+# release.ps1 checks the Store submission before it builds; the stub records that it ran.
+FixtureFile (Join-Path $seed 'store\Submit-StoreRelease.ps1') "param([string]`$ProductId, [string]`$PackageUrl, [switch]`$PreflightOnly) Write-Output ('STORE_PREFLIGHT ' + [bool]`$PreflightOnly)"
 Git $seed @('-c', 'protocol.file.allow=always', 'submodule', 'add', '--quiet', $engine, 'dependencies/KillerTools')
 Git $seed @('add', '.')
 Git $seed @('commit', '--quiet', '-m', 'Fixture release inputs')
@@ -66,6 +68,10 @@ $output = & $hostExecutable -NoProfile -ExecutionPolicy Bypass -Command $command
 $text = $output -join "`n"
 if ($LASTEXITCODE -ne 1 -or $text -notlike '*BUILD_STARTED*' -or $text -like '*Local main and origin/main differ*') {
     throw "A matching checkout did not reach the build boundary:`n$text`nFixture retained at $scratch"
+}
+$storeAt = $text.IndexOf('STORE_PREFLIGHT True')
+if ($storeAt -lt 0 -or $storeAt -gt $text.IndexOf('BUILD_STARTED')) {
+    throw "The Store preflight did not run before the build:`n$text`nFixture retained at $scratch"
 }
 Write-Output 'PASS: a matching checkout reaches the build boundary.'
 Write-Output "Fixture retained at $scratch"
