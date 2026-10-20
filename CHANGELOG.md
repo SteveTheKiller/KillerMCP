@@ -21,6 +21,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - Only one KillerMCP window runs a KillerBench repair at a time. A repair lock that cannot be saved still blocks repairs in that window, and the result says the lock was not saved.
 - Tools check page ranges, DPI, note IDs and MAC addresses before running an app, and a number sent as text gets a clear error. Saving PDF pages as notes reports the notes already made when a later page fails, and a failed MAC vendor lookup is reported as an error.
 - Uninstall closes a running KillerMCP before removing it instead of failing partway and leaving a broken folder, and setup can now uninstall or reinstall over a folder an earlier uninstall left half removed.
+- Setup closes running hosts right before it replaces the folder, so a host an agent client restarts during an upgrade no longer stops it. A finished install is no longer reported as failed when the old copy cannot be removed yet; the next install clears it.
+- Setup reinstalls when its copy beside the install folder was deleted or quarantined, ends a client configuration that stops responding instead of waiting forever, and treats an unreadable update preference as the default instead of failing at every sign-in.
+- Downloaded update installers no longer pile up in the temporary folder.
 - KillerMCP no longer closes when a client asks for something it does not offer, such as resource templates. It answers with a standard error, replies to ping, and treats tools/call without arguments as an empty set.
 - KillerMCP still reports a new release when it cannot save its update status, and the status file the update window reads is replaced whole instead of rewritten in place.
 - A silent install or update that finds KillerMCP running exits with 1618, which Intune, Configuration Manager and RMM tools retry, instead of a general failure.

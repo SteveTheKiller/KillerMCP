@@ -5,6 +5,8 @@ var fakeCodexState = Environment.GetEnvironmentVariable("KILLERMCP_FAKE_CODEX_ST
 if (!string.IsNullOrWhiteSpace(fakeCodexState))
 {
     var command = Environment.GetCommandLineArgs().Skip(1).ToArray();
+    // Stands in for a Codex that stops responding, so setup's time limit on client configuration can be checked.
+    if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_CODEX_HANG") == "1") Thread.Sleep(Timeout.Infinite);
     if (command.SequenceEqual(["mcp", "get", "killermcp", "--json"]))
     {
         if (!File.Exists(fakeCodexState)) { Console.Error.Write("No MCP server named killermcp"); return 1; }
@@ -200,6 +202,23 @@ try
         if (!string.IsNullOrWhiteSpace(released)) Equal(true, KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(released));
         Console.WriteLine("PASS update publisher check");
     }
+
+    // Each update download is a new file in the temporary folder. Copies left by updates that already ran
+    // are removed before the next download; other files are left alone.
+    var downloads = Path.Combine(root, "downloads");
+    Directory.CreateDirectory(downloads);
+    var oldDownload = Path.Combine(downloads, "KillerMCP-Setup-0.6.0-old.exe");
+    var recentDownload = Path.Combine(downloads, "KillerMCP-Setup-0.6.1-recent.exe");
+    var otherFile = Path.Combine(downloads, "KillerMCP-Setup.exe");
+    foreach (var file in new[] { oldDownload, recentDownload, otherFile }) File.WriteAllText(file, "fixture");
+    File.SetLastWriteTimeUtc(oldDownload, DateTime.UtcNow.AddDays(-2));
+    File.SetLastWriteTimeUtc(otherFile, DateTime.UtcNow.AddDays(-2));
+    var nextDownload = KillerMCP.Updates.DownloadedSetups.NewPath(downloads, "0.7.0");
+    Equal(false, File.Exists(oldDownload));
+    Equal(true, File.Exists(recentDownload) && File.Exists(otherFile));
+    Equal(downloads, Path.GetDirectoryName(nextDownload));
+    Equal(true, Path.GetFileName(nextDownload).StartsWith("KillerMCP-Setup-0.7.0-", StringComparison.Ordinal));
+    Console.WriteLine("PASS downloaded update cleanup");
 }
 finally
 {

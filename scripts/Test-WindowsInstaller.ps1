@@ -25,7 +25,7 @@ $installed = Join-Path $scratch 'Installed'
 $codexState = Join-Path $scratch 'codex-state.json'
 $previous = @{}
 $names = @('CLAUDE', 'CURSOR', 'COPILOT', 'GEMINI', 'WINDSURF', 'CLAUDE_DESKTOP')
-$variables = @('KILLERMCP_TEST_INSTALL_ROOT', 'KILLERMCP_TEST_RUNTIME', 'KILLERMCP_FAKE_CODEX_STATE', 'KILLERMCP_TOOL_CALL_LOG', 'CODEX_CLI_PATH', 'KILLERMCP_UPDATE_CACHE', 'KILLERMCP_UPDATE_API', 'KILLERMCP_NOTIFIER') + ($names | ForEach-Object { "KILLERMCP_TEST_${_}_CONFIG" })
+$variables = @('KILLERMCP_TEST_INSTALL_ROOT', 'KILLERMCP_TEST_RUNTIME', 'KILLERMCP_FAKE_CODEX_STATE', 'KILLERMCP_TOOL_CALL_LOG', 'CODEX_CLI_PATH', 'KILLERMCP_UPDATE_CACHE', 'KILLERMCP_UPDATE_API', 'KILLERMCP_NOTIFIER', 'KILLERMCP_TEST_UPDATE_API', 'KILLERMCP_FAKE_CODEX_HANG', 'KILLERMCP_TEST_CONFIGURE_TIMEOUT_MS') + ($names | ForEach-Object { "KILLERMCP_TEST_${_}_CONFIG" })
 foreach ($name in $variables) { $previous[$name] = [Environment]::GetEnvironmentVariable($name) }
 $success = $false
 
@@ -153,6 +153,45 @@ try {
         if ($blocked.ExitCode -eq 0) { throw 'Reinstall replaced a modified setup file.' }
     }
     finally { [IO.File]::WriteAllBytes($setupCopy, $setupBytes) }
+
+    # A setup copy that was deleted or quarantined must not block reinstalling, but an entry for another folder is not adopted.
+    Remove-Item -LiteralPath $setupCopy
+    Set-ItemProperty -LiteralPath $uninstallKey -Name InstallLocation -Value 'C:\Elsewhere\KillerMCP'
+    try {
+        $blocked = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        if ($blocked.ExitCode -eq 0) { throw 'Setup adopted an uninstall entry for a different folder.' }
+    }
+    finally { Set-ItemProperty -LiteralPath $uninstallKey -Name InstallLocation -Value $installed }
+    $recovered = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+    if ($recovered.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $setupCopy -PathType Leaf) -or (Get-ItemProperty -LiteralPath $uninstallKey).SetupSha256 -ne (Get-FileHash -LiteralPath $setupCopy -Algorithm SHA256).Hash) { throw "Setup could not reinstall after its setup copy went missing (exit $($recovered.ExitCode))." }
+
+    # A backup that an earlier upgrade could not remove is cleared by the next install.
+    $leftoverBackup = "$installed.previous-test"
+    Copy-Item -LiteralPath $installed -Destination $leftoverBackup -Recurse
+    $install = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+    if ($install.ExitCode -ne 0 -or (Test-Path -LiteralPath $leftoverBackup)) { throw "Install did not remove a backup an earlier upgrade left behind (exit $($install.ExitCode))." }
+
+    # A preferences file that holds valid JSON but not an object falls back to checking for updates.
+    $preferences = Join-Path $scratch 'update-preferences.json'
+    Write-Utf8NoBom $preferences '[]'
+    $env:KILLERMCP_TEST_UPDATE_API = 'https://127.0.0.1:9/no-release'
+    $check = Start-Process -FilePath $setup -ArgumentList '/check-update', '/silent' -Wait -PassThru -WindowStyle Hidden
+    Remove-Item -LiteralPath $preferences
+    if ($check.ExitCode -ne 0) { throw "The update check failed on a preferences file that is not an object (exit $($check.ExitCode))." }
+
+    # A client configuration that stops responding is ended at the time limit, Codex with it, and the
+    # previous installation stays in place.
+    $env:KILLERMCP_FAKE_CODEX_HANG = '1'
+    $env:KILLERMCP_TEST_CONFIGURE_TIMEOUT_MS = '3000'
+    $hungStarted = [Diagnostics.Stopwatch]::StartNew()
+    try { $blocked = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden }
+    finally { $env:KILLERMCP_FAKE_CODEX_HANG = $null; $env:KILLERMCP_TEST_CONFIGURE_TIMEOUT_MS = $null }
+    $hungSeconds = $hungStarted.Elapsed.TotalSeconds
+    $leftCodex = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $fakeCodex })
+    $leftCodex | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    if ($blocked.ExitCode -eq 0 -or $hungSeconds -gt 20 -or $leftCodex.Count -gt 0) { throw "A hung client configuration was not ended at the time limit (exit $($blocked.ExitCode), $([int]$hungSeconds) s, $($leftCodex.Count) Codex left)." }
+    node (Join-Path $PSScriptRoot 'Test-NativePackage.mjs') $installed
+    if ($LASTEXITCODE -ne 0) { throw 'A timed-out install did not keep the previous installation.' }
 
     $cursorPath = [Environment]::GetEnvironmentVariable('KILLERMCP_TEST_CURSOR_CONFIG')
     $cursorOriginal = Get-Content -LiteralPath $cursorPath -Raw

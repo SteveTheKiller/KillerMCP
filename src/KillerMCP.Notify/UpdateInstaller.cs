@@ -18,7 +18,7 @@ internal static class UpdateInstaller
         string actual = Convert.ToHexString(SHA256.HashData(installer));
         if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The update checksum does not match the published release.");
 
-        string path = Path.Combine(Path.GetTempPath(), $"KillerMCP-Setup-{version}-{Guid.NewGuid():N}.exe");
+        string path = KillerMCP.Updates.DownloadedSetups.NewPath(Path.GetTempPath(), version);
         await File.WriteAllBytesAsync(path, installer).ConfigureAwait(false);
         if (!KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(path))
         {

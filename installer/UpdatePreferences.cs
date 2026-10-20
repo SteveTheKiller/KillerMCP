@@ -43,6 +43,8 @@ namespace KillerMCP.Setup
             catch (FileNotFoundException) { return new Dictionary<string, object>(); }
             catch (DirectoryNotFoundException) { return new Dictionary<string, object>(); }
             catch (ArgumentException) { return new Dictionary<string, object>(); }
+            // Valid JSON that is not an object, such as an array, is treated like a missing file.
+            catch (InvalidOperationException) { return new Dictionary<string, object>(); }
         }
 
         private static string? Behavior(Dictionary<string, object> values) =>

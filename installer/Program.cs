@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 
 namespace KillerMCP.Setup
@@ -119,10 +120,17 @@ namespace KillerMCP.Setup
                     // A folder that an interrupted uninstall left partly removed is still replaced,
                     // as long as every file in it is one KillerMCP installed.
                     ValidateInstalled(destination, allowLegacy: true, allowMissing: true);
-                    CloseRunningProcesses(destination);
                 }
                 ExtractAndVerify(staging);
-                if (Directory.Exists(destination)) { Directory.Move(destination, backup); movedPrevious = true; }
+                if (Directory.Exists(destination))
+                {
+                    // Agent clients start a closed host again on their own, so hosts are closed right before the
+                    // folder moves, and once more if one started again in between.
+                    CloseRunningProcesses(destination);
+                    try { Directory.Move(destination, backup); }
+                    catch (IOException) { CloseRunningProcesses(destination); Directory.Move(destination, backup); }
+                    movedPrevious = true;
+                }
                 try { Directory.Move(staging, destination); }
                 catch { if (movedPrevious) Directory.Move(backup, destination); throw; }
                 try
@@ -137,9 +145,15 @@ namespace KillerMCP.Setup
                     if (movedPrevious) Directory.Move(backup, destination);
                     throw;
                 }
-                if (movedPrevious) DeleteVerifiedInstallation(backup, allowLegacy: true, allowMissing: true);
                 RegisterInstalledApp(destination);
                 UpdateBootstrap.Register(destination);
+                // The new version is in place and registered. A backup that cannot be removed now is left for
+                // the next install to clear instead of failing an install that succeeded.
+                if (movedPrevious)
+                {
+                    try { DeleteVerifiedInstallation(backup, allowLegacy: true, allowMissing: true); }
+                    catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException || exception is InvalidDataException || exception is InvalidOperationException) { }
+                }
             }
             finally
             {
@@ -208,12 +222,45 @@ namespace KillerMCP.Setup
             using (Process? process = Process.Start(start))
             {
                 if (process == null) throw new InvalidOperationException("KillerMCP client configuration did not start.");
-                string output = process.StandardOutput.ReadToEnd();
-                string error = process.StandardError.ReadToEnd();
-                if (!process.WaitForExit(60000)) { process.Kill(); throw new TimeoutException("KillerMCP client configuration timed out."); }
+                // Both streams are read at once, so a configurator that fills one cannot stall on the other
+                // and the time limit holds while it is still writing.
+                Task<string> outputRead = process.StandardOutput.ReadToEndAsync();
+                Task<string> errorRead = process.StandardError.ReadToEndAsync();
+                if (!process.WaitForExit(ConfigureTimeout()))
+                {
+                    KillTree(process);
+                    throw new TimeoutException("KillerMCP client configuration did not finish in time. Close agent clients such as Codex and run setup again.");
+                }
+                process.WaitForExit();
+                // A program the configurator started can keep its output open after it exits.
+                Task.WaitAll(new Task[] { outputRead, errorRead }, 5000);
+                string output = outputRead.Status == TaskStatus.RanToCompletion ? outputRead.Result : string.Empty;
+                string error = errorRead.Status == TaskStatus.RanToCompletion ? errorRead.Result : string.Empty;
                 if (process.ExitCode != 0) throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? output.Trim() : error.Trim());
                 return output;
             }
+        }
+
+        // Above the configurator's own limits for each Codex call, so only a configurator that has stopped
+        // responding reaches it. An isolated test install can shorten it.
+        private static int ConfigureTimeout()
+        {
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(TestRootVariable))
+                && int.TryParse(Environment.GetEnvironmentVariable("KILLERMCP_TEST_CONFIGURE_TIMEOUT_MS"), out int test) && test > 0) return test;
+            return 150000;
+        }
+
+        // The configurator runs Codex, which has to stop with it.
+        private static void KillTree(Process process)
+        {
+            try
+            {
+                var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "taskkill.exe"), "/PID " + process.Id + " /T /F") { UseShellExecute = false, CreateNoWindow = true };
+                using (Process? killer = Process.Start(start)) killer?.WaitForExit(10000);
+            }
+            catch (System.ComponentModel.Win32Exception) { }
+            try { if (!process.HasExited) process.Kill(); }
+            catch (Exception exception) when (exception is InvalidOperationException || exception is System.ComponentModel.Win32Exception) { }
         }
 
         private static void NotifySuccess(string destination)
@@ -317,13 +364,14 @@ namespace KillerMCP.Setup
             Directory.Delete(folder);
         }
 
-        // Finishes removals that an earlier setup started but could not complete. A folder that holds
-        // anything KillerMCP did not install is left alone.
+        // Finishes removals that an earlier setup started but could not complete, and removes backups an
+        // earlier upgrade could not delete. A folder that holds anything KillerMCP did not install is left alone.
         private static void RemoveInterruptedRemovals(string destination)
         {
             string? parent = Path.GetDirectoryName(destination);
             if (parent == null || !Directory.Exists(parent)) return;
-            foreach (string folder in Directory.GetDirectories(parent, Path.GetFileName(destination) + ".removing-*"))
+            string name = Path.GetFileName(destination);
+            foreach (string folder in Directory.GetDirectories(parent, name + ".removing-*").Concat(Directory.GetDirectories(parent, name + ".previous-*")))
             {
                 try
                 {
@@ -372,9 +420,32 @@ namespace KillerMCP.Setup
             string setup = SetupCopyPath(destination);
             using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegistryPath(destination)))
             {
-                if (!File.Exists(setup)) { if (key != null) throw new InvalidOperationException("The installed KillerMCP setup file is missing."); return; }
+                if (!File.Exists(setup))
+                {
+                    if (key == null || IsOrphanedEntry(destination, setup, key)) return;
+                    throw new InvalidOperationException("The installed KillerMCP setup file is missing, and its uninstall entry names a different folder. Remove the entry under HKCU\\" + RegistryPath(destination) + " and run setup again.");
+                }
                 if (key != null && string.Equals(key.GetValue("SetupSha256") as string, Sha256(setup), StringComparison.OrdinalIgnoreCase)) return;
                 if (!IsRecoverableSetup(destination, setup, key)) throw new InvalidOperationException(key == null ? "An unregistered KillerMCP setup file already exists." : "The installed KillerMCP setup file or uninstall entry has changed.");
+            }
+        }
+
+        // The setup copy beside the folder can be deleted or quarantined while its uninstall entry stays. When
+        // the entry is for this folder and the folder holds only KillerMCP files, setup installs again and
+        // writes a new copy and entry instead of refusing.
+        private static bool IsOrphanedEntry(string destination, string setup, RegistryKey key)
+        {
+            try
+            {
+                string? location = key.GetValue("InstallLocation") as string;
+                if (string.IsNullOrWhiteSpace(location) || !Path.GetFullPath(location).Equals(Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase)) return false;
+                if (!string.Equals(key.GetValue("UninstallString") as string, Quote(setup) + " /uninstall", StringComparison.OrdinalIgnoreCase)) return false;
+                if (Directory.Exists(destination) && ContainsFiles(destination)) ValidateInstalled(destination, allowLegacy: true, allowMissing: true);
+                return true;
+            }
+            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException || exception is ArgumentException || exception is NotSupportedException || exception is InvalidDataException || exception is InvalidOperationException)
+            {
+                return false;
             }
         }
 

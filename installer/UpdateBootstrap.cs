@@ -107,7 +107,7 @@ namespace KillerMCP.Setup
             string actual;
             using (var sha = SHA256.Create()) actual = BitConverter.ToString(sha.ComputeHash(installer)).Replace("-", "");
             if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The release checksum does not match.");
-            string path = Path.Combine(Path.GetTempPath(), "KillerMCP-Setup-" + version + "-" + Guid.NewGuid().ToString("N") + ".exe");
+            string path = KillerMCP.Updates.DownloadedSetups.NewPath(Path.GetTempPath(), version);
             File.WriteAllBytes(path, installer);
             if (!KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(path))
             {

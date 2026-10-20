@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\installer\ReleaseSignature.cs" Link="ReleaseSignature.cs" />
+    <Compile Include="..\..\installer\DownloadedSetups.cs" Link="DownloadedSetups.cs" />
     <Resource Include="Assets\mcp.png" />
     <Resource Include="..\..\assets\KillerMCP.ico" Link="Assets\app-icon.ico" />
     <Resource Include="Assets\KillerSans-Regular.ttf" />
