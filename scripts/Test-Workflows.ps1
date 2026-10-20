@@ -59,6 +59,16 @@ if (-not $WorkflowFolder) {
     Write-Output 'The workflow check refuses event data run as a step script.'
 }
 
+# The WinGet manifest takes the same exact version tags as the Chocolatey workflow.
+$tagParameter = (Get-Command (Join-Path $PSScriptRoot 'New-WinGetManifest.ps1')).Parameters['Tag']
+$tagRule = $tagParameter.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidatePatternAttribute] }
+if (-not $tagRule) { throw 'New-WinGetManifest.ps1 does not check its tag.' }
+foreach ($badTag in @('V1.2.3', "v1.2.3`n", "v1.2.$([char]0x0663)")) {
+    if ([regex]::IsMatch($badTag, $tagRule.RegexPattern, $tagRule.Options)) { throw "New-WinGetManifest.ps1 accepts the tag '$($badTag.Trim())'." }
+}
+if (-not [regex]::IsMatch('v1.2.3', $tagRule.RegexPattern, $tagRule.Options)) { throw 'New-WinGetManifest.ps1 refuses a version tag.' }
+Write-Output 'Release tags are exact version tags in every release workflow.'
+
 # The installer check accepts only the KillerMCP publisher's timestamped signature.
 $assert = Join-Path $PSScriptRoot 'Assert-ReleaseInstaller.ps1'
 $unsigned = Join-Path ([IO.Path]::GetTempPath()) ('killermcp-unsigned-' + [guid]::NewGuid().ToString('N') + '.exe')

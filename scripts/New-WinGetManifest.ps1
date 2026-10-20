@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidatePattern('^v\d+\.\d+\.\d+$')]
+    [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+\z', Options = 'None')]
     [string]$Tag,
     [Parameter(Mandatory = $true)]
     [string]$OutputDirectory
