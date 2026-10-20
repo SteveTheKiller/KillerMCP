@@ -516,6 +516,13 @@ const fakeApp = environment.KILLERNOTES_CLI;
 const brokenApp = join(updateDirectory, 'broken.exe');
 const missingApp = join(updateDirectory, 'missing.exe');
 await writeFile(brokenApp, 'not a program');
+// Starting it must fail before Windows reads it: a file it reads that is not a program makes Windows
+// show an unsupported 16-bit application dialog on the desktop. Denying execute makes the start fail
+// with access denied instead.
+if (process.platform === 'win32') {
+  const denied = spawnSync('icacls', [brokenApp, '/deny', '*S-1-1-0:(X)'], { stdio: 'ignore' });
+  assert.equal(denied.status, 0, 'Could not deny execute on the broken app fixture.');
+}
 const stalled = spawn('dotnet', ['run', '--project', 'src/KillerMCP/KillerMCP.csproj', '-c', 'Release', '--no-build'], {
   stdio: ['pipe', 'pipe', 'ignore'],
   env: { ...environment, KILLERMCP_FAKE_HANG: '1', KILLERNOTES_CLI: fakeApp, KILLERPDF_CLI: brokenApp, KILLENDAR_CLI: missingApp, KILLERSHELL_CLI: missingApp, KILLERSCAN_CLI: missingApp, KILLERBENCH_CLI: missingApp, KILLERSHOT_CLI: missingApp },

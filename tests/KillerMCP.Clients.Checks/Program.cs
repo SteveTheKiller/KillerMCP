@@ -243,11 +243,14 @@ try
         Equal(1, ClientConfiguration.RemoveAll(executable, npmEnvironment).Count(message => message.StartsWith("Warning: Codex", StringComparison.Ordinal)));
     }
 
-    // A Codex program that cannot be started is an error setup can show, not a crash.
+    // A Codex program that cannot be started is an error setup can show, not a crash. The file is held
+    // open so starting it fails before Windows reads it; a file it reads that is not a program makes
+    // Windows show an unsupported 16-bit application dialog on the desktop.
     var brokenCodex = Path.Combine(root, "broken-codex.exe");
     File.WriteAllText(brokenCodex, "not a program");
     var brokenEnvironment = new Dictionary<string, string?>(npmEnvironment) { ["PATH"] = string.Empty, ["CODEX_CLI_PATH"] = brokenCodex };
-    Equal(true, Caught<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, brokenEnvironment)).Message.Contains("Codex could not be started", StringComparison.Ordinal));
+    using (File.Open(brokenCodex, FileMode.Open, FileAccess.Read, FileShare.None))
+        Equal(true, Caught<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, brokenEnvironment)).Message.Contains("Codex could not be started", StringComparison.Ordinal));
 
     // When Codex cannot take the new connection and the old one cannot be put back either, the error says so.
     File.WriteAllText(codexState, new JsonObject { ["transport"] = new JsonObject { ["type"] = "stdio", ["command"] = legacyCommand, ["args"] = new JsonArray(legacyScript) } }.ToJsonString());
