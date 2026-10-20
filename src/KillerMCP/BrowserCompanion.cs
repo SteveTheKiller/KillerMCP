@@ -44,12 +44,40 @@ sealed class BrowserCompanion
         ? value
         : throw new InvalidOperationException("Open the browser companion and provide this input first");
 
+    // Each connection runs on its own task with a time limit, and only a few run at once, so a
+    // connection that never finishes its request cannot hold up the page or tie up the host.
+    private const int MaximumConnections = 16;
+    private static readonly TimeSpan RequestTime = TimeSpan.FromSeconds(5);
+    private readonly SemaphoreSlim connections = new(MaximumConnections, MaximumConnections);
+
     private async Task AcceptLoopAsync()
     {
         while (true)
         {
-            var client = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
-            _ = HandleAsync(client);
+            TcpClient client;
+            try
+            {
+                client = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
+            }
+            catch (SocketException exception)
+            {
+                Console.Error.WriteLine("KillerMCP browser companion could not accept a connection: " + exception.Message);
+                continue;
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+            if (!connections.Wait(0))
+            {
+                client.Dispose();
+                continue;
+            }
+            _ = Task.Run(async () =>
+            {
+                try { await HandleAsync(client).ConfigureAwait(false); }
+                finally { connections.Release(); }
+            });
         }
     }
 
@@ -57,10 +85,11 @@ sealed class BrowserCompanion
     {
         using (client)
         {
+            using var deadline = new CancellationTokenSource(RequestTime);
             try
             {
                 using var stream = client.GetStream();
-                var headerText = await ReadHeadersAsync(stream).ConfigureAwait(false);
+                var headerText = await ReadHeadersAsync(stream, deadline.Token).ConfigureAwait(false);
                 var lines = headerText.Split("\r\n", StringSplitOptions.None);
                 var requestLine = lines[0].Split(' ', 3);
                 if (requestLine.Length != 3 || !Uri.TryCreate($"http://127.0.0.1{requestLine[1]}", UriKind.Absolute, out var url))
@@ -90,7 +119,7 @@ sealed class BrowserCompanion
                     return;
                 }
                 var body = new byte[length];
-                await stream.ReadExactlyAsync(body).ConfigureAwait(false);
+                await stream.ReadExactlyAsync(body, deadline.Token).ConfigureAwait(false);
                 using var document = JsonDocument.Parse(body);
                 var type = document.RootElement.GetProperty("type").GetString();
                 var value = document.RootElement.GetProperty("value").GetString();
@@ -109,14 +138,14 @@ sealed class BrowserCompanion
         }
     }
 
-    private static async Task<string> ReadHeadersAsync(NetworkStream stream)
+    private static async Task<string> ReadHeadersAsync(NetworkStream stream, CancellationToken cancellationToken)
     {
         var bytes = new List<byte>();
+        var one = new byte[1];
         while (bytes.Count < 16_384)
         {
-            var value = stream.ReadByte();
-            if (value < 0) throw new EndOfStreamException();
-            bytes.Add((byte)value);
+            if (await stream.ReadAsync(one, cancellationToken).ConfigureAwait(false) == 0) throw new EndOfStreamException();
+            bytes.Add(one[0]);
             var count = bytes.Count;
             if (count >= 4 && bytes[count - 4] == 13 && bytes[count - 3] == 10 && bytes[count - 2] == 13 && bytes[count - 1] == 10) return Encoding.ASCII.GetString(bytes.ToArray(), 0, count - 4);
         }

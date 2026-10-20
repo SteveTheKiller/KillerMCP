@@ -169,7 +169,22 @@ Task.WaitAll([.. calls], TimeSpan.FromSeconds(10));
 static class ToolRegistry
 {
     private static readonly JsonSerializerOptions CamelCaseJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-    private static readonly BrowserCompanion Companion = new();
+    // The companion's local web server starts the first time it is opened, not with every host, and a
+    // failure to start is that tool's error rather than the host's.
+    private static readonly object CompanionGate = new();
+    private static BrowserCompanion? companion;
+
+    private static object OpenCompanion()
+    {
+        try
+        {
+            lock (CompanionGate) return new { url = (companion ??= new BrowserCompanion()).Url };
+        }
+        catch (Exception exception) when (exception is System.Net.Sockets.SocketException or InvalidOperationException or IOException)
+        {
+            throw new ToolCallException("The browser companion could not start: " + exception.Message);
+        }
+    }
     private static IReadOnlyDictionary<string, AppAdapter> Adapters = new Dictionary<string, AppAdapter>();
     public static UpdateStatus Status { get; set; } = null!;
 
@@ -400,7 +415,7 @@ static class ToolRegistry
             "format_yaml" => YamlFormat(arguments),
             "generate_meta_tags" => MetaTagResult(arguments),
             "search_gifs" => SearchGifs(arguments),
-            "open_browser_companion_local" => new { url = Companion.Url },
+            "open_browser_companion_local" => OpenCompanion(),
             "get_browser_device_information_local" => BrowserState("device"),
             "get_browser_keycode_local" => BrowserState("key"),
             "get_browser_html_local" => BrowserState("html"),
@@ -520,7 +535,7 @@ static class ToolRegistry
     }
     private static object BrowserState(string type)
     {
-        try { return Companion.Get(type); }
+        try { return (companion ?? throw new InvalidOperationException("Open the browser companion and provide this input first")).Get(type); }
         catch (InvalidOperationException exception) { throw new ToolCallException(exception.Message); }
     }
     private static object PowerShellCmdlet(JsonElement arguments)

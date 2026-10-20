@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
+import { createConnection } from 'node:net';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
@@ -280,6 +281,21 @@ for (const [type, tool, value] of [
   assert.equal(browserState.value, value);
   assert.equal(typeof browserState.updatedAt, 'number');
 }
+// A connection that never finishes its request must not block the page for everyone else.
+const stalledSockets = [];
+for (let index = 0; index < 3; index++) {
+  const socket = createConnection({ host: '127.0.0.1', port: Number(companionUrl.port) });
+  socket.on('error', () => {});
+  socket.write('GET / HTTP/1.1\r\n');
+  stalledSockets.push(socket);
+}
+await new Promise(done => setTimeout(done, 300));
+const pageStarted = Date.now();
+const pageWhileStalled = await fetch(companion.url, { signal: AbortSignal.timeout(10000) });
+assert.equal(pageWhileStalled.status, 200);
+await pageWhileStalled.text();
+assert.ok(Date.now() - pageStarted < 2000, 'A stalled connection held up the companion page.');
+for (const socket of stalledSockets) socket.destroy();
 const cron = await request('tools/call', { name: 'describe_cron', arguments: { expression: '*/5 * * * *' } });
 assert.equal(JSON.parse(cron.content[0].text).description, 'Every 5 minutes, every hour, every day');
 const subnet = await request('tools/call', { name: 'calculate_ipv4_subnet', arguments: { address: '198.51.100.27/24' } });

@@ -43,9 +43,10 @@
 
   <section>
     <h2>Signature creator</h2>
-    <canvas id="signature" width="880" height="180" aria-label="Draw a signature"></canvas>
+    <canvas id="signature" width="880" height="180" role="img" aria-label="Signature area. Draw with a mouse, pen or finger, or type your name below."></canvas>
+    <p><label for="typedName">Or type your name</label> <input id="typedName" autocomplete="name" maxlength="80"> <button id="useTypedName">Use typed name</button></p>
     <button id="clearSignature">Clear signature</button>
-    <output id="signatureStatus">Draw in the white area.</output>
+    <output id="signatureStatus">Draw in the white area or type your name.</output>
   </section>
 
   <section>
@@ -84,25 +85,37 @@
       await send('device', JSON.stringify(data));
       document.querySelector('#deviceStatus').textContent = 'Current device information is available to the local MCP server.';
     }
-    deviceInfo().catch(error => document.querySelector('#deviceStatus').textContent = error.message);
-    document.querySelector('#refreshDevice').onclick = () => deviceInfo();
-    addEventListener('resize', () => deviceInfo());
+    // Every transfer reports its own failure in that section instead of failing silently.
+    function report(statusId, work) {
+      Promise.resolve().then(work).catch(error => document.querySelector(statusId).textContent = error.message);
+    }
+    report('#deviceStatus', deviceInfo);
+    document.querySelector('#refreshDevice').onclick = () => report('#deviceStatus', deviceInfo);
+    addEventListener('resize', () => report('#deviceStatus', deviceInfo));
 
-    addEventListener('keydown', async (event) => {
+    addEventListener('keydown', (event) => report('#keyStatus', async () => {
       const data = { key: event.key, keyCode: event.keyCode, code: event.code, location: event.location,
         modifiers: ['Meta', 'Shift', 'Ctrl', 'Alt'].filter((name, index) =>
           [event.metaKey, event.shiftKey, event.ctrlKey, event.altKey][index]) };
       await send('key', JSON.stringify(data));
       document.querySelector('#keyStatus').textContent = `${data.key} (${data.code}, ${data.keyCode})`;
-    });
+    }));
 
     const editor = document.querySelector('#editor');
+    const htmlLimit = 8192;
     async function sendHtml() {
-      await send('html', editor.innerHTML);
+      const html = editor.innerHTML;
+      if (html.length > htmlLimit) {
+        // The server refuses longer HTML, so say so instead of leaving the last accepted version in place unnoticed.
+        await send('html', '');
+        document.querySelector('#editorStatus').textContent = `The HTML is ${html.length} characters, over the ${htmlLimit} limit, so it was not sent. Shorten it to send it.`;
+        return;
+      }
+      await send('html', html);
       document.querySelector('#editorStatus').textContent = 'HTML is available to the local MCP server.';
     }
-    editor.addEventListener('input', () => sendHtml());
-    sendHtml();
+    editor.addEventListener('input', () => report('#editorStatus', sendHtml));
+    report('#editorStatus', sendHtml);
 
     const signature = document.querySelector('#signature');
     const ink = signature.getContext('2d');
@@ -128,15 +141,31 @@
       ink.lineTo(pos.x, pos.y);
       ink.stroke();
     });
-    signature.addEventListener('pointerup', async () => {
-      drawing = false;
+    async function sendSignature() {
       await send('signature', signature.toDataURL('image/png'));
       document.querySelector('#signatureStatus').textContent = 'Signature is available to the local MCP server.';
+    }
+    signature.addEventListener('pointerup', () => {
+      drawing = false;
+      report('#signatureStatus', sendSignature);
     });
+    // A typed name is the keyboard alternative to drawing.
+    document.querySelector('#useTypedName').onclick = () => {
+      const name = document.querySelector('#typedName').value.trim();
+      if (!name) { document.querySelector('#signatureStatus').textContent = 'Type a name first.'; return; }
+      ink.clearRect(0, 0, signature.width, signature.height);
+      ink.fillStyle = '#111';
+      ink.font = '56px "Segoe Script", "Brush Script MT", cursive';
+      ink.textBaseline = 'middle';
+      ink.fillText(name, 24, signature.height / 2, signature.width - 48);
+      report('#signatureStatus', sendSignature);
+    };
     document.querySelector('#clearSignature').onclick = () => {
       ink.clearRect(0, 0, signature.width, signature.height);
-      send('signature', '');
-      document.querySelector('#signatureStatus').textContent = 'Signature cleared.';
+      report('#signatureStatus', async () => {
+        await send('signature', '');
+        document.querySelector('#signatureStatus').textContent = 'Signature cleared.';
+      });
     };
 
     const preview = document.querySelector('#preview');
