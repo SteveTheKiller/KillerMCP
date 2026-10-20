@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
+- PDFs made from notes, reports and agent content render fully offline. A note with a refresh, base, frame, script or remote image can no longer redirect the page, reach a server or file share, or stop the PDF from being created.
 - File tools open network paths, mapped drives and links to them only on servers in the local network or listed in `%LOCALAPPDATA%\KillerMCP\network-servers.json`, so an agent cannot send your Windows sign-in to an outside server. Device paths are refused.
 - KillerMCP answers right away when it starts, even when a Killer app is slow, hung or broken. Apps are asked for their commands in parallel, and one that does not answer is left out instead of delaying or closing the server.
 - A long tool call no longer holds up other requests. Calls run side by side, a client can cancel one and its app process stops, and a malformed line no longer closes KillerMCP.

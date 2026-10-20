@@ -272,14 +272,39 @@ public static partial class IntegrationAdapter
         {
             Directory.CreateDirectory(temp);
             var source = Path.Combine(temp, "report.html");
-            await File.WriteAllTextAsync(source, html, new UTF8Encoding(false), token).ConfigureAwait(false);
-            // A private profile keeps browser data separate, and the resolver rule fails every host name lookup.
-            var result = await ProcessRunner.RunAsync(edge, ["--headless", "--disable-gpu", "--no-pdf-header-footer", "--user-data-dir=" + Path.Combine(temp, "profile"), "--host-resolver-rules=MAP * ~NOTFOUND", "--print-to-pdf=" + output, new Uri(source).AbsoluteUri], TimeSpan.FromSeconds(90), 32768, token).ConfigureAwait(false);
+            await File.WriteAllTextAsync(source, Harden(html), new UTF8Encoding(false), token).ConfigureAwait(false);
+            // A private profile keeps browser data separate. The resolver rule fails every host name
+            // lookup, and the dead proxy, with loopback taken out of its bypass list, fails every
+            // request to an address, so nothing in the page can reach a server.
+            var result = await ProcessRunner.RunAsync(edge,
+            [
+                "--headless", "--disable-gpu", "--no-pdf-header-footer", "--user-data-dir=" + Path.Combine(temp, "profile"),
+                "--host-resolver-rules=MAP * ~NOTFOUND", "--proxy-server=http://127.0.0.1:9", "--proxy-bypass-list=<-loopback>",
+                "--disable-background-networking", "--disable-component-update", "--disable-extensions", "--disable-sync", "--no-first-run",
+                "--print-to-pdf=" + output, new Uri(source).AbsoluteUri,
+            ], TimeSpan.FromSeconds(90), 32768, token).ConfigureAwait(false);
             return result.ExitCode == 0 && File.Exists(output) ? Ok(JsonSerializer.Serialize(new { output })) : ProcessError("PDF creation", result);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or TimeoutException or InvalidOperationException) { return Error(Limit(ex.Message)); }
         finally { Delete(temp); }
     }
+
+    // Notes and agent content are untrusted HTML. The policy comes first in the document, ahead of
+    // anything the content could use to slip it, and base and refresh elements are removed because
+    // the policy cannot stop them from pointing the page elsewhere, including a file share.
+    internal static string Harden(string html)
+    {
+        var body = LeadingDoctype().Replace(BaseOrRefresh().Replace(html, string.Empty), string.Empty, 1);
+        return "<!doctype html><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"" + ContentPolicy + "\">" + body;
+    }
+
+    private const string ContentPolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:";
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"<base\b[^>]*>|<meta\b[^>]*http-equiv\s*=\s*[""']?\s*refresh[^>]*>", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex BaseOrRefresh();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^[^<]*<!doctype[^>]*>", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex LeadingDoctype();
 
     private static string JsonReport(string title, JsonElement root)
     {

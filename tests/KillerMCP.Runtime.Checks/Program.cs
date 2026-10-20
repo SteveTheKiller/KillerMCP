@@ -211,7 +211,8 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     }
     if (arguments.Length == 5 && arguments[0] == "export" && arguments[1] == "--id" && arguments[3] == "--output")
     {
-        File.WriteAllText(arguments[4], "<!doctype html><html><body><h1>Fixture note</h1></body></html>");
+        var noteHtml = Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES_HTML");
+        File.WriteAllText(arguments[4], noteHtml is { Length: > 0 } ? File.ReadAllText(noteHtml) : "<!doctype html><html><body><h1>Fixture note</h1></body></html>");
         Console.Write(JsonSerializer.Serialize(new { output = arguments[4] }));
         return;
     }
@@ -565,6 +566,45 @@ try
     Equal(true, (await Integration("killerpdf_save_report_as_note", new { path = sourceOne, report = "everything" })).IsError);
     Equal(true, (await Integration("killernotes_export_notes_pdf", new { ids = Array.Empty<int>(), output = Path.Combine(root, "notes.pdf") })).IsError);
     Equal(true, (await Integration("killer_create_pdf", new { content = "report", output = "relative.pdf" })).IsError);
+
+    // A note or report turned into a PDF must not make Edge contact anything: not a server named by
+    // address, not a page a refresh or base element points at, not a frame.
+    var edgeInstalled = new[] { Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.ProgramFiles }
+        .Any(folder => File.Exists(Path.Combine(Environment.GetFolderPath(folder), "Microsoft", "Edge", "Application", "msedge.exe")));
+    if (OperatingSystem.IsWindows() && edgeInstalled)
+    {
+        var trap = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        trap.Start();
+        var trapPort = ((System.Net.IPEndPoint)trap.LocalEndpoint).Port;
+        var contacts = 0;
+        var trapLoop = Task.Run(async () =>
+        {
+            while (true)
+            {
+                try { using var trapClient = await trap.AcceptTcpClientAsync(); Interlocked.Increment(ref contacts); }
+                catch (Exception trapError) when (trapError is ObjectDisposedException or System.Net.Sockets.SocketException) { return; }
+            }
+        });
+        var trapUrl = $"http://127.0.0.1:{trapPort}";
+        var hostile = $"<!doctype html><html><head><base href=\"{trapUrl}/base/\"><META HTTP-EQUIV=\"Refresh\" CONTENT=\"0; url={trapUrl}/refresh\"></head>"
+            + $"<body><h1>Fixture note</h1><img src=\"{trapUrl}/image.png\"><img src=\"relative.png\"><iframe src=\"{trapUrl}/frame\"></iframe>"
+            + $"<link rel=\"stylesheet\" href=\"{trapUrl}/style.css\"><script>new Image().src='{trapUrl}/script'</script></body></html>";
+        var hostileNote = Path.Combine(root, "hostile-note.html");
+        File.WriteAllText(hostileNote, hostile);
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_HTML", hostileNote);
+        var notePdf = Path.Combine(root, "hostile-note.pdf");
+        var noteResult = await Integration("killernotes_export_pdf", new { id = 1, output = notePdf });
+        var reportPdf = Path.Combine(root, "hostile-report.pdf");
+        var reportResult = await Integration("killer_create_pdf", new { content = hostile, output = reportPdf });
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_HTML", null);
+        await Task.Delay(1000);
+        trap.Stop();
+        await trapLoop;
+        if (contacts != 0) throw new InvalidOperationException($"Rendering a PDF contacted a server {contacts} time(s).");
+        if (noteResult.IsError || !File.Exists(notePdf)) throw new InvalidOperationException("The note PDF was not created: " + noteResult.Text);
+        if (reportResult.IsError || !File.Exists(reportPdf)) throw new InvalidOperationException("The report PDF was not created: " + reportResult.Text);
+        Console.WriteLine("PASS PDF rendering stays offline");
+    }
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", null);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", null);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", null);
