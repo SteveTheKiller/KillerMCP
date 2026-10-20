@@ -5,12 +5,27 @@ namespace KillerMCP.Runtime;
 
 internal sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError, bool OutputExceeded);
 
-/// <summary>The app processes KillerMCP starts, for the host to stop when it ends.</summary>
+/// <summary>
+/// App processes that end with the host. Only work run through StopWithHost is stopped, such as asking
+/// each app for its commands; other app processes, such as a KillerBench repair running in the
+/// background, keep running when the host ends.
+/// </summary>
 public static class AppProcesses
 {
-    /// <summary>Stops every app process a tool or app discovery started and is still running, so none
-    /// outlives the host, including one that hangs.</summary>
+    private static readonly AsyncLocal<bool> EndsWithHost = new();
+
+    internal static bool Current => EndsWithHost.Value;
+
+    /// <summary>Stops every app process started through StopWithHost that is still running, and any
+    /// such process started afterwards, so none outlives the host, including one that hangs.</summary>
     public static void StopAll() => ProcessRunner.StopAll();
+
+    /// <summary>Runs work whose app processes end with the host.</summary>
+    public static Task<T> StopWithHost<T>(Func<Task<T>> work) => Task.Run(() =>
+    {
+        EndsWithHost.Value = true;
+        return work();
+    });
 }
 
 internal static class ProcessRunner
@@ -76,23 +91,31 @@ internal static class ProcessRunner
             throw new InvalidOperationException("The application command did not start.");
         }
 
-        Running.TryAdd(process, 0);
+        var endsWithHost = AppProcesses.Current;
+        if (endsWithHost)
+        {
+            Running.TryAdd(process, 0);
+            // A process started after the host began stopping is stopped at once.
+            if (stopping) TryKill(process);
+        }
         try
         {
             return await WaitAsync(process, timeout, maximumCharacters, cancellationToken, standardInput).ConfigureAwait(false);
         }
         finally
         {
-            Running.TryRemove(process, out _);
+            if (endsWithHost) Running.TryRemove(process, out _);
         }
     }
 
-    // Every app process a run started and has not finished with, so a host that ends can stop them.
+    // App processes started to end with the host that have not finished, so a host that ends can stop them.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Process, byte> Running = new();
+    private static volatile bool stopping;
 
-    /// <summary>Stops every app process still running, with the processes it started.</summary>
+    /// <summary>Stops every app process that ends with the host, with the processes it started.</summary>
     internal static void StopAll()
     {
+        stopping = true;
         foreach (var process in Running.Keys)
         {
             TryKill(process);

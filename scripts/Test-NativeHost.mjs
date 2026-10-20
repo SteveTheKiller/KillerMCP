@@ -581,8 +581,12 @@ if (process.platform === 'win32') {
     started = hungApps();
   }
   assert.notEqual(started, '0', 'The host that leaves early never started the hanging app.');
+  // A tools/list still waiting on the hanging app does not hold the host open either.
+  early.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })}\n`);
+  const closedAt = Date.now();
   early.stdin.end();
   await earlyExit;
+  assert.ok(Date.now() - closedAt < 8000, 'A host waiting on a hanging app took too long to exit.');
   let left = hungApps();
   for (let attempt = 0; attempt < 10 && left !== '0'; attempt++) {
     await new Promise(wait => setTimeout(wait, 500));

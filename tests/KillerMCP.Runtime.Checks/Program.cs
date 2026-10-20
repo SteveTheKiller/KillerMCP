@@ -688,6 +688,26 @@ try
             catch (ArgumentException) { }
         }
         Console.WriteLine("PASS cancelled input stops the app");
+
+        // A host that ends stops only the app processes started to end with it, such as asking an app for
+        // its commands. A KillerBench repair running in the background keeps running, and work of that
+        // kind that starts after the host began stopping is stopped too.
+        string Sleeper(string pidPath) => $"$PID | Set-Content -LiteralPath '{pidPath}'; Start-Sleep -Seconds 30";
+        var keptPid = Path.Combine(root, "kept.pid");
+        var endedPid = Path.Combine(root, "ended.pid");
+        var kept = ProcessRunner.RunAsync("powershell.exe", ["-NoProfile", "-Command", Sleeper(keptPid)], TimeSpan.FromSeconds(60), 4096);
+        var ended = AppProcesses.StopWithHost(() => ProcessRunner.RunAsync("powershell.exe", ["-NoProfile", "-Command", Sleeper(endedPid)], TimeSpan.FromSeconds(60), 4096));
+        for (var wait = 0; wait < 60 && !(File.Exists(keptPid) && File.Exists(endedPid)); wait++) await Task.Delay(250);
+        Equal(true, File.Exists(keptPid) && File.Exists(endedPid));
+        AppProcesses.StopAll();
+        Equal(true, await Task.WhenAny(ended, Task.Delay(10000)) == ended);
+        await Task.Delay(1000);
+        Equal(false, kept.IsCompleted);
+        using (var keptProcess = System.Diagnostics.Process.GetProcessById(int.Parse(File.ReadAllText(keptPid).Trim(), System.Globalization.CultureInfo.InvariantCulture))) keptProcess.Kill(true);
+        await kept;
+        var late = AppProcesses.StopWithHost(async () => { try { return (await ProcessRunner.RunAsync("powershell.exe", ["-NoProfile", "-Command", "Start-Sleep -Seconds 30"], TimeSpan.FromSeconds(60), 4096)).ExitCode; } catch (InvalidOperationException) { return -1; } });
+        Equal(true, await Task.WhenAny(late, Task.Delay(10000)) == late);
+        Console.WriteLine("PASS a closing host stops only its own app processes");
     }
     // When a later page cannot be saved, the result still names the notes already created.
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_IMPORT_FAIL", "page-2");

@@ -51,7 +51,8 @@ static async Task<IReadOnlyList<AppAdapter>> LoadApp(string app, Func<Task<IRead
 {
     try
     {
-        return await Task.Run(create).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        // The apps asked for their commands end with the host, even one that hangs.
+        return await AppProcesses.StopWithHost(create).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
     }
     catch (Exception exception)
     {
@@ -163,10 +164,11 @@ while ((line = Console.ReadLine()) is not null)
     }
 }
 // The client closed the connection, so nobody is waiting for the remaining calls.
+// App discovery can still be waiting on an app that hangs. Stopping it first lets calls waiting for the
+// tool list finish instead of holding the host open, and no such app outlives the host.
+AppProcesses.StopAll();
 foreach (var source in running.Values) source.Cancel();
 Task.WaitAll([.. calls], TimeSpan.FromSeconds(10));
-// App discovery can still be waiting on an app that hangs; no app process outlives the host.
-AppProcesses.StopAll();
 
 static class ToolRegistry
 {
