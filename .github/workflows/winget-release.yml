@@ -28,6 +28,9 @@ jobs:
       - name: Update WinGet validator
         shell: pwsh
         run: |
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              Register-PSRepository -Default -ErrorAction Stop
+          }
           # Pinned so a new module release cannot change what runs here without a commit.
           Install-Module Microsoft.WinGet.Client -RequiredVersion 1.29.380 -Scope CurrentUser -Force -Repository PSGallery
           Repair-WinGetPackageManager -Latest

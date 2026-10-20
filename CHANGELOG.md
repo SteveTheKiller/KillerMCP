@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 ### Fixed
 
 - Setup releases its inherited installation-folder lock before replacing files during an update.
+- WinGet publishing registers PSGallery when the build runner is missing it.
 
 ## [0.7.0] - 2026-10-20
 
