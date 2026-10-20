@@ -54,21 +54,34 @@ while ((line = Console.ReadLine()) is not null)
     {
         continue;
     }
-    var method = methodElement.GetString();
-    object result = method switch
+    var method = methodElement.ValueKind == JsonValueKind.String ? methodElement.GetString() : null;
+    // A client may ask for anything, including methods this server never advertised, so one
+    // request must never end the process. Failures go back as JSON-RPC errors on that id.
+    try
     {
-        "initialize" => new
+        object result = method switch
         {
-            protocolVersion = "2025-06-18",
-            capabilities = new { tools = new { listChanged = false } },
-            serverInfo = new { name = "KillerMCP", version = currentVersion },
-            instructions = "Use KillerMCP tools by task. Exact tool names are optional when the request is clear." + UpdateChecker.Instruction(ToolRegistry.Status),
-        },
-        "tools/list" => new { tools = ToolRegistry.Tools },
-        "tools/call" => ToolRegistry.Call(request.GetProperty("params"), json),
-        _ => throw new InvalidOperationException($"Unknown MCP method: {method}"),
-    };
-    Console.WriteLine(JsonSerializer.Serialize(new { jsonrpc = "2.0", id, result }, json));
+            "initialize" => new
+            {
+                protocolVersion = "2025-06-18",
+                capabilities = new { tools = new { listChanged = false } },
+                serverInfo = new { name = "KillerMCP", version = currentVersion },
+                instructions = "Use KillerMCP tools by task. Exact tool names are optional when the request is clear." + UpdateChecker.Instruction(ToolRegistry.Status),
+            },
+            "ping" => new { },
+            "tools/list" => new { tools = ToolRegistry.Tools },
+            "tools/call" => ToolRegistry.Call(request.TryGetProperty("params", out var callParams) ? callParams : default, json),
+            _ => throw new McpRequestException(-32601, $"Method not found: {method}"),
+        };
+        Console.WriteLine(JsonSerializer.Serialize(new { jsonrpc = "2.0", id, result }, json));
+    }
+    catch (Exception exception)
+    {
+        var (code, message) = exception is McpRequestException known
+            ? (known.Code, known.Message)
+            : (-32603, "Internal error: " + (exception.Message.Length <= 1024 ? exception.Message : exception.Message[..1024]));
+        Console.WriteLine(JsonSerializer.Serialize(new { jsonrpc = "2.0", id, error = new { code, message } }, json));
+    }
 }
 
 static class ToolRegistry
@@ -188,12 +201,22 @@ static class ToolRegistry
         annotations = ToolSafety.For(adapter.Tool.Name),
     })).ToArray<object>();
 
+    private static readonly JsonElement EmptyArguments = JsonDocument.Parse("{}").RootElement.Clone();
+
     public static void SetAdapters(IEnumerable<AppAdapter> adapters) => Adapters = adapters.ToDictionary(adapter => adapter.Tool.Name, StringComparer.Ordinal);
 
     public static object Call(JsonElement parameters, JsonSerializerOptions json)
     {
-        var name = parameters.GetProperty("name").GetString();
-        var arguments = parameters.GetProperty("arguments");
+        if (parameters.ValueKind != JsonValueKind.Object
+            || !parameters.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String)
+        {
+            throw new McpRequestException(-32602, "tools/call needs params with a tool name.");
+        }
+        var name = nameElement.GetString();
+        // MCP makes arguments optional; a tool without inputs is called with an empty object.
+        var arguments = parameters.TryGetProperty("arguments", out var given) && given.ValueKind == JsonValueKind.Object
+            ? given
+            : EmptyArguments;
         var loggedName = name is not null && (CoreToolNames.Contains(name) || Adapters.ContainsKey(name))
             ? name : "(unknown)";
         ToolCallLog.Record(loggedName, "started");
@@ -919,3 +942,9 @@ static class ToolRegistry
 }
 
 sealed class ToolCallException(string message) : Exception(message);
+
+/// <summary>A request the server rejects with a JSON-RPC error code instead of a result.</summary>
+sealed class McpRequestException(int code, string message) : Exception(message)
+{
+    public int Code { get; } = code;
+}

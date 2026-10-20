@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
+- KillerMCP no longer closes when a client asks for something it does not offer, such as resource templates. It answers with a standard error, replies to ping, and treats tools/call without arguments as an empty set.
 - A silent install or update that finds KillerMCP running exits with 1618, which Intune, Configuration Manager and RMM tools retry, instead of a general failure.
 
 ## [0.6.1] - 2026-10-19

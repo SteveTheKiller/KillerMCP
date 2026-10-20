@@ -45,6 +45,12 @@ const environment = {
   KILLERBENCH_STATE_DIR: join(updateDirectory, 'bench-state'),
 };
 const child = spawn('dotnet', ['run', '--project', 'src/KillerMCP/KillerMCP.csproj', '-c', 'Release', '--no-build'], { stdio: ['pipe', 'pipe', 'inherit'], env: environment });
+let closing = false;
+child.on('exit', code => {
+  if (closing) return;
+  console.error(`KillerMCP exited before the checks finished (exit code ${code}).`);
+  process.exit(1);
+});
 let buffer = '';
 const pending = new Map();
 child.stdout.setEncoding('utf8');
@@ -54,7 +60,7 @@ child.stdout.on('data', chunk => {
     const end = buffer.indexOf('\n');
     const message = JSON.parse(buffer.slice(0, end));
     buffer = buffer.slice(end + 1);
-    pending.get(message.id)?.(message.result);
+    pending.get(message.id)?.(message.error ? { error: message.error } : message.result);
     pending.delete(message.id);
   }
 });
@@ -171,6 +177,15 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killerpdf_save_report_as_note',
   'killerpdf_save_pages_as_notes',
 ]);
+const templates = await request('resources/templates/list');
+assert.equal(templates.error.code, -32601);
+assert.deepEqual(await request('ping'), {});
+const nullParams = await request('tools/call', null);
+assert.equal(nullParams.error.code, -32602);
+const nameless = await request('tools/call', { arguments: {} });
+assert.equal(nameless.error.code, -32602);
+const noArguments = await request('tools/call', { name: 'list_film_stocks' });
+assert.equal(JSON.parse(noArguments.content[0].text).length, 41);
 const called = await request('tools/call', { name: 'text_statistics', arguments: { text: 'hello world' } });
 assert.deepEqual(JSON.parse(called.content[0].text), { characterCount: 11, wordCount: 2, lineCount: 1, byteSize: 11 });
 const encoded = await request('tools/call', { name: 'encode_base64', arguments: { text: 'hé' } });
@@ -378,6 +393,7 @@ assert.ok(calls.some(call => call.outcome === 'ok' && typeof call.durationMs ===
 assert.ok(calls.some(call => call.tool === 'killermcp_update_status' && call.outcome === 'error'));
 assert.ok(calls.some(call => call.tool === 'killendar_create_appointment' && call.outcome === 'ok'));
 assert.ok(calls.every(call => !JSON.stringify(call).includes('Secret123!')));
+closing = true;
 child.stdin.end();
 updateServer.close();
 await rm(updateDirectory, { recursive: true, force: true });
