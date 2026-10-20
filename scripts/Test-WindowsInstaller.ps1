@@ -23,7 +23,7 @@ $installed = Join-Path $scratch 'Installed'
 $codexState = Join-Path $scratch 'codex-state.json'
 $previous = @{}
 $names = @('CLAUDE', 'CURSOR', 'COPILOT', 'GEMINI', 'WINDSURF', 'CLAUDE_DESKTOP')
-$variables = @('KILLERMCP_TEST_INSTALL_ROOT', 'KILLERMCP_TEST_RUNTIME', 'KILLERMCP_FAKE_CODEX_STATE', 'KILLERMCP_TOOL_CALL_LOG', 'CODEX_CLI_PATH') + ($names | ForEach-Object { "KILLERMCP_TEST_${_}_CONFIG" })
+$variables = @('KILLERMCP_TEST_INSTALL_ROOT', 'KILLERMCP_TEST_RUNTIME', 'KILLERMCP_FAKE_CODEX_STATE', 'KILLERMCP_TOOL_CALL_LOG', 'CODEX_CLI_PATH', 'KILLERMCP_UPDATE_CACHE', 'KILLERMCP_UPDATE_API', 'KILLERMCP_NOTIFIER') + ($names | ForEach-Object { "KILLERMCP_TEST_${_}_CONFIG" })
 foreach ($name in $variables) { $previous[$name] = [Environment]::GetEnvironmentVariable($name) }
 $success = $false
 
@@ -33,6 +33,10 @@ try {
     $env:KILLERMCP_TOOL_CALL_LOG = Join-Path $scratch 'tool-calls.jsonl'
     $env:KILLERMCP_FAKE_CODEX_STATE = $codexState
     $env:CODEX_CLI_PATH = $fakeCodex
+    # Installed hosts started by this test must not reach the real release API, cache or update window.
+    $env:KILLERMCP_UPDATE_CACHE = Join-Path $scratch 'update-status.json'
+    $env:KILLERMCP_UPDATE_API = 'https://127.0.0.1:9/no-release'
+    $env:KILLERMCP_NOTIFIER = Join-Path $scratch 'no-notifier.exe'
     foreach ($name in $names) {
         $path = Join-Path $scratch "$name\settings.json"
         New-Item -ItemType Directory -Path (Split-Path $path) -Force | Out-Null
