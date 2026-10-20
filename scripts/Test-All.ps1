@@ -4,6 +4,8 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 dotnet build (Join-Path $root 'KillerMCP.slnx') -c Release
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP solution build failed.' }
 
+& (Join-Path $PSScriptRoot 'Test-Workflows.ps1')
+
 dotnet run --project (Join-Path $root 'tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj') -c Release --no-build
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP client checks failed.' }
 

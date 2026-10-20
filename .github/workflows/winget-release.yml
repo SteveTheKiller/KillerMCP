@@ -26,7 +26,8 @@ jobs:
       - name: Update WinGet validator
         shell: pwsh
         run: |
-          Install-Module Microsoft.WinGet.Client -Scope CurrentUser -Force -Repository PSGallery
+          # Pinned so a new module release cannot change what runs here without a commit.
+          Install-Module Microsoft.WinGet.Client -RequiredVersion 1.29.380 -Scope CurrentUser -Force -Repository PSGallery
           Repair-WinGetPackageManager -Latest
           winget --version
         env:
@@ -36,19 +37,16 @@ jobs:
 
       - name: Install Komac
         run: |
-          $headers = @{
-            Authorization = "Bearer $env:GITHUB_TOKEN"
-            Accept = "application/vnd.github+json"
-            "X-GitHub-Api-Version" = "2022-11-28"
-            "User-Agent" = "KillerMCP-WinGet-Release"
-          }
-          $tag = (Invoke-RestMethod "https://api.github.com/repos/russellbanks/Komac/releases/latest" -Headers $headers).tag_name
-          $ver = $tag.TrimStart('v')
-          $url = "https://github.com/russellbanks/Komac/releases/download/$tag/komac-$ver-x86_64-pc-windows-msvc.exe"
-          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\komac.exe"
+          # Komac gets the WinGet token, so the exact release is pinned and checked by hash.
+          # Moving to a newer Komac is a deliberate change to these two values.
+          $version = '2.16.0'
+          $expected = 'BDC45BAF028F750DA7519CC8A5F2EAB5DFEF46DFE88650EEB0D0A9BF51446E4F'
+          $url = "https://github.com/russellbanks/Komac/releases/download/v$version/komac-$version-x86_64-pc-windows-msvc.exe"
+          $komac = Join-Path $env:RUNNER_TEMP 'komac.exe'
+          Invoke-WebRequest -Uri $url -OutFile $komac
+          $actual = (Get-FileHash -LiteralPath $komac -Algorithm SHA256).Hash
+          if ($actual -ne $expected) { Remove-Item -LiteralPath $komac; throw "Komac $version does not match its pinned SHA-256 ($actual)." }
           Add-Content $env:GITHUB_PATH $env:RUNNER_TEMP
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         shell: pwsh
 
       - name: Submit to WinGet
