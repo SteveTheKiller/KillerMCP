@@ -278,15 +278,25 @@ public static class ClientConfiguration
     }
 
     // npm installs Codex as codex.cmd, which starts the program bundled in its package with the same
-    // arguments, so that program is run directly instead of through cmd.exe.
+    // arguments, so that program is run directly instead of through cmd.exe. The package can carry a
+    // program for each Windows architecture in a folder named for its target, so only the one for this
+    // PC is used; npm gives every file the same date, so dates cannot tell them apart.
     private static string? NpmCodex(string script)
     {
         var package = Path.Combine(Path.GetDirectoryName(script)!, "node_modules", "@openai", "codex");
+        var target = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64
+            ? "aarch64-pc-windows-msvc"
+            : "x86_64-pc-windows-msvc";
         try
         {
-            return Directory.Exists(package)
-                ? Directory.GetFiles(package, "codex.exe", SearchOption.AllDirectories).OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault()
-                : null;
+            if (!Directory.Exists(package)) return null;
+            var expected = Path.Combine(package, "vendor", target, "codex", "codex.exe");
+            if (File.Exists(expected)) return expected;
+            var marker = Path.DirectorySeparatorChar + target + Path.DirectorySeparatorChar;
+            return Directory.GetFiles(package, "codex.exe", SearchOption.AllDirectories)
+                .Where(path => path.Contains(marker, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { return null; }
     }

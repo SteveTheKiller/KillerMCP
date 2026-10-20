@@ -220,16 +220,25 @@ try
     var emptyProfile = Path.Combine(root, "empty-profile");
     Directory.CreateDirectory(emptyProfile);
     var npm = Path.Combine(root, "npm");
-    var vendored = Path.Combine(npm, "node_modules", "@openai", "codex", "vendor", "x86_64-pc-windows-msvc", "codex", "codex.exe");
+    // The package can carry a program for each Windows architecture; the one for this PC is used even
+    // when the other is newer.
+    var arm = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64;
+    string Vendored(string triple) => Path.Combine(npm, "node_modules", "@openai", "codex", "vendor", triple, "codex", "codex.exe");
+    var vendored = Vendored(arm ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc");
+    var otherArchitecture = Vendored(arm ? "x86_64-pc-windows-msvc" : "aarch64-pc-windows-msvc");
     Directory.CreateDirectory(Path.GetDirectoryName(vendored)!);
+    Directory.CreateDirectory(Path.GetDirectoryName(otherArchitecture)!);
     File.WriteAllText(Path.Combine(npm, "codex.cmd"), "@echo off");
     File.WriteAllText(vendored, "fixture");
+    File.WriteAllText(otherArchitecture, "fixture");
+    File.SetLastWriteTimeUtc(otherArchitecture, File.GetLastWriteTimeUtc(vendored).AddHours(1));
     var npmEnvironment = new Dictionary<string, string?> { ["PATH"] = npm, ["USERPROFILE"] = emptyProfile, ["APPDATA"] = emptyProfile, ["LOCALAPPDATA"] = emptyProfile, ["ProgramFiles"] = emptyProfile };
     if (OperatingSystem.IsWindows())
     {
         Equal<string?>(vendored, ClientConfiguration.FindCodex(npmEnvironment));
         File.Delete(vendored);
         Equal<string?>(null, ClientConfiguration.FindCodex(npmEnvironment));
+        File.Delete(otherArchitecture);
         Equal(1, ClientConfiguration.RegisterAll(executable, npmEnvironment).Count(message => message.StartsWith("Warning: Codex", StringComparison.Ordinal) && message.Contains("codex mcp add killermcp", StringComparison.Ordinal)));
         Equal(1, ClientConfiguration.RemoveAll(executable, npmEnvironment).Count(message => message.StartsWith("Warning: Codex", StringComparison.Ordinal)));
     }
