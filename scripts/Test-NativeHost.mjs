@@ -41,6 +41,7 @@ const environment = {
   KILLERMCP_FAKE_BENCH: '1',
   KILLERSHOT_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
   KILLERMCP_FAKE_SHOT: '1',
+  KILLERMCP_FAKE_SHOT_MARK: join(updateDirectory, 'slow-capture.done'),
   KILLERMCP_STATE_DIR: join(updateDirectory, 'state'),
   KILLERBENCH_STATE_DIR: join(updateDirectory, 'bench-state'),
 };
@@ -411,6 +412,27 @@ const unknown = await request('tools/call', { name: 'no_such_tool', arguments: {
 assert.equal(unknown.isError, true);
 const afterUnknown = await request('tools/call', { name: 'text_statistics', arguments: { text: 'still running' } });
 assert.notEqual(afterUnknown.isError, true);
+// A line that is valid JSON but not a request object must not end the server.
+child.stdin.write('1\n[]\n"text"\nnull\n{"id":[],"method":7}\n');
+assert.deepEqual(await request('ping'), {});
+
+// A long tool call must not hold up other requests, and cancelling it ends its process without a reply.
+const slowId = ++id;
+let slowAnswered = false;
+pending.set(slowId, () => { slowAnswered = true; });
+child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: slowId, method: 'tools/call', params: { name: 'killershot_capture_all', arguments: { delay: 3 } } })}\n`);
+await new Promise(done => setTimeout(done, 500));
+const pingStarted = Date.now();
+assert.deepEqual(await request('ping'), {});
+const meanwhile = await request('tools/call', { name: 'text_statistics', arguments: { text: 'meanwhile' } });
+assert.notEqual(meanwhile.isError, true);
+assert.ok(Date.now() - pingStarted < 1500, 'Requests waited for a running tool call.');
+child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: slowId, reason: 'check' } })}\n`);
+await new Promise(done => setTimeout(done, 4500));
+assert.equal(slowAnswered, false, 'A cancelled call was still answered.');
+await assert.rejects(readFile(environment.KILLERMCP_FAKE_SHOT_MARK), undefined, 'The cancelled capture kept running.');
+assert.deepEqual(await request('ping'), {});
+
 const calls = (await readFile(environment.KILLERMCP_TOOL_CALL_LOG, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
 assert.ok(calls.some(call => call.tool === 'text_statistics' && call.outcome === 'ok'));
 assert.ok(calls.some(call => call.outcome === 'ok' && typeof call.durationMs === 'number'));

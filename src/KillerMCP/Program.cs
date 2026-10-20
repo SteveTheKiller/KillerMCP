@@ -44,17 +44,75 @@ appAdapters.AddRange(await KillerBenchAdapter.CreateAsync(killerBenchPath, kille
 appAdapters.AddRange(await KillerShotAdapter.CreateAsync(killerShotPath));
 appAdapters.AddRange(IntegrationAdapter.Create(killerNotesPath, killendarPath, killerShellPath, killerScanPath, killerPdfPath));
 ToolRegistry.SetAdapters(appAdapters);
+
+// Tool calls run on their own tasks so a slow one never holds up ping, tools/list or other calls.
+// Each keeps a cancellation source by request id for notifications/cancelled, and every reply is
+// written as one whole line.
+var outputGate = new object();
+var running = new System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource>(StringComparer.Ordinal);
+var calls = new List<Task>();
+void Send(object message)
+{
+    var text = JsonSerializer.Serialize(message, json);
+    lock (outputGate) Console.WriteLine(text);
+}
+object Failure(JsonElement id, Exception exception)
+{
+    var (code, message) = exception is McpRequestException known
+        ? (known.Code, known.Message)
+        : (-32603, "Internal error: " + (exception.Message.Length <= 1024 ? exception.Message : exception.Message[..1024]));
+    return new { jsonrpc = "2.0", id, error = new { code, message } };
+}
 string? line;
 while ((line = Console.ReadLine()) is not null)
 {
     JsonElement request;
     try { request = JsonSerializer.Deserialize<JsonElement>(line); }
     catch { continue; }
-    if (!request.TryGetProperty("id", out var id) || !request.TryGetProperty("method", out var methodElement))
+    // Only an object can be a request or a notification; anything else is ignored.
+    if (request.ValueKind != JsonValueKind.Object || !request.TryGetProperty("method", out var methodElement)) continue;
+    var method = methodElement.ValueKind == JsonValueKind.String ? methodElement.GetString() : null;
+    if (!request.TryGetProperty("id", out var id))
     {
+        if (method == "notifications/cancelled"
+            && request.TryGetProperty("params", out var cancelParams) && cancelParams.ValueKind == JsonValueKind.Object
+            && cancelParams.TryGetProperty("requestId", out var cancelledId)
+            && running.TryGetValue(cancelledId.GetRawText(), out var cancelled))
+        {
+            cancelled.Cancel();
+        }
         continue;
     }
-    var method = methodElement.ValueKind == JsonValueKind.String ? methodElement.GetString() : null;
+    if (method == "tools/call")
+    {
+        var key = id.GetRawText();
+        var source = new CancellationTokenSource();
+        if (!running.TryAdd(key, source))
+        {
+            Send(new { jsonrpc = "2.0", id, error = new { code = -32600, message = "A request with this id is still running." } });
+            continue;
+        }
+        var callParams = request.TryGetProperty("params", out var givenParams) ? givenParams : default;
+        calls.RemoveAll(task => task.IsCompleted);
+        calls.Add(Task.Run(() =>
+        {
+            try
+            {
+                var result = ToolRegistry.Call(callParams, json, source.Token);
+                // A cancelled request gets no reply.
+                if (!source.IsCancellationRequested) Send(new { jsonrpc = "2.0", id, result });
+            }
+            catch (Exception exception)
+            {
+                if (!source.IsCancellationRequested) Send(Failure(id, exception));
+            }
+            finally
+            {
+                running.TryRemove(key, out _);
+            }
+        }));
+        continue;
+    }
     // A client may ask for anything, including methods this server never advertised, so one
     // request must never end the process. Failures go back as JSON-RPC errors on that id.
     try
@@ -70,19 +128,18 @@ while ((line = Console.ReadLine()) is not null)
             },
             "ping" => new { },
             "tools/list" => new { tools = ToolRegistry.Tools },
-            "tools/call" => ToolRegistry.Call(request.TryGetProperty("params", out var callParams) ? callParams : default, json),
             _ => throw new McpRequestException(-32601, $"Method not found: {method}"),
         };
-        Console.WriteLine(JsonSerializer.Serialize(new { jsonrpc = "2.0", id, result }, json));
+        Send(new { jsonrpc = "2.0", id, result });
     }
     catch (Exception exception)
     {
-        var (code, message) = exception is McpRequestException known
-            ? (known.Code, known.Message)
-            : (-32603, "Internal error: " + (exception.Message.Length <= 1024 ? exception.Message : exception.Message[..1024]));
-        Console.WriteLine(JsonSerializer.Serialize(new { jsonrpc = "2.0", id, error = new { code, message } }, json));
+        Send(Failure(id, exception));
     }
 }
+// The client closed the connection, so nobody is waiting for the remaining calls.
+foreach (var source in running.Values) source.Cancel();
+Task.WaitAll([.. calls], TimeSpan.FromSeconds(10));
 
 static class ToolRegistry
 {
@@ -219,7 +276,7 @@ static class ToolRegistry
 
     public static void SetAdapters(IEnumerable<AppAdapter> adapters) => Adapters = adapters.ToDictionary(adapter => adapter.Tool.Name, StringComparer.Ordinal);
 
-    public static object Call(JsonElement parameters, JsonSerializerOptions json)
+    public static object Call(JsonElement parameters, JsonSerializerOptions json, CancellationToken cancellationToken = default)
     {
         if (parameters.ValueKind != JsonValueKind.Object
             || !parameters.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String)
@@ -244,7 +301,7 @@ static class ToolRegistry
             }
             if (name is not null && Adapters.TryGetValue(name, out var adapter))
             {
-                var adapterResult = adapter.CallAsync(arguments, CancellationToken.None).GetAwaiter().GetResult();
+                var adapterResult = adapter.CallAsync(arguments, cancellationToken).GetAwaiter().GetResult();
                 ToolCallLog.Record(loggedName, adapterResult.IsError ? "error" : "ok", stopwatch.ElapsedMilliseconds);
                 return adapterResult.IsError
                     ? new { content = new[] { new { type = "text", text = adapterResult.Text } }, isError = true }

@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
+- A long tool call no longer holds up other requests. Calls run side by side, a client can cancel one and its app process stops, and a malformed line no longer closes KillerMCP.
 - Agents can no longer turn on KillerBench repairs themselves. No tool may write into the KillerMCP or KillerBench settings folders, by any path, and the first repair after the KillerBench repair setting appears or changes asks for approval on the desktop.
 - Uninstall closes a running KillerMCP before removing it instead of failing partway and leaving a broken folder, and setup can now uninstall or reinstall over a folder an earlier uninstall left half removed.
 - KillerMCP no longer closes when a client asks for something it does not offer, such as resource templates. It answers with a standard error, replies to ping, and treats tools/call without arguments as an empty set.
