@@ -449,7 +449,7 @@ try
     using var badTarget = JsonDocument.Parse("{\"target\":\"example.com\"}");
     Equal(true, (await scanByName["killerscan_probe_host"].CallAsync(badTarget.RootElement, CancellationToken.None)).IsError);
     // A MAC address has a fixed shape, and a vendor lookup that fails is an error even if it printed something.
-    foreach (var mac in new[] { "00:00:0C:00:00:00 /speedtest", "0x0000.0C00.0000", "00:00:0C:00:00:00:00", "zz00:0C:00:00:00:00" })
+    foreach (var mac in new[] { "00:00:0C:00:00:00 /speedtest", "0x0000.0C00.0000", "00:00:0C:00:00:00:00", "zz00:0C:00:00:00:00", "00:00:0C:00:00:00\n" })
     {
         using var badMac = JsonDocument.Parse(JsonSerializer.Serialize(new { mac }));
         Equal(true, (await scanByName["killerscan_mac_vendor"].CallAsync(badMac.RootElement, CancellationToken.None)).IsError);
@@ -617,6 +617,7 @@ try
     Equal(true, (await Pdf("killerpdf_divide_spreads", new { path = sourceOne, output = NewPdf("bad-divide"), splitAt = 0.95 })).IsError);
     Equal(true, (await Pdf("killerpdf_convert_office", new { path = sourceOne, output = NewPdf("bad-convert") })).IsError);
     Equal(true, (await Pdf("killerpdf_extract_pages", new { path = sourceOne, pages = "bad", output = Path.Combine(root, "bad.pdf") })).IsError);
+    Equal(true, (await Pdf("killerpdf_extract_pages", new { path = sourceOne, pages = "1\n", output = Path.Combine(root, "bad.pdf") })).IsError);
     Equal(true, (await Pdf("killerpdf_merge", new { inputs = new[] { sourceOne, sourceTwo }, output = Path.Combine(root, "merged.pdf") })).IsError);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", null);
     Console.WriteLine("PASS native KillerPDF adapters");
@@ -644,6 +645,45 @@ try
     Equal(true, (await Integration("killerscan_save_report_note", new { limit = "5" })).IsError);
     Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = "150" })).IsError);
     Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1;2" })).IsError);
+    // Page lists are ASCII digits only, with nothing after the last range.
+    Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1-2\n" })).IsError);
+    Equal(true, (await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = "١" })).IsError);
+    // Hardened HTML holds no base or meta tag but its own, however the content nests, splits or
+    // encodes them. A browser starts such a tag only at a literal less-than sign and tag name.
+    var tricks = "<me<meta http-equiv=refresh content=\"0; url=file://evil/share\">ta http-equiv=\"refresh\" content=\"0; url=file://evil/nested\">"
+        + "<<meta x>meta http-equiv=refresh content=\"0; url=file://evil/joined\">"
+        + "<meta http-equiv=\"&#x72;efresh\" content=\"0; url=file://evil/encoded\">"
+        + "<meta content=\"a>b\" http-equiv=refresh>"
+        + "<svg><style><meta http-equiv=refresh content=\"0; url=file://evil/svg\"></style></svg>"
+        + "<BASE\thref=file://evil/><base/href=file://evil/><p>kept</p>";
+    var hardened = IntegrationAdapter.Harden(tricks);
+    Equal(2, System.Text.RegularExpressions.Regex.Matches(hardened, @"<(?:meta|base)(?:[\t\n\f\r />]|\z)", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Count);
+    Equal(true, hardened.Contains("<p>kept</p>", StringComparison.Ordinal));
+
+    // A call cancelled while its input is written still stops the app it started.
+    if (OperatingSystem.IsWindows())
+    {
+        var pidFile = Path.Combine(root, "cancelled-input.pid");
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        var stopped = false;
+        try { await ProcessRunner.RunAsync("powershell.exe", ["-NoProfile", "-Command", $"$PID | Set-Content -LiteralPath '{pidFile}'; Start-Sleep -Seconds 60"], TimeSpan.FromSeconds(60), 4096, cancelled.Token, "secret"); }
+        catch (OperationCanceledException) { stopped = true; }
+        Equal(true, stopped);
+        await Task.Delay(5000);
+        if (File.Exists(pidFile))
+        {
+            var leftover = int.Parse(File.ReadAllText(pidFile).Trim(), System.Globalization.CultureInfo.InvariantCulture);
+            try
+            {
+                using var survivor = System.Diagnostics.Process.GetProcessById(leftover);
+                survivor.Kill(true);
+                throw new InvalidOperationException("A call cancelled while writing its input left its app running.");
+            }
+            catch (ArgumentException) { }
+        }
+        Console.WriteLine("PASS cancelled input stops the app");
+    }
     // When a later page cannot be saved, the result still names the notes already created.
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_IMPORT_FAIL", "page-2");
     var partialPages = await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1-2" });
@@ -752,6 +792,8 @@ try
     Equal("Fixture preamble line.", offPreview.GetProperty("preview").GetProperty("notes").GetString());
     await Bench("killerbench_repair_preview", new { action = "bitlocker_decrypt" }, true);
     await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "bad host;" } }, true);
+    // Checked values end where the value ends, not before a trailing line break.
+    await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "ok.example\n" } }, true);
     await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "ok.example", extra = 1 } }, true);
 
     KillerBenchSettings.WriteLevel(KillerBenchRepairLevel.Safe);
@@ -821,6 +863,14 @@ try
     }
     var afterOtherHost = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
     Equal("Completed", Finished(await Bench("killerbench_repair_execute", new { token = afterOtherHost.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
+
+    // A repair hold that cannot be opened is an error, and later repairs in this host still run.
+    Directory.CreateDirectory(KillerBenchSettings.RepairHoldPath);
+    var unopened = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
+    await Bench("killerbench_repair_execute", new { token = unopened.GetProperty("token").GetString() }, true);
+    Directory.Delete(KillerBenchSettings.RepairHoldPath);
+    var afterUnopened = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
+    Equal("Completed", Finished(await Bench("killerbench_repair_execute", new { token = afterUnopened.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
 
     // A repair lock that cannot be saved still blocks repairs in this host, and the result says so.
     Directory.CreateDirectory(KillerBenchSettings.LockPath);

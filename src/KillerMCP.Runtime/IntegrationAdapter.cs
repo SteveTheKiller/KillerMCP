@@ -302,18 +302,22 @@ public static partial class IntegrationAdapter
     }
 
     // Notes and agent content are untrusted HTML. The policy comes first in the document, ahead of
-    // anything the content could use to slip it, and base and refresh elements are removed because
-    // the policy cannot stop them from pointing the page elsewhere, including a file share.
+    // anything the content could use to slip it. Base and meta elements are disabled because the
+    // policy cannot stop a base or a refresh from pointing the page elsewhere, including a file
+    // share. A browser starts one of these elements only at a less-than sign followed by the tag
+    // name and a space, slash or greater-than sign, whatever the attributes say or encode. Escaping
+    // that less-than sign disables the element wherever it appears, including in nested or split
+    // markup, and removes no text, so it cannot join the pieces around it into a new element.
     internal static string Harden(string html)
     {
-        var body = LeadingDoctype().Replace(BaseOrRefresh().Replace(html, string.Empty), string.Empty, 1);
+        var body = LeadingDoctype().Replace(BaseOrMeta().Replace(html, "&lt;"), string.Empty, 1);
         return "<!doctype html><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"" + ContentPolicy + "\">" + body;
     }
 
     private const string ContentPolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:";
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"<base\b[^>]*>|<meta\b[^>]*http-equiv\s*=\s*[""']?\s*refresh[^>]*>", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
-    private static partial System.Text.RegularExpressions.Regex BaseOrRefresh();
+    [System.Text.RegularExpressions.GeneratedRegex(@"<(?=[Bb][Aa][Ss][Ee](?:[\t\n\f\r />]|\z)|[Mm][Ee][Tt][Aa](?:[\t\n\f\r />]|\z))", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex BaseOrMeta();
 
     [System.Text.RegularExpressions.GeneratedRegex(@"^[^<]*<!doctype[^>]*>", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
     private static partial System.Text.RegularExpressions.Regex LeadingDoctype();
@@ -452,6 +456,6 @@ public static partial class IntegrationAdapter
     private static JsonObject Integer(int min, int max, int fallback) => new() { ["type"] = "integer", ["minimum"] = min, ["maximum"] = max, ["default"] = fallback };
     private static JsonObject Integer(int min, int max) => new() { ["type"] = "integer", ["minimum"] = min, ["maximum"] = max };
     private static JsonObject Boolean(bool fallback) => new() { ["type"] = "boolean", ["default"] = fallback };
-    [System.Text.RegularExpressions.GeneratedRegex("^\\d+(?:-\\d+)?(?:,\\d+(?:-\\d+)?)*$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)] private static partial System.Text.RegularExpressions.Regex PageList();
+    [System.Text.RegularExpressions.GeneratedRegex("^[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*\\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant)] private static partial System.Text.RegularExpressions.Regex PageList();
     private static JsonObject Enum(params string[] values) => new() { ["type"] = "string", ["enum"] = new JsonArray(values.Select(value => JsonValue.Create(value)).ToArray()), ["default"] = values[0] };
 }

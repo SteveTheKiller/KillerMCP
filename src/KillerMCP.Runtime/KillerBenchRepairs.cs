@@ -371,12 +371,12 @@ internal static partial class KillerBenchRepairs
         return full.StartsWith(root, StringComparison.OrdinalIgnoreCase) && File.Exists(full) && (path = full) is not null;
     }
 
-    [GeneratedRegex("^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$", RegexOptions.CultureInvariant)] private static partial Regex HostName();
-    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9 ._()#,+'-]{0,127}$", RegexOptions.CultureInvariant)] private static partial Regex QueueName();
-    [GeneratedRegex("^[a-z0-9][a-z0-9-]{0,63}$", RegexOptions.CultureInvariant)] private static partial Regex PrivacyKey();
-    [GeneratedRegex("^[A-Za-z]:?$", RegexOptions.CultureInvariant)] private static partial Regex DriveLetter();
-    [GeneratedRegex("^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}:[0-9]{1,6}$", RegexOptions.CultureInvariant)] private static partial Regex UpdateIdentity();
-    [GeneratedRegex("^[a-z0-9]+(?:[.-][a-z0-9]+){1,8}$", RegexOptions.CultureInvariant)] private static partial Regex RecipeId();
-    [GeneratedRegex("^[A-Za-z0-9 ._,()'+-]+$", RegexOptions.CultureInvariant)] private static partial Regex PlainText();
-    [GeneratedRegex("^[A-Za-z]:\\\\[A-Za-z0-9 ._()'+\\\\-]+$", RegexOptions.CultureInvariant)] private static partial Regex PlainPath();
+    [GeneratedRegex("^(?=.{1,253}\\z)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\z", RegexOptions.CultureInvariant)] private static partial Regex HostName();
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9 ._()#,+'-]{0,127}\\z", RegexOptions.CultureInvariant)] private static partial Regex QueueName();
+    [GeneratedRegex("^[a-z0-9][a-z0-9-]{0,63}\\z", RegexOptions.CultureInvariant)] private static partial Regex PrivacyKey();
+    [GeneratedRegex("^[A-Za-z]:?\\z", RegexOptions.CultureInvariant)] private static partial Regex DriveLetter();
+    [GeneratedRegex("^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}:[0-9]{1,6}\\z", RegexOptions.CultureInvariant)] private static partial Regex UpdateIdentity();
+    [GeneratedRegex("^[a-z0-9]+(?:[.-][a-z0-9]+){1,8}\\z", RegexOptions.CultureInvariant)] private static partial Regex RecipeId();
+    [GeneratedRegex("^[A-Za-z0-9 ._,()'+-]+\\z", RegexOptions.CultureInvariant)] private static partial Regex PlainText();
+    [GeneratedRegex("^[A-Za-z]:\\\\[A-Za-z0-9 ._()'+\\\\-]+\\z", RegexOptions.CultureInvariant)] private static partial Regex PlainPath();
 }

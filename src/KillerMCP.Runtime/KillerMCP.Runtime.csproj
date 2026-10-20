@@ -2,4 +2,7 @@
   <PropertyGroup>
     <Description>Cross-platform runtime services for the native KillerMCP host.</Description>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="KillerMCP.Runtime.Checks" />
+  </ItemGroup>
 </Project>

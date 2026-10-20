@@ -147,7 +147,7 @@ public static partial class KillerScanAdapter
     private static bool RequiredString(JsonElement input, string name, out string? value) { value = null; return input.TryGetProperty(name, out var element) && element.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(value = element.GetString()); }
     private static bool OptionalBoolean(JsonElement input, string name, out bool value) { value = false; return !input.TryGetProperty(name, out var element) || (element.ValueKind is JsonValueKind.True or JsonValueKind.False && (value = element.GetBoolean()) == value); }
     private static bool OptionalInteger(JsonElement input, string name, int min, int max, int defaultValue, out int value) { value = defaultValue; return !input.TryGetProperty(name, out var element) || (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out value) && value >= min && value <= max); }
-    [System.Text.RegularExpressions.GeneratedRegex(@"^(?:[0-9A-Fa-f]{2}([:-]?)(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}|[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4})$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(?:[0-9A-Fa-f]{2}([:-]?)(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}|[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4})\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
     private static partial System.Text.RegularExpressions.Regex MacAddress();
     private static bool IsIpv4(string value) => IPAddress.TryParse(value, out var address) && address.AddressFamily == AddressFamily.InterNetwork;
     private static bool ValidTarget(string value) => value.Length is > 0 and <= 253 && (IsIpv4(value) || Hostname().IsMatch(value));
@@ -168,5 +168,5 @@ public static partial class KillerScanAdapter
     private static JsonObject Integer(int min, int max, int? defaultValue = null) { var value = new JsonObject { ["type"] = "integer", ["minimum"] = min, ["maximum"] = max }; if (defaultValue.HasValue) value["default"] = defaultValue.Value; return value; }
 
     [GeneratedRegex("^(INTERFACE|LOCAL IP|SUBNET|GATEWAY|DNS)\\s{2,}(.+)$", RegexOptions.CultureInvariant)] private static partial Regex NetworkLine();
-    [GeneratedRegex("^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)] private static partial Regex Hostname();
+    [GeneratedRegex("^(?=.{1,253}\\z)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\z", RegexOptions.CultureInvariant)] private static partial Regex Hostname();
 }

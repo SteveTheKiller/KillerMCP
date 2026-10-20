@@ -402,6 +402,6 @@ public static partial class KillerPdfAdapter
     }
     private enum OutputKind { File, Directory, Action, Report }
 
-    [GeneratedRegex("^\\d+(?:-\\d+)?(?:,\\d+(?:-\\d+)?)*$", RegexOptions.CultureInvariant)] private static partial Regex PageRangePattern();
-    [GeneratedRegex("^[A-Za-z0-9_]+$", RegexOptions.CultureInvariant)] private static partial Regex LanguagePattern();
+    [GeneratedRegex("^[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*\\z", RegexOptions.CultureInvariant)] private static partial Regex PageRangePattern();
+    [GeneratedRegex("^[A-Za-z0-9_]+\\z", RegexOptions.CultureInvariant)] private static partial Regex LanguagePattern();
 }

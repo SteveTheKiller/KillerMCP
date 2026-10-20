@@ -68,19 +68,6 @@ internal static class ProcessRunner
             throw new InvalidOperationException("The application command did not start.");
         }
 
-        if (standardInput is not null)
-        {
-            try
-            {
-                await process.StandardInput.WriteAsync(standardInput.AsMemory(), cancellationToken).ConfigureAwait(false);
-                process.StandardInput.Close();
-            }
-            catch (IOException)
-            {
-                // The app exited before reading its input; its exit code and output say why.
-            }
-        }
-
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(timeout);
         using var readSource = CancellationTokenSource.CreateLinkedTokenSource(timeoutSource.Token);
@@ -88,6 +75,9 @@ internal static class ProcessRunner
         var error = ReadBoundedAsync(process.StandardError, maximumCharacters, readSource.Token);
         try
         {
+            // The input is written under the same timeout and cancellation as the wait, so an app that
+            // is cancelled or never reads it is stopped like any other.
+            if (standardInput is not null) await WriteInputAsync(process, standardInput, timeoutSource.Token).ConfigureAwait(false);
             await process.WaitForExitAsync(timeoutSource.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -109,6 +99,19 @@ internal static class ProcessRunner
     }
 
     private static readonly TimeSpan OutputGrace = TimeSpan.FromSeconds(2);
+
+    private static async Task WriteInputAsync(Process process, string standardInput, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await process.StandardInput.WriteAsync(standardInput.AsMemory(), cancellationToken).ConfigureAwait(false);
+            process.StandardInput.Close();
+        }
+        catch (IOException)
+        {
+            // The app exited before reading its input; its exit code and output say why.
+        }
+    }
 
     private static async Task<(string Text, bool Exceeded)> ReadBoundedAsync(StreamReader reader, int maximumCharacters, CancellationToken cancellationToken)
     {

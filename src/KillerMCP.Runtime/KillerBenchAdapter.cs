@@ -287,7 +287,15 @@ public static partial class KillerBenchAdapter
             if (problem is not null) return Error(problem);
             if (!await mutation.WaitAsync(0, token).ConfigureAwait(false)) return Error("Another KillerBench repair is running. Wait for it to finish.");
             // Each agent client runs its own KillerMCP host, so the one-repair rule also holds across hosts.
-            var hold = KillerBenchSettings.HoldRepair();
+            IDisposable? hold;
+            try { hold = KillerBenchSettings.HoldRepair(); }
+            catch (Exception exception)
+            {
+                // The repair slot in this host is released whatever stops the hold from opening.
+                mutation.Release();
+                if (exception is UnauthorizedAccessException) return Error("The KillerBench repair hold could not be opened: " + exception.Message);
+                throw;
+            }
             if (hold is null)
             {
                 mutation.Release();
@@ -724,7 +732,7 @@ public static partial class KillerBenchAdapter
     private static JsonObject Boolean(bool fallback) => new() { ["type"] = "boolean", ["default"] = fallback };
     private static JsonObject Enum(params string[] values) => new() { ["type"] = "string", ["enum"] = new JsonArray(values.Select(value => (JsonNode)JsonValue.Create(value)!).ToArray()) };
 
-    [GeneratedRegex("^(?:0[xX][0-9A-Fa-f]{1,8}|-?[0-9]{1,10})$", RegexOptions.CultureInvariant)] private static partial Regex Code();
-    [GeneratedRegex("^[A-Za-z]{2,64}$", RegexOptions.CultureInvariant)] private static partial Regex ScopeName();
-    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9 ._()#,+'-]{0,127}$", RegexOptions.CultureInvariant)] private static partial Regex QueueName();
+    [GeneratedRegex("^(?:0[xX][0-9A-Fa-f]{1,8}|-?[0-9]{1,10})\\z", RegexOptions.CultureInvariant)] private static partial Regex Code();
+    [GeneratedRegex("^[A-Za-z]{2,64}\\z", RegexOptions.CultureInvariant)] private static partial Regex ScopeName();
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9 ._()#,+'-]{0,127}\\z", RegexOptions.CultureInvariant)] private static partial Regex QueueName();
 }
