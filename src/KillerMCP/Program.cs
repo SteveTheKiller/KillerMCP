@@ -165,6 +165,8 @@ while ((line = Console.ReadLine()) is not null)
 // The client closed the connection, so nobody is waiting for the remaining calls.
 foreach (var source in running.Values) source.Cancel();
 Task.WaitAll([.. calls], TimeSpan.FromSeconds(10));
+// App discovery can still be waiting on an app that hangs; no app process outlives the host.
+AppProcesses.StopAll();
 
 static class ToolRegistry
 {

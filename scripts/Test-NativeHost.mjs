@@ -550,6 +550,49 @@ assert.ok(!stalledTools.includes('killernotes_search') && !stalledTools.includes
 assert.equal(stalledExited, false, 'A broken app ended the server.');
 stalled.stdin.end();
 
+await new Promise(done => { if (stalledExited) done(); else stalled.on('exit', done); });
+
+// A host that exits while an app it asked for its commands still hangs stops that app instead of
+// leaving it running.
+if (process.platform === 'win32') {
+  const hungApps = () => spawnSync('powershell.exe', ['-NoProfile', '-Command',
+    `@(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*${fakeApp}*' }).Count`],
+    { encoding: 'utf8' }).stdout.trim();
+  assert.equal(hungApps(), '0', 'An app was already running before the host that leaves early started.');
+  const early = spawn('dotnet', ['run', '--project', 'src/KillerMCP/KillerMCP.csproj', '-c', 'Release', '--no-build'], {
+    stdio: ['pipe', 'pipe', 'ignore'],
+    env: { ...environment, KILLERMCP_FAKE_HANG: '1', KILLERNOTES_CLI: fakeApp, KILLERPDF_CLI: missingApp, KILLENDAR_CLI: missingApp, KILLERSHELL_CLI: missingApp, KILLERSCAN_CLI: missingApp, KILLERBENCH_CLI: missingApp, KILLERSHOT_CLI: missingApp },
+  });
+  hosts.push(early);
+  const earlyExit = new Promise(done => early.on('exit', done));
+  let earlyBuffer = '';
+  await new Promise((done, fail) => {
+    const timer = setTimeout(() => fail(new Error('No initialize reply from the host that leaves early.')), 45000);
+    early.stdout.setEncoding('utf8');
+    early.stdout.on('data', chunk => {
+      earlyBuffer += chunk;
+      if (earlyBuffer.includes('\n')) { clearTimeout(timer); done(); }
+    });
+    early.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } })}\n`);
+  });
+  let started = hungApps();
+  for (let attempt = 0; attempt < 20 && started === '0'; attempt++) {
+    await new Promise(wait => setTimeout(wait, 250));
+    started = hungApps();
+  }
+  assert.notEqual(started, '0', 'The host that leaves early never started the hanging app.');
+  early.stdin.end();
+  await earlyExit;
+  let left = hungApps();
+  for (let attempt = 0; attempt < 10 && left !== '0'; attempt++) {
+    await new Promise(wait => setTimeout(wait, 500));
+    left = hungApps();
+  }
+  if (left !== '0') spawnSync('powershell.exe', ['-NoProfile', '-Command',
+    `Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*${fakeApp}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`], { stdio: 'ignore' });
+  assert.equal(left, '0', 'A host that exited left a hanging app running.');
+}
+
 // A release fetched while the update cache cannot be written is still reported.
 const uncached = spawn('dotnet', ['run', '--project', 'src/KillerMCP/KillerMCP.csproj', '-c', 'Release', '--no-build'], {
   stdio: ['pipe', 'pipe', 'ignore'],

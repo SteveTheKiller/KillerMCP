@@ -5,6 +5,14 @@ namespace KillerMCP.Runtime;
 
 internal sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError, bool OutputExceeded);
 
+/// <summary>The app processes KillerMCP starts, for the host to stop when it ends.</summary>
+public static class AppProcesses
+{
+    /// <summary>Stops every app process a tool or app discovery started and is still running, so none
+    /// outlives the host, including one that hangs.</summary>
+    public static void StopAll() => ProcessRunner.StopAll();
+}
+
 internal static class ProcessRunner
 {
     // CreateProcess rejects command lines longer than 32,767 characters.
@@ -68,6 +76,31 @@ internal static class ProcessRunner
             throw new InvalidOperationException("The application command did not start.");
         }
 
+        Running.TryAdd(process, 0);
+        try
+        {
+            return await WaitAsync(process, timeout, maximumCharacters, cancellationToken, standardInput).ConfigureAwait(false);
+        }
+        finally
+        {
+            Running.TryRemove(process, out _);
+        }
+    }
+
+    // Every app process a run started and has not finished with, so a host that ends can stop them.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Process, byte> Running = new();
+
+    /// <summary>Stops every app process still running, with the processes it started.</summary>
+    internal static void StopAll()
+    {
+        foreach (var process in Running.Keys)
+        {
+            TryKill(process);
+        }
+    }
+
+    private static async Task<ProcessResult> WaitAsync(Process process, TimeSpan timeout, int maximumCharacters, CancellationToken cancellationToken, string? standardInput)
+    {
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(timeout);
         using var readSource = CancellationTokenSource.CreateLinkedTokenSource(timeoutSource.Token);
