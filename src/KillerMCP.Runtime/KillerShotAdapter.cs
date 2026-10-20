@@ -115,7 +115,7 @@ public static class KillerShotAdapter
         var problem = CommonOptions(input, arguments, allowDelay: true);
         if (problem != null) return Task.FromResult(Error(problem));
         arguments.AddRange(["--save", "--no-shutter", "--json"]);
-        int delay = input.TryGetProperty("delay", out var d) && d.TryGetInt32(out int seconds) ? seconds : 0;
+        int delay = input.TryGetProperty("delay", out var d) && d.ValueKind == JsonValueKind.Number && d.TryGetInt32(out int seconds) ? seconds : 0;
         return RunJsonAsync(path, arguments, "path", 45 + delay, token);
     }
 

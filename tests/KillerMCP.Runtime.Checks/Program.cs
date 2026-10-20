@@ -86,6 +86,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     if (arguments.Length >= 2 && arguments[0] == "/vendor")
     {
         Console.Write("Cisco Systems");
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_EXIT") is { Length: > 0 } scanExit) Environment.ExitCode = int.Parse(scanExit);
         return;
     }
     if (arguments.Length > 0 && arguments[0] == "/scan")
@@ -182,6 +183,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
             {
                 Directory.CreateDirectory(output);
                 File.WriteAllText(Path.Combine(output, "page-1.png"), "fixture");
+                if (arguments.Contains("1-2")) File.WriteAllText(Path.Combine(output, "page-2.png"), "fixture");
             }
             else
             {
@@ -227,6 +229,12 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     }
     if (arguments.Length >= 3 && arguments[0] == "import-image" && arguments[1] == "--path")
     {
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES_IMPORT_FAIL") is { Length: > 0 } failing && arguments[2].Contains(failing, StringComparison.Ordinal))
+        {
+            Console.Error.Write("Fixture import failure");
+            Environment.ExitCode = 1;
+            return;
+        }
         Console.Write(JsonSerializer.Serialize(new { id = 43, path = arguments[2] }));
         return;
     }
@@ -357,6 +365,8 @@ try
         Environment.SetEnvironmentVariable("TEMP", previousTemp);
         Environment.SetEnvironmentVariable("TMP", previousTmp);
     }
+    using var textId = JsonDocument.Parse("{\"id\":\"5\"}");
+    Equal(true, (await notesAdapters.First(item => item.Tool.Name == "killernotes_get").CallAsync(textId.RootElement, CancellationToken.None)).IsError);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", null);
     Console.WriteLine("PASS native KillerNotes adapter");
     if (args.Contains("--notes-only", StringComparer.Ordinal)) return;
@@ -434,6 +444,20 @@ try
     Equal(false, (await scanByName["killerscan_speed_test"].CallAsync(empty.RootElement, CancellationToken.None)).IsError);
     using var badTarget = JsonDocument.Parse("{\"target\":\"example.com\"}");
     Equal(true, (await scanByName["killerscan_probe_host"].CallAsync(badTarget.RootElement, CancellationToken.None)).IsError);
+    // A MAC address has a fixed shape, and a vendor lookup that fails is an error even if it printed something.
+    foreach (var mac in new[] { "00:00:0C:00:00:00 /speedtest", "0x0000.0C00.0000", "00:00:0C:00:00:00:00", "zz00:0C:00:00:00:00" })
+    {
+        using var badMac = JsonDocument.Parse(JsonSerializer.Serialize(new { mac }));
+        Equal(true, (await scanByName["killerscan_mac_vendor"].CallAsync(badMac.RootElement, CancellationToken.None)).IsError);
+    }
+    foreach (var mac in new[] { "00-00-0C-00-00-00", "00000C000000", "0000.0C00.0000" })
+    {
+        using var goodMac = JsonDocument.Parse(JsonSerializer.Serialize(new { mac }));
+        Equal(false, (await scanByName["killerscan_mac_vendor"].CallAsync(goodMac.RootElement, CancellationToken.None)).IsError);
+    }
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_EXIT", "4");
+    Equal(true, (await scanByName["killerscan_mac_vendor"].CallAsync(vendor.RootElement, CancellationToken.None)).IsError);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_EXIT", null);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", null);
     Console.WriteLine("PASS native KillerScan adapters");
 
@@ -569,6 +593,18 @@ try
     Equal(false, (await Integration("killendar_save_agenda_note", new { date = "2026-09-28", days = 7, limit = 5 })).IsError);
     Equal(false, (await Integration("killershell_save_directory_note", new { path = root, limit = 5 })).IsError);
     Equal(false, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = 150 })).IsError);
+    // Arguments of the wrong kind get the tool's own message instead of an internal error.
+    Equal(true, (await Integration("killernotes_export_pdf", new { id = "1", output = Path.Combine(root, "typed.pdf") })).IsError);
+    Equal(true, (await Integration("killernotes_export_notes_pdf", new { ids = new object[] { "1" }, output = Path.Combine(root, "typed-notes.pdf") })).IsError);
+    Equal(true, (await Integration("killerscan_save_report_note", new { limit = "5" })).IsError);
+    Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = "150" })).IsError);
+    Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1;2" })).IsError);
+    // When a later page cannot be saved, the result still names the notes already created.
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_IMPORT_FAIL", "page-2");
+    var partialPages = await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1-2" });
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_IMPORT_FAIL", null);
+    Equal(true, partialPages.IsError);
+    Equal(true, partialPages.Text.Contains("\"created\"", StringComparison.Ordinal) && partialPages.Text.Contains("43", StringComparison.Ordinal));
     Equal(42, JsonDocument.Parse((await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = "1", title = "Fixture text" })).Text).RootElement.GetProperty("id").GetInt32());
     Equal(true, (await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = "first" })).IsError);
     Equal(42, JsonDocument.Parse((await Integration("killerpdf_save_report_as_note", new { path = sourceOne, report = "signatures" })).Text).RootElement.GetProperty("id").GetInt32());

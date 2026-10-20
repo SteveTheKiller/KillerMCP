@@ -67,10 +67,13 @@ public static partial class KillerScanAdapter
 
     private static async Task<AppCallResult> Vendor(string path, JsonElement input, CancellationToken token)
     {
-        if (!ObjectWith(input, "mac") || !RequiredString(input, "mac", out var mac) || mac!.Count(Uri.IsHexDigit) != 12) return Error("MAC address must contain 12 hexadecimal digits");
-        var response = await Run(path, ["/vendor", mac!], 15, 8192, token).ConfigureAwait(false);
+        if (!ObjectWith(input, "mac") || !RequiredString(input, "mac", out var mac) || !MacAddress().IsMatch(mac!)) return Error("MAC address must be six hexadecimal pairs, such as 00:11:22:33:44:55, 00-11-22-33-44-55, 001122334455 or 0011.2233.4455");
+        ProcessResult response;
+        try { response = await Run(path, ["/vendor", mac!], 15, 8192, token).ConfigureAwait(false); }
+        catch (Exception exception) when (exception is TimeoutException or InvalidOperationException) { return Error("KillerScan could not look up the vendor: " + exception.Message); }
         var value = response.StandardOutput.Trim();
-        if (response.ExitCode != 0 && value.Length == 0) return ProcessError(response);
+        // A failed lookup is an error even when KillerScan printed something first.
+        if (response.ExitCode != 0 || response.OutputExceeded) return ProcessError(response);
         return Ok(JsonSerializer.Serialize(new { mac, vendor = value.Length == 0 ? "Unknown" : value }));
     }
 
@@ -144,6 +147,8 @@ public static partial class KillerScanAdapter
     private static bool RequiredString(JsonElement input, string name, out string? value) { value = null; return input.TryGetProperty(name, out var element) && element.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(value = element.GetString()); }
     private static bool OptionalBoolean(JsonElement input, string name, out bool value) { value = false; return !input.TryGetProperty(name, out var element) || (element.ValueKind is JsonValueKind.True or JsonValueKind.False && (value = element.GetBoolean()) == value); }
     private static bool OptionalInteger(JsonElement input, string name, int min, int max, int defaultValue, out int value) { value = defaultValue; return !input.TryGetProperty(name, out var element) || (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out value) && value >= min && value <= max); }
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(?:[0-9A-Fa-f]{2}([:-]?)(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}|[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4})$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex MacAddress();
     private static bool IsIpv4(string value) => IPAddress.TryParse(value, out var address) && address.AddressFamily == AddressFamily.InterNetwork;
     private static bool ValidTarget(string value) => value.Length is > 0 and <= 253 && (IsIpv4(value) || Hostname().IsMatch(value));
     private static bool ValidScanTarget(string value, out string? target) { target = value; var parts = value.Split('/'); return value.Length <= 43 && parts.Length <= 2 && IsIpv4(parts[0]) && (parts.Length == 1 || int.TryParse(parts[1], out var prefix) && prefix is >= 22 and <= 32); }

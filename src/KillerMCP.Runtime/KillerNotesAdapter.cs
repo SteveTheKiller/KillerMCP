@@ -89,7 +89,7 @@ public static class KillerNotesAdapter
             }
             else if (type == "integer")
             {
-                if (!item.Value.TryGetInt32(out int number)) return false;
+                if (item.Value.ValueKind != JsonValueKind.Number || !item.Value.TryGetInt32(out int number)) return false;
                 if (rule["minimum"] is JsonValue min && number < min.GetValue<int>() || rule["maximum"] is JsonValue max && number > max.GetValue<int>()) return false;
             }
         }

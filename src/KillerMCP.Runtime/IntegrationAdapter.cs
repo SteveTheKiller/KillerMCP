@@ -108,9 +108,10 @@ public static partial class IntegrationAdapter
     private static async Task<AppCallResult> PdfPagesToNotes(string pdf, string notes, JsonElement input, CancellationToken token)
     {
         if (!Exact(input, "path", "pages", "dpi", "group") || !ExistingFile(input, "path", ".pdf", out var path)) return Error("Provide an existing absolute PDF path");
-        var pages = input.TryGetProperty("pages", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : "1";
-        var dpi = input.TryGetProperty("dpi", out var d) && d.TryGetInt32(out var n) ? n : 150;
-        if (dpi is < 72 or > 600 || string.IsNullOrWhiteSpace(pages) || pages.Length > 200) return Error("Pages or DPI is invalid");
+        string? pages = "1";
+        if (input.TryGetProperty("pages", out var p) && (p.ValueKind != JsonValueKind.String || (pages = p.GetString())!.Length > 200 || !PageList().IsMatch(pages))) return Error("Pages must look like 1-3,5");
+        var dpi = 150;
+        if (!OptionalInt(input, "dpi", 72, 600, ref dpi)) return Error("DPI must be a whole number from 72 to 600");
         var group = input.TryGetProperty("group", out var g) && g.ValueKind == JsonValueKind.String ? g.GetString() : null;
         var temp = TempFolder();
         try
@@ -126,8 +127,19 @@ public static partial class IntegrationAdapter
                 var args = new List<string> { "import-image", "--path", image };
                 if (!string.IsNullOrWhiteSpace(group)) args.AddRange(["--group", group!]);
                 var result = await RunApp(notes, args, 30, token).ConfigureAwait(false);
-                if (result.ExitCode != 0) return ProcessError("KillerNotes", result);
-                created.Add(JsonNode.Parse(result.StandardOutput));
+                JsonNode? note = null;
+                if (result.ExitCode == 0)
+                {
+                    try { note = JsonNode.Parse(result.StandardOutput); }
+                    catch (JsonException) { }
+                }
+                if (note is null)
+                {
+                    // Notes already made stay made, so the error names them.
+                    var failure = result.ExitCode != 0 ? ProcessError("KillerNotes", result).Text : "KillerNotes returned an invalid response";
+                    return Error(new JsonObject { ["error"] = failure, ["failedAtPage"] = created.Count + 1, ["created"] = created }.ToJsonString());
+                }
+                created.Add(note);
             }
             return Ok(new JsonObject { ["created"] = created }.ToJsonString());
         }
@@ -193,7 +205,7 @@ public static partial class IntegrationAdapter
         var list = new List<int>();
         foreach (var id in ids.EnumerateArray())
         {
-            if (!id.TryGetInt32(out var number) || number < 1) return Error("Note IDs must be positive whole numbers");
+            if (id.ValueKind != JsonValueKind.Number || !id.TryGetInt32(out var number) || number < 1) return Error("Note IDs must be positive whole numbers");
             list.Add(number);
         }
         var temp = TempFolder();
@@ -403,11 +415,11 @@ public static partial class IntegrationAdapter
         return ProcessRunner.RunAsync(path, prefix.Concat(arguments), TimeSpan.FromSeconds(seconds), 1_048_576, token);
     }
 
-    private static bool IdOutput(JsonElement input, out int id, out string? output) { id = 0; output = null; return Exact(input, "id", "output") && input.TryGetProperty("id", out var value) && value.TryGetInt32(out id) && id > 0 && Text(input, "output", 1024, out output) && NewPdf(output!); }
+    private static bool IdOutput(JsonElement input, out int id, out string? output) { id = 0; output = null; return Exact(input, "id", "output") && input.TryGetProperty("id", out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out id) && id > 0 && Text(input, "output", 1024, out output) && NewPdf(output!); }
     private static bool ScanInput(JsonElement input, bool needsOutput, out string? target, out bool full, out int limit, out string? output, out string? group) { target = output = group = null; full = false; limit = 100; if (!Exact(input, needsOutput ? ["target", "full", "limit", "output"] : ["target", "full", "limit", "group"])) return false; if (input.TryGetProperty("target", out var t) && (t.ValueKind != JsonValueKind.String || !ValidScanTarget(target = t.GetString()))) return false; if (input.TryGetProperty("full", out var f)) { if (f.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return false; full = f.GetBoolean(); } if (!OptionalInt(input, "limit", 1, 100, ref limit)) return false; if (needsOutput && (!Text(input, "output", 1024, out output) || !NewPdf(output!))) return false; if (!needsOutput && input.TryGetProperty("group", out var g) && (g.ValueKind != JsonValueKind.String || (group = g.GetString())!.Length > 240)) return false; return true; }
     private static bool AgendaInput(JsonElement input, bool needsOutput, out string? date, out int days, out int limit, out string? output, out string? group) { date = output = group = null; days = 7; limit = 50; if (!Exact(input, needsOutput ? ["date", "days", "limit", "output"] : ["date", "days", "limit", "group"]) || !Text(input, "date", 10, out date) || !DateOnly.TryParseExact(date, "yyyy-MM-dd", out _)) return false; if (!OptionalInt(input, "days", 1, 31, ref days) || !OptionalInt(input, "limit", 1, 100, ref limit)) return false; if (needsOutput && (!Text(input, "output", 1024, out output) || !NewPdf(output!))) return false; if (!needsOutput && input.TryGetProperty("group", out var g) && (g.ValueKind != JsonValueKind.String || (group = g.GetString())!.Length > 240)) return false; return true; }
     private static bool DirectoryInput(JsonElement input, bool needsOutput, out string? path, out int limit, out string? output, out string? group) { path = output = group = null; limit = 100; if (!Exact(input, needsOutput ? ["path", "limit", "output"] : ["path", "limit", "group"]) || !Text(input, "path", 1024, out path) || !Path.IsPathFullyQualified(path!) || !Directory.Exists(path) || !OptionalInt(input, "limit", 1, 100, ref limit)) return false; if (needsOutput && (!Text(input, "output", 1024, out output) || !NewPdf(output!))) return false; if (!needsOutput && input.TryGetProperty("group", out var g) && (g.ValueKind != JsonValueKind.String || (group = g.GetString())!.Length > 240)) return false; return true; }
-    private static bool OptionalInt(JsonElement input, string name, int min, int max, ref int value) => !input.TryGetProperty(name, out var item) || item.TryGetInt32(out value) && value >= min && value <= max;
+    private static bool OptionalInt(JsonElement input, string name, int min, int max, ref int value) => !input.TryGetProperty(name, out var item) || item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out value) && value >= min && value <= max;
     private static bool ValidScanTarget(string? value) { if (string.IsNullOrWhiteSpace(value) || value.Length > 43) return false; var parts = value.Split('/'); if (parts.Length is < 1 or > 2 || !IPAddress.TryParse(parts[0], out var address) || address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) return false; return parts.Length == 1 || int.TryParse(parts[1], out var prefix) && prefix is >= 22 and <= 32; }
     private static bool Text(JsonElement input, string name, int max, out string? value) { value = null; return input.TryGetProperty(name, out var item) && item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value = item.GetString()) && value.Length <= max; }
     private static bool ExistingFile(JsonElement input, string name, string extension, out string? path) { path = null; return Text(input, name, 1024, out path) && Path.IsPathFullyQualified(path!) && path!.EndsWith(extension, StringComparison.OrdinalIgnoreCase) && File.Exists(path); }
