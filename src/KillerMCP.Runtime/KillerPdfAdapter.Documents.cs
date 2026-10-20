@@ -132,7 +132,7 @@ public static partial class KillerPdfAdapter
                 .Concat(Joined(input, "find", "--find")).ToList(), input, output), 600);
         yield return FileOperation("killerpdf_protect", "--protect <in.pdf>", "Write an AES-256 encrypted copy of a local PDF protected by passwords with print, copy and edit permissions, or for certificate recipients. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["userPassword"] = Password(), ["ownerPassword"] = Password(), ["allow"] = ListOf(Choice("print", "copy", "edit"), 0, 3), ["recipients"] = ListOf(FilePath("Absolute path to a recipient certificate (.cer)", "^[^,]+$"), 1, 16), ["invalidateSignatures"] = Boolean(false) }, "path", "output"),
-            (input, output) => Options(["--protect", String(input, "path"), output], input, ("userPassword", "--user-password"), ("ownerPassword", "--owner-password"), ("invalidateSignatures", "--invalidate-signatures"))
+            (input, output) => Options(["--protect", String(input, "path"), output], input, ("userPassword", UserPasswordOption), ("ownerPassword", OwnerPasswordOption), ("invalidateSignatures", "--invalidate-signatures"))
                 .Concat(Joined(input, "allow", "--allow")).Concat(Joined(input, "recipients", "--recipients")).ToList())
             with { ExtraFiles = ["recipients"] };
         yield return FileOperation("killerpdf_export", "--export <in.pdf>", "Export a local PDF to Word, Excel, PowerPoint, HTML, Markdown, plain text or JSON, chosen by the output extension. Never changes the source.",
@@ -216,7 +216,7 @@ public static partial class KillerPdfAdapter
 
     private static List<string> SignArguments(JsonElement input, string output)
     {
-        var args = Options(["--sign", String(input, "path"), output], input, ("pfx", "--pfx"), ("pfxPassword", "--pfx-password"), ("certificate", "--cert"),
+        var args = Options(["--sign", String(input, "path"), output], input, ("pfx", "--pfx"), ("pfxPassword", PfxPasswordOption), ("certificate", "--cert"),
             ("reason", "--reason"), ("location", "--location"), ("contact", "--contact"), ("timestamp", "--timestamp"), ("timestampServer", "--timestamp-server"),
             ("appearanceText", "--appearance-text"), ("width", "--width"), ("height", "--height"), ("fontSize", "--font-size"));
         if (input.TryGetProperty("appearancePage", out var page))

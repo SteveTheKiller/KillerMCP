@@ -8,11 +8,40 @@ public static partial class KillerPdfAdapter
 {
     private const long MaxPdfBytes = 64L * 1024 * 1024;
 
+    // Passwords on a command line can be read by any program running as the same user and are kept in
+    // process-creation logs, so KillerPDF gets them on standard input when its help says it accepts them
+    // there. The option names are string instances of their own, found by reference, so text a user
+    // passes that happens to read "--password" is never taken for one.
+    private static readonly string PasswordOption = Secret("--password");
+    private static readonly string UserPasswordOption = Secret("--user-password");
+    private static readonly string OwnerPasswordOption = Secret("--owner-password");
+    private static readonly string PfxPasswordOption = Secret("--pfx-password");
+    private static readonly string[] SecretOptions = [PasswordOption, UserPasswordOption, OwnerPasswordOption, PfxPasswordOption];
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> SecretsOnInput = new(StringComparer.OrdinalIgnoreCase);
+
+    private static string Secret(string name) => new(name.AsSpan());
+
+    private static string? MoveSecretsToInput(List<string> args)
+    {
+        var secrets = new JsonObject();
+        for (var index = 0; index < args.Count - 1;)
+        {
+            var option = Array.Find(SecretOptions, secret => ReferenceEquals(secret, args[index]));
+            if (option is null) { index++; continue; }
+            secrets[option[2..]] = args[index + 1];
+            args.RemoveRange(index, 2);
+        }
+        if (secrets.Count == 0) return null;
+        args.Add("--secrets-stdin");
+        return secrets.ToJsonString();
+    }
+
     public static async Task<IReadOnlyList<AppAdapter>> CreateAsync(string? path, CancellationToken cancellationToken = default)
     {
         if (!IsFile(path)) return [];
         var help = await Run(path!, ["--help"], 8, 65536, cancellationToken).ConfigureAwait(false);
         if (help.ExitCode != 0) return [];
+        SecretsOnInput[path!] = KillerPdfCapabilities.Supports(help.StandardOutput, "--secrets-stdin");
 
         var adapters = new List<AppAdapter>();
         if (KillerPdfCapabilities.Supports(help.StandardOutput, "--merge <out.pdf>")) adapters.Add(new AppAdapter(MergeTool(), (input, token) => Merge(path!, input, token)));
@@ -39,18 +68,18 @@ public static partial class KillerPdfAdapter
             (input, output) => Options(["--split", String(input, "path"), output], input, ("every", "--every"), ("parts", "--parts"), ("bookmarkLevel", "--bookmarks"), ("maxSize", "--max-size"), ("nameTemplate", "--name")));
         yield return FileOperation("killerpdf_decrypt", "--decrypt <in.pdf>", "Remove PDF encryption into a new local PDF. Supply a password when the document requires one. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["password"] = Password() }, "path", "output"),
-            (input, output) => Append(["--decrypt", String(input, "path"), output], input, "password", "--password"));
+            (input, output) => Append(["--decrypt", String(input, "path"), output], input, "password", PasswordOption));
         yield return DirectoryOperation("killerpdf_render_pages", "--to-image <in.pdf>", "Render selected PDF pages into PNG or JPEG images in a new folder. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["outputFolder"] = NewFolder(), ["pages"] = PageRange(), ["dpi"] = Integer(36, 1200, 150), ["format"] = EnumWithDefault(["png", "jpg"], "png"), ["transparent"] = Boolean(false), ["password"] = Password() }, "path", "outputFolder"),
             (input, output) => RenderArguments(input, output));
         yield return FileOperation("killerpdf_flatten", "--flatten <in.pdf>", "Rasterize a local PDF into a new uneditable PDF, in color, grayscale or black and white, optionally looking printed and scanned. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["dpi"] = Integer(36, 1200, 150), ["password"] = Password(), ["colorMode"] = Choice("color", "grayscale", "black-white"), ["threshold"] = Integer(0, 255), ["compression"] = Choice("lossless", "jpeg"), ["jpegQuality"] = Integer(1, 100), ["scannedLook"] = Text(64, "^(?:all|[a-z-]+(?:,[a-z-]+)*)$", "all, or any of tilt, paper, grain, soft-focus, shadow") }, "path", "output"),
-            (input, output) => Options(Append(["--flatten", String(input, "path"), output, "--dpi", Number(input, "dpi", 150)], input, "password", "--password"), input, ("colorMode", "--color-mode"), ("threshold", "--threshold"), ("compression", "--compression"), ("jpegQuality", "--jpeg-quality"), ("scannedLook", "--scanned-look")), 300);
+            (input, output) => Options(Append(["--flatten", String(input, "path"), output, "--dpi", Number(input, "dpi", 150)], input, "password", PasswordOption), input, ("colorMode", "--color-mode"), ("threshold", "--threshold"), ("compression", "--compression"), ("jpegQuality", "--jpeg-quality"), ("scannedLook", "--scanned-look")), 300);
         yield return Action("killerpdf_print", "--print <in.pdf>", "Print selected pages from a local PDF. This sends a real print job to the selected or default printer.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["printer"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 256 }, ["pages"] = PageRange(), ["copies"] = Integer(1, 99, 1), ["password"] = Password() }, "path"), PrintArguments);
         yield return FileOperation("killerpdf_ocr", "--ocr <in.pdf>", "Create a new searchable PDF with OCR. A language model may be downloaded on first use. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["language"] = new JsonObject { ["type"] = "string", ["minLength"] = 3, ["maxLength"] = 32, ["pattern"] = "^[A-Za-z0-9_]+$", ["default"] = "eng" }, ["password"] = Password() }, "path", "output"),
-            (input, output) => Append(["--ocr", String(input, "path"), output, "--lang", OptionalString(input, "language", "eng")], input, "password", "--password"), 600);
+            (input, output) => Append(["--ocr", String(input, "path"), output, "--lang", OptionalString(input, "language", "eng")], input, "password", PasswordOption), 600);
         yield return FileOperation("killerpdf_resave", "--batch-resave <in>", "Resave a local PDF through KillerPDF into a new PDF without changing the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf() }, "path", "output"),
             (input, output) => ["--batch-resave", String(input, "path"), output, "--quiet"], 300);
@@ -292,7 +321,7 @@ public static partial class KillerPdfAdapter
         var args = new List<string> { "--to-image", String(input, "path"), output, "--dpi", Number(input, "dpi", 150), "--format", OptionalString(input, "format", "png") };
         Append(args, input, "pages", "--pages");
         if (input.TryGetProperty("transparent", out var transparent) && transparent.ValueKind == JsonValueKind.True) args.Add("--transparent");
-        return Append(args, input, "password", "--password");
+        return Append(args, input, "password", PasswordOption);
     }
 
     private static List<string> PrintArguments(JsonElement input)
@@ -301,7 +330,7 @@ public static partial class KillerPdfAdapter
         Append(args, input, "printer", "--printer");
         Append(args, input, "pages", "--pages");
         args.AddRange(["--copies", Number(input, "copies", 1)]);
-        return Append(args, input, "password", "--password");
+        return Append(args, input, "password", PasswordOption);
     }
 
     private static List<string> Append(List<string> args, JsonElement input, string property, string flag)
@@ -347,7 +376,12 @@ public static partial class KillerPdfAdapter
     private static string OptionalString(JsonElement input, string name, string fallback) => input.TryGetProperty(name, out var value) ? value.GetString()! : fallback;
     private static string Number(JsonElement input, string name, int fallback = 0) => input.TryGetProperty(name, out var value) ? value.GetRawText() : fallback.ToString(System.Globalization.CultureInfo.InvariantCulture);
     private static string Number(JsonElement input, string name, double fallback) => input.TryGetProperty(name, out var value) ? value.GetRawText() : fallback.ToString(System.Globalization.CultureInfo.InvariantCulture);
-    private static Task<ProcessResult> Run(string path, IEnumerable<string> args, int seconds, int maximum, CancellationToken token) => ProcessRunner.RunAsync(path, args, TimeSpan.FromSeconds(seconds), maximum, token);
+    private static Task<ProcessResult> Run(string path, IEnumerable<string> args, int seconds, int maximum, CancellationToken token)
+    {
+        var arguments = args.ToList();
+        var secrets = SecretsOnInput.TryGetValue(path, out var supported) && supported ? MoveSecretsToInput(arguments) : null;
+        return ProcessRunner.RunAsync(path, arguments, TimeSpan.FromSeconds(seconds), maximum, token, secrets);
+    }
     private static AppCallResult Ok(string text) => new(text);
     private static AppCallResult Error(string text) => new(text, true);
     private static AppCallResult ProcessError(ProcessResult response) { var text = string.IsNullOrWhiteSpace(response.StandardError) ? string.IsNullOrWhiteSpace(response.StandardOutput) ? "KillerPDF command failed" : response.StandardOutput : response.StandardError; return Error(Limit(text.Trim())); }

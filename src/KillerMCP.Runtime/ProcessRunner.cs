@@ -27,7 +27,9 @@ internal static class ProcessRunner
         return length;
     }
 
-    public static async Task<ProcessResult> RunAsync(string executable, IEnumerable<string> arguments, TimeSpan timeout, int maximumCharacters, CancellationToken cancellationToken = default)
+    // standardInput, when given, is written to the app as UTF-8 and then closed. It carries what must not
+    // appear on a command line, where other programs and process logs can read it.
+    public static async Task<ProcessResult> RunAsync(string executable, IEnumerable<string> arguments, TimeSpan timeout, int maximumCharacters, CancellationToken cancellationToken = default, string? standardInput = null)
     {
         using var process = new Process
         {
@@ -38,6 +40,8 @@ internal static class ProcessRunner
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                RedirectStandardInput = standardInput is not null,
+                StandardInputEncoding = standardInput is not null ? new UTF8Encoding(false) : null,
             },
         };
         var commandLineLength = executable.Length + 3;
@@ -62,6 +66,19 @@ internal static class ProcessRunner
         catch (System.ComponentModel.Win32Exception)
         {
             throw new InvalidOperationException("The application command did not start.");
+        }
+
+        if (standardInput is not null)
+        {
+            try
+            {
+                await process.StandardInput.WriteAsync(standardInput.AsMemory(), cancellationToken).ConfigureAwait(false);
+                process.StandardInput.Close();
+            }
+            catch (IOException)
+            {
+                // The app exited before reading its input; its exit code and output say why.
+            }
         }
 
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
