@@ -31,13 +31,13 @@ public static partial class KillerPdfAdapter
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["sheet"] = Sheet(), ["margin"] = Points(720), ["gutter"] = Points(720), ["creep"] = Points(72), ["binding"] = Choice("long", "short"), ["marks"] = Boolean(false) }, "path", "output"),
             (input, output) => Options(["--booklet", String(input, "path"), output], input, ("sheet", "--sheet"), ("margin", "--margin"), ("gutter", "--gutter"), ("creep", "--creep"), ("binding", "--binding"), ("marks", "--marks")));
         yield return FileOperation("killerpdf_nup", "--nup <in.pdf>", "Place several pages of a local PDF on each sheet of a new PDF, such as a 2x2 grid. Never changes the source.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["grid"] = Text(5, "^\\d{1,2}x\\d{1,2}$", "Columns by rows, such as 2x2"), ["sheet"] = Sheet(), ["margin"] = Points(720), ["gutter"] = Points(720), ["marks"] = Boolean(false) }, "path", "output", "grid"),
+            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["grid"] = Text(5, "^[0-9]{1,2}x[0-9]{1,2}$", "Columns by rows, such as 2x2"), ["sheet"] = Sheet(), ["margin"] = Points(720), ["gutter"] = Points(720), ["marks"] = Boolean(false) }, "path", "output", "grid"),
             (input, output) => Options(["--nup", String(input, "path"), output], input, ("grid", "--grid"), ("sheet", "--sheet"), ("margin", "--margin"), ("gutter", "--gutter"), ("marks", "--marks")));
         yield return FileOperation("killerpdf_auto_bookmarks", "--auto-bookmarks <in.pdf>", "Build bookmarks from the detected headings of a local PDF into a new PDF. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["minSize"] = Range(0, 200), ["depth"] = Integer(1, 6), ["pattern"] = Text(256, null, "Regular expression a heading must match") }, "path", "output"),
             (input, output) => Options(["--auto-bookmarks", String(input, "path"), output], input, ("minSize", "--min-size"), ("depth", "--depth"), ("pattern", "--pattern")));
         yield return FileOperation("killerpdf_scan_to_text", "--scan-to-text <in.pdf>", "Replace the words on scanned pages of a local PDF with real text in the closest matching typeface, in a new PDF. reviewFolder receives each converted word as scanned beside it as text (p<page>-w<word>.png, least certain first in review.json); keepScanned lists page:word ids from a review to keep as scanned. A language model may be downloaded on first use. Never changes the source.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["language"] = Language(), ["reviewFolder"] = NewFolder(), ["keepScanned"] = ListOf(Text(16, "^\\d+:\\d+$", "page:word, such as 3:17"), 1, 10000) }, "path", "output"),
+            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["language"] = Language(), ["reviewFolder"] = NewFolder(), ["keepScanned"] = ListOf(Text(16, "^[0-9]+:[0-9]+$", "page:word, such as 3:17"), 1, 10000) }, "path", "output"),
             (input, output) => KeepScanned(Options(["--scan-to-text", String(input, "path"), output, "--lang", OptionalString(input, "language", "eng")], input, ("reviewFolder", "--review")), input, output), 900)
             with { NewFolders = ["reviewFolder"] };
         yield return FileOperation("killerpdf_reverse_pages", "--reverse-pages <in.pdf>", "Reverse the order of all or the selected pages of a local PDF into a new PDF. Never changes the source.",
@@ -53,7 +53,7 @@ public static partial class KillerPdfAdapter
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["pages"] = PageRange(), ["direction"] = Choice("vertical", "horizontal"), ["splitAt"] = new JsonObject { ["type"] = "number", ["minimum"] = 0.1, ["maximum"] = 0.9, ["description"] = "Where the split falls across the page, 0.5 for the middle" } }, "path", "output"),
             (input, output) => Options(["--divide-spreads", String(input, "path"), output], input, ("pages", "--pages"), ("direction", "--direction"), ("splitAt", "--position")));
         yield return FileOperation("killerpdf_rasterize_region", "--rasterize-region <in.pdf>", "Turn one box of a page of a local PDF into an image, in a new PDF. The box is left,bottom,right,top in points on the unrotated page. Never changes the source.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["page"] = Integer(1, 100000), ["box"] = Text(80, "^-?\\d+(?:\\.\\d+)?(?:,-?\\d+(?:\\.\\d+)?){3}$", "left,bottom,right,top in points"), ["dpi"] = Integer(36, 1200, 300) }, "path", "output", "page", "box"),
+            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["page"] = Integer(1, 100000), ["box"] = Text(80, "^-?[0-9]+(?:\\.[0-9]+)?(?:,-?[0-9]+(?:\\.[0-9]+)?){3}$", "left,bottom,right,top in points"), ["dpi"] = Integer(36, 1200, 300) }, "path", "output", "page", "box"),
             (input, output) => ["--rasterize-region", String(input, "path"), Number(input, "page"), String(input, "box"), output, "--dpi", Number(input, "dpi", 300)]);
 
         // ---- Document tools reports -------------------------------------------------------------
@@ -94,7 +94,7 @@ public static partial class KillerPdfAdapter
             (input, output) => Options(["--add-attachment", String(input, "path"), output, .. Strings(input, "files")], input, ("description", "--description"), ("relationship", "--relationship")))
             with { ExtraFiles = ["files"] };
         yield return FileOperation("killerpdf_edit_attachment", "--edit-attachment <in.pdf>", "Rename, describe, retype or remove one embedded file of a local PDF, in a new PDF. Never changes the source.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["name"] = Positional(256), ["rename"] = Text(256), ["description"] = Text(1024), ["mime"] = Text(128, "^[\\w.+-]+/[\\w.+-]+$", "MIME type such as text/csv"), ["relationship"] = Relationship(), ["remove"] = Boolean(false) }, "path", "output", "name"),
+            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["name"] = Positional(256), ["rename"] = Text(256), ["description"] = Text(1024), ["mime"] = Text(128, "^[A-Za-z0-9_.+-]+/[A-Za-z0-9_.+-]+$", "MIME type such as text/csv"), ["relationship"] = Relationship(), ["remove"] = Boolean(false) }, "path", "output", "name"),
             (input, output) => Options(["--edit-attachment", String(input, "path"), output, String(input, "name")], input, ("rename", "--rename"), ("description", "--description"), ("mime", "--mime"), ("relationship", "--relationship"), ("remove", "--remove")));
         yield return FileOperation("killerpdf_repair_links", "--repair-links <in.pdf>", "Remove unsafe links, broken links, or both (the default) from a local PDF, in a new PDF. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["unsafe"] = Boolean(false), ["unresolved"] = Boolean(false) }, "path", "output"),
@@ -103,13 +103,13 @@ public static partial class KillerPdfAdapter
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["title"] = Text(256), ["depth"] = Integer(1, 6) }, "path", "output"),
             (input, output) => Options(["--toc", String(input, "path"), output], input, ("title", "--title"), ("depth", "--depth")));
         yield return FileOperation("killerpdf_page_labels", "--page-labels <in.pdf>", "Set the page-label ranges of a local PDF, such as 1:lower-roman,5:decimal or 40:decimal:A-:1, in a new PDF. Styles: decimal, upper-roman, lower-roman, upper-letters, lower-letters, none. Never changes the source.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["ranges"] = Text(1024, "^\\d+:[a-z-]+(?::[^:,]*(?::\\d+)?)?(?:,\\d+:[a-z-]+(?::[^:,]*(?::\\d+)?)?)*$", "page:style[:prefix[:start]], comma separated") }, "path", "output", "ranges"),
+            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["ranges"] = Text(1024, "^[0-9]+:[a-z-]+(?::[^:,]*(?::[0-9]+)?)?(?:,[0-9]+:[a-z-]+(?::[^:,]*(?::[0-9]+)?)?)*$", "page:style[:prefix[:start]], comma separated") }, "path", "output", "ranges"),
             (input, output) => ["--page-labels", String(input, "path"), output, String(input, "ranges")]);
         yield return FileOperation("killerpdf_initial_view", "--initial-view <in.pdf>", "Set how a local PDF opens: page, zoom, layout, side panel and window options, in a new PDF. Never changes the source.",
             Schema(new JsonObject
             {
                 ["path"] = PdfPath(), ["output"] = NewPdf(), ["page"] = Integer(1, 100000),
-                ["zoom"] = Text(10, "^(?:fit-page|fit-width|fit-height|actual|\\d{1,4})$", "fit-page, fit-width, fit-height, actual, or a percent"),
+                ["zoom"] = Text(10, "^(?:fit-page|fit-width|fit-height|actual|[0-9]{1,4})$", "fit-page, fit-width, fit-height, actual, or a percent"),
                 ["layout"] = Choice("default", "single", "one-column", "two-column-left", "two-column-right", "two-page-left", "two-page-right"),
                 ["panel"] = Choice("default", "none", "outlines", "thumbnails", "layers", "attachments", "full-screen"),
                 ["hideToolbar"] = Boolean(false), ["hideMenu"] = Boolean(false), ["hideWindowUi"] = Boolean(false),
@@ -293,12 +293,12 @@ public static partial class KillerPdfAdapter
         new(marker, OutputKind.Report, new RuntimeTool(name, description, Schema(new JsonObject { ["path"] = PdfPath() }, "path")),
             (input, _) => [marker[..marker.IndexOf(' ', StringComparison.Ordinal)], String(input, "path"), "--json"], 120) { SuccessCodes = [0, 3] };
 
-    // Schema patterns are JSON Schema (ECMAScript) patterns, where \d is an ASCII digit and $ is the end
-    // of the text. .NET reads them the same way only with ECMAScript matching and a match that reaches
-    // the end, since its $ also matches before a final line break.
+    // Schema patterns are JSON Schema (ECMAScript) patterns, where $ is the end of the text. They spell
+    // digits and word characters as ASCII ranges, which mean the same in .NET, and a match must reach the
+    // end of the value, since .NET's $ also matches before a final line break.
     private static bool MatchesPattern(string text, string pattern)
     {
-        var match = Regex.Match(text, pattern, RegexOptions.ECMAScript, TimeSpan.FromSeconds(1));
+        var match = Regex.Match(text, pattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
         return match.Success && (!pattern.EndsWith('$') || match.Index + match.Length == text.Length);
     }
 
@@ -317,7 +317,7 @@ public static partial class KillerPdfAdapter
     private static JsonObject ListOf(JsonObject items, int minItems, int maxItems) => new() { ["type"] = "array", ["items"] = items, ["minItems"] = minItems, ["maxItems"] = maxItems };
     private static JsonObject Range(double minimum, double maximum) => new() { ["type"] = "number", ["minimum"] = minimum, ["maximum"] = maximum };
     private static JsonObject Points(double maximum) => Range(0, maximum);
-    private static JsonObject Sheet() => Text(32, "^(?:[A-Za-z0-9]+|\\d+(?:\\.\\d+)?x\\d+(?:\\.\\d+)?)$", "Sheet name such as letter, tabloid or a4, or WxH in points");
+    private static JsonObject Sheet() => Text(32, "^(?:[A-Za-z0-9]+|[0-9]+(?:\\.[0-9]+)?x[0-9]+(?:\\.[0-9]+)?)$", "Sheet name such as letter, tabloid or a4, or WxH in points");
     private static JsonObject Choice(params string[] values) => Enum(values);
     private static JsonObject Relationship() => Choice("data", "source", "alternative", "supplement", "unspecified");
     private static JsonObject Language() => new() { ["type"] = "string", ["minLength"] = 3, ["maxLength"] = 32, ["pattern"] = "^[A-Za-z0-9_]+$", ["default"] = "eng" };

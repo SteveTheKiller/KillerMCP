@@ -570,7 +570,7 @@ try
     Equal(false, (await Pdf("killerpdf_reverse_pages", new { path = sourceOne, output = NewPdf("reversed"), pages = "1-2" })).IsError);
     // Checked text ends where the value ends and takes ASCII digits only.
     Equal(true, (await Pdf("killerpdf_reverse_pages", new { path = sourceOne, output = NewPdf("reversed-newline"), pages = "1-2\n" })).IsError);
-    Equal(true, (await Pdf("killerpdf_nup", new { path = sourceOne, output = NewPdf("nup-digits"), grid = "٢x2" })).IsError);
+    Equal(true, (await Pdf("killerpdf_nup", new { path = sourceOne, output = NewPdf("nup-digits"), grid = (char)0x662 + "x2" })).IsError);
     Equal(false, (await Pdf("killerpdf_fix_orientation", new { path = sourceOne, output = NewPdf("upright") })).IsError);
     Equal(false, (await Pdf("killerpdf_straighten", new { path = sourceOne, output = NewPdf("level") })).IsError);
     Equal(false, (await Pdf("killerpdf_divide_spreads", new { path = sourceOne, output = NewPdf("divided"), direction = "vertical", splitAt = 0.5 })).IsError);
@@ -585,6 +585,9 @@ try
     Equal(false, (await Pdf("killerpdf_portfolio_view", new { path = sourceOne, output = NewPdf("portfolio"), view = "tile" })).IsError);
     Equal(false, (await Pdf("killerpdf_add_attachment", new { path = sourceOne, output = NewPdf("attached"), files = new[] { attachmentFile }, relationship = "supplement" })).IsError);
     Equal(false, (await Pdf("killerpdf_edit_attachment", new { path = sourceOne, output = NewPdf("edited-attachment"), name = "notes.txt", mime = "text/plain" })).IsError);
+    // Word characters in checked text are ASCII, and a space of any kind ends an address.
+    Equal(true, (await Pdf("killerpdf_edit_attachment", new { path = sourceOne, output = NewPdf("edited-attachment-dotted"), name = "notes.txt", mime = "text/c" + (char)0x130 })).IsError);
+    Equal(true, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed-space"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, timestampServer = "https://a" + (char)0xA0 + "b" })).IsError);
     Equal(false, (await Pdf("killerpdf_repair_links", new { path = sourceOne, output = NewPdf("links"), @unsafe = true })).IsError);
     Equal(false, (await Pdf("killerpdf_table_of_contents", new { path = sourceOne, output = NewPdf("contents"), title = "Contents", depth = 2 })).IsError);
     Equal(false, (await Pdf("killerpdf_page_labels", new { path = sourceOne, output = NewPdf("labels"), ranges = "1:lower-roman,3:decimal" })).IsError);
@@ -650,7 +653,7 @@ try
     Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1;2" })).IsError);
     // Page lists are ASCII digits only, with nothing after the last range.
     Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1-2\n" })).IsError);
-    Equal(true, (await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = "١" })).IsError);
+    Equal(true, (await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = ((char)0x661).ToString() })).IsError);
     // Hardened HTML holds no base or meta tag but its own, however the content nests, splits or
     // encodes them. A browser starts such a tag only at a literal less-than sign and tag name.
     var tricks = "<me<meta http-equiv=refresh content=\"0; url=file://evil/share\">ta http-equiv=\"refresh\" content=\"0; url=file://evil/nested\">"
