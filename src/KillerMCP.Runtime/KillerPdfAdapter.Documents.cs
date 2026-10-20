@@ -185,7 +185,7 @@ public static partial class KillerPdfAdapter
                 ["path"] = PdfPath(), ["output"] = NewPdf(), ["pfx"] = FilePath("Absolute path to a .pfx or .p12 certificate file"), ["pfxPassword"] = Password(),
                 ["certificate"] = Text(256, null, "Thumbprint or name of a signing certificate in the Windows personal store"),
                 ["reason"] = Text(256), ["location"] = Text(256), ["contact"] = Text(256), ["timestamp"] = Boolean(false),
-                ["timestampServer"] = Text(512, "^https?://[!-~]+$", "RFC 3161 timestamp server address"),
+                ["timestampServer"] = Text(512, "^https?://[!-~]+$", "RFC 3161 timestamp server address in ASCII, with an international host name in its xn-- form"),
                 ["appearancePage"] = Integer(1, 100000), ["appearanceCorner"] = Choice("bottom-left", "bottom-right", "top-left", "top-right"),
                 ["appearanceText"] = Text(1024, null, "Visible signature text; {name}, {date}, {reason} and {location} are filled in"),
                 ["width"] = Range(72, 14400), ["height"] = Range(36, 14400), ["fontSize"] = Range(6, 72),

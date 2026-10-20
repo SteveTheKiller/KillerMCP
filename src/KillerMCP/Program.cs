@@ -169,10 +169,11 @@ while ((line = Console.ReadLine()) is not null)
 AppProcesses.StopAll();
 foreach (var source in running.Values) source.Cancel();
 Task.WaitAll([.. calls], TimeSpan.FromSeconds(10));
-// A KillerBench repair that started keeps running to its own time limit. The host stays until it ends,
-// so it keeps the one-repair hold that stops another window from starting a second repair, and records
-// the result and any uncertain-result lock.
-KillerBenchRepairJobs.WaitForRunning(TimeSpan.FromMinutes(70));
+// A KillerBench repair that started keeps running to its own time limit, which is up to four hours for
+// some repairs. The host stays until it ends, with no limit of its own, so it keeps the one-repair hold
+// that stops another window from starting a second repair, and records the result and any
+// uncertain-result lock. The repair's own limit and the approval window's five minutes bound the wait.
+KillerBenchRepairJobs.WaitForRunning(Timeout.InfiniteTimeSpan);
 
 static class ToolRegistry
 {

@@ -374,8 +374,9 @@ public static partial class KillerBenchAdapter
                     approved = await Confirm(new KillerBenchConfirmation(plan.Action, plan.Title, plan.Tier == KillerBenchTier.B ? "Disruptive" : "Safe", effects, plan.Target, command), token).ConfigureAwait(false);
                     if (approved && settingChanged) KillerBenchSettings.Approve(settingsHash!);
                 }
-                catch (Exception exception) when (exception is IOException or InvalidOperationException or Win32Exception or TimeoutException)
+                catch (Exception exception) when (exception is IOException or InvalidOperationException or Win32Exception or TimeoutException or OperationCanceledException)
                 {
+                    // A request cancelled while it waits for approval was not approved; nothing has run yet.
                     approved = false;
                 }
                 if (!approved)

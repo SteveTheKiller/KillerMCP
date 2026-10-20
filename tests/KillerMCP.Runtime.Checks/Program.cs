@@ -779,12 +779,13 @@ try
     var clock = DateTimeOffset.UtcNow;
     var confirmations = new List<KillerBenchConfirmation>();
     var approve = false;
+    var cancelConfirm = false;
     var elevated = new List<string>();
     var benchOptions = new KillerBenchOptions
     {
         Now = () => clock,
         Wait = TimeSpan.FromSeconds(20),
-        Confirm = (request, _) => { confirmations.Add(request); return Task.FromResult(approve); },
+        Confirm = (request, _) => { if (cancelConfirm) throw new OperationCanceledException(); confirmations.Add(request); return Task.FromResult(approve); },
         RunElevated = async (exe, args, timeout, token) =>
         {
             elevated.Add(string.Join(" ", args));
@@ -904,8 +905,11 @@ try
 
     // A repair that has started runs to its end even when the request that started it is cancelled, for
     // example because the agent client closed, so the PC is not left half repaired. The host can wait for it.
+    // Both the elevated path and the direct path used for privacy settings are checked.
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW_REPAIR", "1");
-    var unattended = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
+    foreach (var unattendedPlan in new object[] { new { action = "dns_cache_flush", options = new { host = "missing.example" } }, new { action = "privacy_setting", options = new { key = "camera-access", state = "off" } } })
+    {
+    var unattended = Finished(await Bench("killerbench_repair_preview", unattendedPlan));
     using (var closing = new CancellationTokenSource())
     using (var unattendedRequest = JsonDocument.Parse(JsonSerializer.Serialize(new { token = unattended.GetProperty("token").GetString() })))
     {
@@ -919,8 +923,17 @@ try
         var unattendedResult = JsonDocument.Parse((await benchByName["killerbench_job"].CallAsync(repairPoll.RootElement, CancellationToken.None)).Text).RootElement.Clone();
         Equal("Completed", unattendedResult.GetProperty("result").GetProperty("outcome").GetString());
     }
+    }
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW_REPAIR", null);
     Equal(null, KillerBenchSettings.ReadLock());
+
+    // A desktop approval cancelled with its request counts as not approved, and the audit says so.
+    cancelConfirm = true;
+    var cancelledApproval = Finished(await Bench("killerbench_repair_preview", new { action = "system_image_repair", options = new { tool = "dism" } }));
+    var deniedBefore = File.ReadAllLines(KillerBenchSettings.AuditPath).Count(line => line.Contains("\"denied\""));
+    Equal("NotApproved", Finished(await Bench("killerbench_repair_execute", new { token = cancelledApproval.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
+    Equal(deniedBefore + 1, File.ReadAllLines(KillerBenchSettings.AuditPath).Count(line => line.Contains("\"denied\"")));
+    cancelConfirm = false;
 
     // A repair lock that cannot be saved still blocks repairs in this host, and the result says so.
     Directory.CreateDirectory(KillerBenchSettings.LockPath);
