@@ -169,13 +169,51 @@ try {
     if ($blocked.ExitCode -eq 0 -or -not (Test-Path -LiteralPath $sentinel)) { throw 'Uninstall did not preserve an installation folder with an extra file.' }
     Remove-Item -LiteralPath $sentinel
 
-    $uninstall = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
-    if ($uninstall.ExitCode -ne 0 -or (Test-Path -LiteralPath $installed) -or (Test-Path -LiteralPath $setupCopy) -or (Test-Path -LiteralPath $uninstallKey) -or (Test-Path -LiteralPath $codexState)) { throw 'KillerMCP uninstall did not remove its files and registrations.' }
+    # Agent clients keep the host running, so uninstall has to close it rather than fail partway through deleting.
+    $runningHost = [Diagnostics.Process]::new()
+    $runningHost.StartInfo = $runningStart
+    try {
+        if (-not $runningHost.Start()) { throw 'The installed MCP host did not start for the active-process uninstall test.' }
+        Start-Sleep -Milliseconds 500
+        if ($runningHost.HasExited) { throw 'The installed MCP host exited before the active-process uninstall test.' }
+        $uninstall = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+        if (-not $runningHost.HasExited) { throw 'Uninstall did not close the active MCP host.' }
+    }
+    finally {
+        if (-not $runningHost.HasExited) { $runningHost.Kill() }
+        $runningHost.Dispose()
+    }
+    if ($uninstall.ExitCode -ne 0 -or (Test-Path -LiteralPath $installed) -or (Test-Path -LiteralPath $setupCopy) -or (Test-Path -LiteralPath $uninstallKey) -or (Test-Path -LiteralPath $codexState)) { throw "KillerMCP uninstall did not remove its files and registrations (exit $($uninstall.ExitCode))." }
+    if (Get-ChildItem -LiteralPath $scratch -Directory -Filter 'Installed.*') { throw 'Uninstall left a staging, backup or removal folder behind.' }
     if ((Get-ItemProperty -LiteralPath $updateRunKey -ErrorAction SilentlyContinue).'KillerMCP Update Check') { throw 'KillerMCP uninstall kept its update check.' }
     foreach ($name in $names) {
         $configuration = Get-Content -LiteralPath ([Environment]::GetEnvironmentVariable("KILLERMCP_TEST_${name}_CONFIG")) -Raw | ConvertFrom-Json
         if ($configuration.preservedSetting -ne 'keep' -or $null -ne $configuration.mcpServers.killermcp) { throw "$name was not safely disconnected." }
     }
+
+    # Earlier versions could stop uninstalling partway and leave a folder with only some of its files.
+    # Setup has to remove such a folder, and reinstall over one, without touching anything it did not install.
+    foreach ($recovery in 'uninstall', 'install') {
+        $install = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        if ($install.ExitCode -ne 0) { throw "Install before the stranded-folder $recovery check failed with exit code $($install.ExitCode)." }
+        $listed = @((Get-Content -LiteralPath (Join-Path $installed 'manifest.json') -Raw | ConvertFrom-Json).files.PSObject.Properties.Name | Sort-Object)
+        Remove-Item -LiteralPath (Join-Path $installed ($listed[0] -replace '/', '\'))
+        Remove-Item -LiteralPath (Join-Path $installed ($listed[1] -replace '/', '\'))
+        $stranded = Start-Process -FilePath $setup -ArgumentList $(if ($recovery -eq 'uninstall') { @('/silent', '/uninstall') } else { @('/silent') }) -Wait -PassThru -WindowStyle Hidden
+        if ($stranded.ExitCode -ne 0) { throw "Setup could not $recovery over a partly removed installation (exit $($stranded.ExitCode))." }
+        if ($recovery -eq 'install') {
+            node (Join-Path $PSScriptRoot 'Test-NativePackage.mjs') $installed
+            if ($LASTEXITCODE -ne 0) { throw 'Reinstall over a partly removed installation left a broken runtime.' }
+        }
+        elseif (Test-Path -LiteralPath $installed) { throw 'Uninstall left a partly removed installation folder.' }
+    }
+    Set-Content -LiteralPath $sentinel -Value 'keep'
+    $blocked = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+    if ($blocked.ExitCode -eq 0 -or -not (Test-Path -LiteralPath $sentinel)) { throw 'Uninstall removed a file it did not install from a recovered installation.' }
+    Remove-Item -LiteralPath $sentinel
+    $uninstall = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+    if ($uninstall.ExitCode -ne 0 -or (Test-Path -LiteralPath $installed)) { throw 'Final uninstall after the stranded-folder checks failed.' }
+
     if ($PreviousSignedSetup -and $PreviousSignedInstall) {
         if ((Get-AuthenticodeSignature -LiteralPath $PreviousSignedSetup).Status -ne 'Valid') { throw 'The previous setup fixture is not signed and trusted.' }
         New-Item -ItemType Directory -Path $installed -Force | Out-Null

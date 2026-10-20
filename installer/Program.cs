@@ -110,9 +110,13 @@ namespace KillerMCP.Setup
             bool movedPrevious = false;
             try
             {
+                RemoveInterruptedRemovals(destination);
+                if (Directory.Exists(destination) && !ContainsFiles(destination)) Directory.Delete(destination, true);
                 if (Directory.Exists(destination))
                 {
-                    ValidateInstalled(destination, allowLegacy: true);
+                    // A folder that an interrupted uninstall left partly removed is still replaced,
+                    // as long as every file in it is one KillerMCP installed.
+                    ValidateInstalled(destination, allowLegacy: true, allowMissing: true);
                     CloseRunningProcesses(destination);
                 }
                 ExtractAndVerify(staging);
@@ -126,7 +130,7 @@ namespace KillerMCP.Setup
                     if (movedPrevious) Directory.Move(backup, destination);
                     throw;
                 }
-                if (movedPrevious) DeleteVerifiedInstallation(backup, allowLegacy: true);
+                if (movedPrevious) DeleteVerifiedInstallation(backup, allowLegacy: true, allowMissing: true);
                 RegisterInstalledApp(destination);
                 UpdateBootstrap.Register(destination);
             }
@@ -138,10 +142,18 @@ namespace KillerMCP.Setup
 
         internal static void Uninstall(string destination, bool removeRegistration)
         {
+            RemoveInterruptedRemovals(destination);
             if (!Directory.Exists(destination)) return;
-            ValidateInstalled(destination);
-            if (removeRegistration) Configure(destination, "unregister");
-            DeleteVerifiedInstallation(destination);
+            if (!ContainsFiles(destination)) { Directory.Delete(destination, true); return; }
+            ValidateInstalled(destination, allowMissing: true);
+            if (removeRegistration)
+            {
+                if (File.Exists(Path.Combine(destination, "KillerMCP.Configure.exe"))) Configure(destination, "unregister");
+                else Console.Error.WriteLine("KillerMCP.Configure.exe is missing, so agent clients still list KillerMCP. Remove the killermcp entry from their MCP settings.");
+            }
+            // Agent clients keep the host running; deleting around it would strand a partial folder.
+            CloseRunningProcesses(destination);
+            DeleteVerifiedInstallation(destination, allowMissing: true);
         }
 
         internal static void UninstallRegistered(string destination)
@@ -152,8 +164,8 @@ namespace KillerMCP.Setup
 
         internal static string? InstalledVersion(string destination)
         {
-            if (!Directory.Exists(destination)) return null;
-            ValidateInstalled(destination, allowLegacy: true);
+            if (!Directory.Exists(destination) || !ContainsFiles(destination)) return null;
+            ValidateInstalled(destination, allowLegacy: true, allowMissing: true);
             using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegistryPath(destination)))
             {
                 string? version = key?.GetValue("DisplayVersion") as string;
@@ -239,7 +251,9 @@ namespace KillerMCP.Setup
             ValidateInstalled(staging);
         }
 
-        private static Manifest ValidateInstalled(string destination, bool allowLegacy = false)
+        // allowMissing accepts a folder that lost some listed files to an interrupted removal.
+        // Every file still present has to be listed and match its hash either way.
+        private static Manifest ValidateInstalled(string destination, bool allowLegacy = false, bool allowMissing = false)
         {
             string manifestPath = Path.Combine(destination, "manifest.json");
             var serializer = new JavaScriptSerializer { MaxJsonLength = 4 * 1024 * 1024 };
@@ -249,23 +263,60 @@ namespace KillerMCP.Setup
             bool legacy = files.ContainsKey("node.exe") && files.ContainsKey("killermcp.mjs") && files.ContainsKey("killertools.mjs");
             if (!native && !(allowLegacy && legacy)) throw new InvalidDataException("The package does not contain a supported KillerMCP runtime.");
             string[] actual = Directory.GetFiles(destination, "*", SearchOption.AllDirectories).Select(path => path.Substring(destination.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/')).Where(name => name != "manifest.json").ToArray();
-            if (actual.Length != files.Count || actual.Any(name => !files.ContainsKey(name))) throw new InvalidOperationException("The installation folder contains files outside the KillerMCP manifest.");
+            if (actual.Any(name => !files.ContainsKey(name))) throw new InvalidOperationException("The installation folder contains files outside the KillerMCP manifest.");
             foreach (KeyValuePair<string, ManifestFile> item in files)
             {
                 string path = Path.Combine(destination, item.Key.Replace('/', Path.DirectorySeparatorChar));
+                if (allowMissing && !File.Exists(path)) continue;
                 if (!File.Exists(path) || new FileInfo(path).Length != item.Value.bytes || !Sha256(path).Equals(item.Value.sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Package verification failed for " + item.Key);
             }
             return manifest;
         }
 
-        private static void DeleteVerifiedInstallation(string destination, bool allowLegacy = false)
+        // The folder is renamed before anything is deleted. A file that is still in use makes the rename
+        // fail with every file in place, and a removal that stops partway leaves only the renamed folder,
+        // which the next install or uninstall finishes removing.
+        private static void DeleteVerifiedInstallation(string destination, bool allowLegacy = false, bool allowMissing = false)
         {
-            Manifest manifest = ValidateInstalled(destination, allowLegacy);
-            foreach (string name in manifest.files!.Keys) File.Delete(Path.Combine(destination, name.Replace('/', Path.DirectorySeparatorChar)));
-            File.Delete(Path.Combine(destination, "manifest.json"));
-            foreach (string directory in Directory.GetDirectories(destination, "*", SearchOption.AllDirectories).OrderByDescending(value => value.Length)) Directory.Delete(directory);
-            Directory.Delete(destination);
+            ValidateInstalled(destination, allowLegacy, allowMissing);
+            string removing = destination + ".removing-" + Guid.NewGuid().ToString("N");
+            Directory.Move(destination, removing);
+            Manifest manifest;
+            try { manifest = ValidateInstalled(removing, allowLegacy, allowMissing); }
+            catch { Directory.Move(removing, destination); throw; }
+            DeleteListedFiles(removing, manifest);
         }
+
+        private static void DeleteListedFiles(string folder, Manifest manifest)
+        {
+            foreach (string name in manifest.files!.Keys)
+            {
+                string path = Path.Combine(folder, name.Replace('/', Path.DirectorySeparatorChar));
+                if (File.Exists(path)) File.Delete(path);
+            }
+            File.Delete(Path.Combine(folder, "manifest.json"));
+            foreach (string directory in Directory.GetDirectories(folder, "*", SearchOption.AllDirectories).OrderByDescending(value => value.Length)) Directory.Delete(directory);
+            Directory.Delete(folder);
+        }
+
+        // Finishes removals that an earlier setup started but could not complete. A folder that holds
+        // anything KillerMCP did not install is left alone.
+        private static void RemoveInterruptedRemovals(string destination)
+        {
+            string? parent = Path.GetDirectoryName(destination);
+            if (parent == null || !Directory.Exists(parent)) return;
+            foreach (string folder in Directory.GetDirectories(parent, Path.GetFileName(destination) + ".removing-*"))
+            {
+                try
+                {
+                    if (!ContainsFiles(folder)) { Directory.Delete(folder, true); continue; }
+                    DeleteListedFiles(folder, ValidateInstalled(folder, allowLegacy: true, allowMissing: true));
+                }
+                catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException || exception is InvalidDataException || exception is InvalidOperationException) { }
+            }
+        }
+
+        private static bool ContainsFiles(string folder) => Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Any();
 
         private static string SetupCopyPath(string destination) => destination + "-Setup.exe";
         private static string RegistryPath(string destination) => string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(TestRootVariable)) ? UninstallRegistryPath : @"Software\KillerMCP\InstallerTests\" + Path.GetFileName(Path.GetDirectoryName(destination));
