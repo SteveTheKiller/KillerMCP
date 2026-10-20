@@ -259,7 +259,7 @@ Every repair follows the same steps:
 
 1. `killerbench_repair_preview` runs KillerBench's own preview. Nothing changes. When repairs are allowed and KillerBench finds something to fix, the result includes a token that works once and expires after 10 minutes.
 2. `killerbench_repair_execute` takes only that token, so the client cannot change the command after the preview.
-3. Disruptive repairs open a KillerMCP approval window on the desktop. Deny is the default, and the request is denied automatically after four and a half minutes.
+3. Disruptive repairs open a KillerMCP approval window on the desktop. So does the first repair of any kind after the repair setting is turned on or changed, because any program that can write a file could have changed it. Deny is the default, and the request is denied automatically after four and a half minutes. Agents cannot write into the KillerMCP or KillerBench settings folders through any KillerMCP tool.
 4. Windows asks for administrator approval. Privacy changes run as the current user instead, so they apply to the right account.
 5. KillerBench checks the PC again before it changes anything and verifies the result.
 
