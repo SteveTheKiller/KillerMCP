@@ -66,8 +66,9 @@ internal static class ProcessRunner
 
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(timeout);
-        var output = ReadBoundedAsync(process.StandardOutput, maximumCharacters, timeoutSource.Token);
-        var error = ReadBoundedAsync(process.StandardError, maximumCharacters, timeoutSource.Token);
+        using var readSource = CancellationTokenSource.CreateLinkedTokenSource(timeoutSource.Token);
+        var output = ReadBoundedAsync(process.StandardOutput, maximumCharacters, readSource.Token);
+        var error = ReadBoundedAsync(process.StandardError, maximumCharacters, readSource.Token);
         try
         {
             await process.WaitForExitAsync(timeoutSource.Token).ConfigureAwait(false);
@@ -75,13 +76,22 @@ internal static class ProcessRunner
         catch (OperationCanceledException)
         {
             TryKill(process);
+            readSource.Cancel();
+            await Task.WhenAll(output, error).ConfigureAwait(false);
+            // A caller that cancels gets a cancellation; only a real timeout is reported as one.
+            if (cancellationToken.IsCancellationRequested) throw new OperationCanceledException(cancellationToken);
             throw new TimeoutException("The application command timed out.");
         }
 
+        // A process the app started can keep its output open after the app exits, so the readers
+        // get a short grace period and then return what they have.
+        readSource.CancelAfter(OutputGrace);
         var standardOutput = await output.ConfigureAwait(false);
         var standardError = await error.ConfigureAwait(false);
         return new ProcessResult(process.ExitCode, standardOutput.Text, standardError.Text, standardOutput.Exceeded || standardError.Exceeded);
     }
+
+    private static readonly TimeSpan OutputGrace = TimeSpan.FromSeconds(2);
 
     private static async Task<(string Text, bool Exceeded)> ReadBoundedAsync(StreamReader reader, int maximumCharacters, CancellationToken cancellationToken)
     {
@@ -89,14 +99,21 @@ internal static class ProcessRunner
         var buffer = new char[4096];
         var exceeded = false;
         int read;
-        while ((read = await reader.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false)) > 0)
+        try
         {
-            var remaining = maximumCharacters - text.Length;
-            if (remaining > 0)
+            while ((read = await reader.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false)) > 0)
             {
-                text.Append(buffer, 0, Math.Min(read, remaining));
+                var remaining = maximumCharacters - text.Length;
+                if (remaining > 0)
+                {
+                    text.Append(buffer, 0, Math.Min(read, remaining));
+                }
+                exceeded |= read > remaining;
             }
-            exceeded |= read > remaining;
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopped by a timeout, a cancellation or the grace period; keep what was read.
         }
 
         return (text.ToString(), exceeded);

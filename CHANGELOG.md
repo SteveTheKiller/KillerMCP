@@ -15,6 +15,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - File tools open network paths, mapped drives and links to them only on servers in the local network or listed in `%LOCALAPPDATA%\KillerMCP\network-servers.json`, so an agent cannot send your Windows sign-in to an outside server. Device paths are refused.
 - KillerMCP answers right away when it starts, even when a Killer app is slow, hung or broken. Apps are asked for their commands in parallel, and one that does not answer is left out instead of delaying or closing the server.
 - A long tool call no longer holds up other requests. Calls run side by side, a client can cancel one and its app process stops, and a malformed line no longer closes KillerMCP.
+- A tool call returns as soon as its app finishes, even when the app leaves a helper process running, instead of waiting for the timeout.
 - Agents can no longer turn on KillerBench repairs themselves. No tool may write into the KillerMCP or KillerBench settings folders, by any path, and the first repair after the KillerBench repair setting appears or changes asks for approval on the desktop.
 - Uninstall closes a running KillerMCP before removing it instead of failing partway and leaving a broken folder, and setup can now uninstall or reinstall over a folder an earlier uninstall left half removed.
 - KillerMCP no longer closes when a client asks for something it does not offer, such as resource templates. It answers with a standard error, replies to ping, and treats tools/call without arguments as an empty set.

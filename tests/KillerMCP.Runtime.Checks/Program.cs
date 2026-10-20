@@ -54,6 +54,15 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1")
         Thread.Sleep(TimeSpan.FromSeconds(delaySeconds));
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_MARK") is { Length: > 0 } mark) File.WriteAllText(mark, "finished");
     }
+    if (shot.Length > 0 && shot[0] == "capture" && Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_ORPHAN") is { Length: > 0 } orphanPid)
+    {
+        // Leaves a process behind that inherits this one's output and never exits.
+        var orphanInfo = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };
+        orphanInfo.Environment["KILLERMCP_FAKE_HANG"] = "1";
+        orphanInfo.Environment.Remove("KILLERMCP_FAKE_SHOT_ORPHAN");
+        using var orphan = System.Diagnostics.Process.Start(orphanInfo)!;
+        File.WriteAllText(orphanPid, orphan.Id.ToString());
+    }
     if (shot.Length > 0 && shot[0] == "capture") { Console.Write(JsonSerializer.Serialize(new { path = Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_NULL_PATH") == "1" ? null : "C:\\fixture.png", mode = Option("--mode"), args = shot })); return; }
     if (shot.Length > 0 && shot[0] == "record") { Console.Write(JsonSerializer.Serialize(new { path = "C:\\fixture.mp4", mode = Option("--mode"), args = shot })); return; }
     if (shot.Length == 4 && shot[0] == "recent") { Console.Write(JsonSerializer.Serialize(new { folder = "C:\\Recent", items = Array.Empty<object>(), limit = shot[2] })); return; }
@@ -783,6 +792,16 @@ try
     Equal(image, JsonDocument.Parse((await Shot("killershot_open_in_editor", new { path = image })).Text).RootElement.GetProperty("opened").GetString());
     Equal(true, (await Shot("killershot_open_in_editor", new { path = Path.Combine(root, "missing.png") })).IsError);
     Equal(false, (await Shot("killershot_settings", new { })).IsError);
+    // An app that exits while a process it started still holds its output must not hold the call
+    // until the timeout; the result comes back shortly after the app exits.
+    var orphanFile = Path.Combine(root, "orphan.pid");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_ORPHAN", orphanFile);
+    var orphanStarted = System.Diagnostics.Stopwatch.StartNew();
+    var orphanResult = await Shot("killershot_capture_all", new { });
+    var orphanSeconds = orphanStarted.Elapsed.TotalSeconds;
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_ORPHAN", null);
+    try { System.Diagnostics.Process.GetProcessById(int.Parse(File.ReadAllText(orphanFile))).Kill(); } catch (Exception orphanError) when (orphanError is ArgumentException or InvalidOperationException or FormatException or IOException) { }
+    if (orphanResult.IsError || orphanSeconds > 10) throw new InvalidOperationException($"A capture whose app left a process holding its output took {orphanSeconds:0.0} s: {orphanResult.Text}");
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT", null);
     Console.WriteLine("PASS native KillerShot adapters");
     await KillerShotReviewChecks.RunAsync(Environment.ProcessPath!, root);
