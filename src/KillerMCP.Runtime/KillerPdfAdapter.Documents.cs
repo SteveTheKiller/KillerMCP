@@ -185,7 +185,7 @@ public static partial class KillerPdfAdapter
                 ["path"] = PdfPath(), ["output"] = NewPdf(), ["pfx"] = FilePath("Absolute path to a .pfx or .p12 certificate file"), ["pfxPassword"] = Password(),
                 ["certificate"] = Text(256, null, "Thumbprint or name of a signing certificate in the Windows personal store"),
                 ["reason"] = Text(256), ["location"] = Text(256), ["contact"] = Text(256), ["timestamp"] = Boolean(false),
-                ["timestampServer"] = Text(512, "^https?://\\S+$", "RFC 3161 timestamp server address"),
+                ["timestampServer"] = Text(512, "^https?://[!-~]+$", "RFC 3161 timestamp server address"),
                 ["appearancePage"] = Integer(1, 100000), ["appearanceCorner"] = Choice("bottom-left", "bottom-right", "top-left", "top-right"),
                 ["appearanceText"] = Text(1024, null, "Visible signature text; {name}, {date}, {reason} and {location} are filled in"),
                 ["width"] = Range(72, 14400), ["height"] = Range(36, 14400), ["fontSize"] = Range(6, 72),
@@ -294,8 +294,9 @@ public static partial class KillerPdfAdapter
             (input, _) => [marker[..marker.IndexOf(' ', StringComparison.Ordinal)], String(input, "path"), "--json"], 120) { SuccessCodes = [0, 3] };
 
     // Schema patterns are JSON Schema (ECMAScript) patterns, where $ is the end of the text. They spell
-    // digits and word characters as ASCII ranges, which mean the same in .NET, and a match must reach the
-    // end of the value, since .NET's $ also matches before a final line break.
+    // digits, word characters and other characters as ASCII ranges, never as \d, \w or \s classes,
+    // whose meaning differs between the two engines, and a match must reach the end of the value, since
+    // .NET's $ also matches before a final line break.
     private static bool MatchesPattern(string text, string pattern)
     {
         var match = Regex.Match(text, pattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));

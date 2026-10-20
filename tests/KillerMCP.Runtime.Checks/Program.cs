@@ -588,6 +588,7 @@ try
     // Word characters in checked text are ASCII, and a space of any kind ends an address.
     Equal(true, (await Pdf("killerpdf_edit_attachment", new { path = sourceOne, output = NewPdf("edited-attachment-dotted"), name = "notes.txt", mime = "text/c" + (char)0x130 })).IsError);
     Equal(true, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed-space"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, timestampServer = "https://a" + (char)0xA0 + "b" })).IsError);
+    Equal(true, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed-bom"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, timestampServer = "https://a" + (char)0xFEFF + "b" })).IsError);
     Equal(false, (await Pdf("killerpdf_repair_links", new { path = sourceOne, output = NewPdf("links"), @unsafe = true })).IsError);
     Equal(false, (await Pdf("killerpdf_table_of_contents", new { path = sourceOne, output = NewPdf("contents"), title = "Contents", depth = 2 })).IsError);
     Equal(false, (await Pdf("killerpdf_page_labels", new { path = sourceOne, output = NewPdf("labels"), ranges = "1:lower-roman,3:decimal" })).IsError);
