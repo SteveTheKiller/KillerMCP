@@ -67,8 +67,12 @@ $submoduleState = @(git submodule status --recursive)
 if ($LASTEXITCODE -ne 0 -or $submoduleState.Count -eq 0 -or @($submoduleState | Where-Object { $_ -match '^[+-]' }).Count) {
     Fail 'The KillerTools submodule is missing or differs from the pinned commit.'
 }
-$dashMatches = @(git grep -n -I -P '[\x{2013}\x{2014}]' -- . 2>$null)
-if ($dashMatches.Count) {
+# git grep exits 0 with matches and 1 without. Anything else means the check did not run, which
+# must not pass as a clean result.
+$dashMatches = @(& { $ErrorActionPreference = 'Continue'; git grep -n -I -P '[\x{2013}\x{2014}]' -- . 2>&1 })
+$dashExit = $LASTEXITCODE
+if ($dashExit -gt 1) { Fail "The dash check could not run (git grep exit $dashExit): $($dashMatches -join ' ')" }
+if ($dashExit -eq 0) {
     Write-Host ($dashMatches -join "`n")
     Fail 'Prohibited Unicode dash characters were found.'
 }
@@ -89,7 +93,19 @@ if (-not $DryRun) {
 
 Step 'Building and testing the native host'
 Invoke-Checked { dotnet build KillerMCP.slnx -c Release } 'KillerMCP solution build failed.'
-Invoke-Checked { dotnet list src\KillerMCP\KillerMCP.csproj package --vulnerable --include-transitive } 'The dependency vulnerability check failed.'
+# The vulnerability listing exits 0 even when it finds something, so its report is read instead.
+$vulnerabilityReport = @(dotnet list KillerMCP.slnx package --vulnerable --include-transitive --format json)
+if ($LASTEXITCODE -ne 0) { Fail 'The dependency vulnerability check could not run.' }
+try { $vulnerabilityData = ($vulnerabilityReport -join "`n") | ConvertFrom-Json }
+catch { Fail "The dependency vulnerability report could not be read: $($_.Exception.Message)" }
+$vulnerablePackages = @(foreach ($reportProject in @($vulnerabilityData.projects)) {
+    foreach ($framework in @($reportProject.frameworks)) {
+        foreach ($package in @($framework.topLevelPackages) + @($framework.transitivePackages)) {
+            if ($package -and @($package.vulnerabilities).Count) { "$($package.id) $($package.resolvedVersion) in $(Split-Path -Leaf $reportProject.path)" }
+        }
+    }
+})
+if ($vulnerablePackages.Count) { Fail "Vulnerable dependencies were found:`n$($vulnerablePackages -join "`n")" }
 Invoke-Checked { dotnet run --project tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj -c Release --no-build } 'Client registration checks failed.'
 Invoke-Checked { dotnet run --project tests\KillerMCP.Runtime.Checks\KillerMCP.Runtime.Checks.csproj -c Release --no-build } 'Runtime checks failed.'
 Invoke-Checked { node scripts\Test-NativeHost.mjs } 'Native host checks failed.'
@@ -134,6 +150,11 @@ if ($SkipSign) {
 
 Step 'Testing the exact release installer'
 Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-WindowsInstaller.ps1 -Installer $installer } 'The exact release installer failed its test suite.'
+# Existing users get the release through the update path, so it is tested with the same installer.
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-ClientJobUpdate.ps1 -Installer $installer } 'The release installer failed the client update check.'
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-ClientJobNotice.ps1 } 'The update notice check failed.'
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-NoticeRetry.ps1 } 'The update notice retry check failed.'
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-NotifyFailure.ps1 -Installer $installer } 'The release installer failed the update failure check.'
 if (-not $SkipSign) {
     $signature = Get-AuthenticodeSignature -LiteralPath $installer
     if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate) {
@@ -159,12 +180,8 @@ $notesFile = Join-Path $env:TEMP "KillerMCP-$Version-notes.md"
 
 if (-not $DryRun) {
     Step "Publishing KillerMCP $Tag"
-    git tag -a $Tag -m "KillerMCP $Tag"
-    if ($LASTEXITCODE -ne 0) { Fail "Could not create tag $Tag." }
-    git push origin $Tag
-    if ($LASTEXITCODE -ne 0) { Fail "Could not push tag $Tag." }
-    gh release create $Tag $installer $sumsFile --title "KillerMCP $Tag" --notes-file $notesFile --verify-tag
-    if ($LASTEXITCODE -ne 0) { Fail 'GitHub release creation failed.' }
+    try { & (Join-Path $PSScriptRoot 'scripts\Publish-Release.ps1') -Repository $PSScriptRoot -Tag $Tag -Assets @($installer, $sumsFile) -NotesFile $notesFile }
+    catch { Fail $_.Exception.Message }
     gh release view $Tag --json url --jq '.url'
     Step "Submitting $Tag to the Microsoft Store"
     # The GitHub release is already published, so a Store failure is reported with the exact retry
