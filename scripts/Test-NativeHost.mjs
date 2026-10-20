@@ -441,6 +441,45 @@ assert.ok(calls.some(call => call.tool === 'killendar_create_appointment' && cal
 assert.ok(calls.every(call => !JSON.stringify(call).includes('Secret123!')));
 closing = true;
 child.stdin.end();
+
+// An app that hangs and one that cannot start must not delay initialize or stop the server.
+const fakeApp = environment.KILLERNOTES_CLI;
+const brokenApp = join(updateDirectory, 'broken.exe');
+const missingApp = join(updateDirectory, 'missing.exe');
+await writeFile(brokenApp, 'not a program');
+const stalled = spawn('dotnet', ['run', '--project', 'src/KillerMCP/KillerMCP.csproj', '-c', 'Release', '--no-build'], {
+  stdio: ['pipe', 'pipe', 'ignore'],
+  env: { ...environment, KILLERMCP_FAKE_HANG: '1', KILLERNOTES_CLI: fakeApp, KILLERPDF_CLI: brokenApp, KILLENDAR_CLI: missingApp, KILLERSHELL_CLI: missingApp, KILLERSCAN_CLI: missingApp, KILLERBENCH_CLI: missingApp, KILLERSHOT_CLI: missingApp },
+});
+let stalledExited = false;
+stalled.on('exit', () => { stalledExited = true; });
+const stalledReplies = new Map();
+let stalledBuffer = '';
+stalled.stdout.setEncoding('utf8');
+stalled.stdout.on('data', chunk => {
+  stalledBuffer += chunk;
+  while (stalledBuffer.includes('\n')) {
+    const end = stalledBuffer.indexOf('\n');
+    const message = JSON.parse(stalledBuffer.slice(0, end));
+    stalledBuffer = stalledBuffer.slice(end + 1);
+    stalledReplies.get(message.id)?.(message.result);
+  }
+});
+const stalledRequest = (requestId, method) => new Promise((done, fail) => {
+  const timer = setTimeout(() => fail(new Error(`No ${method} reply while an app hangs or cannot start.`)), 45000);
+  stalledReplies.set(requestId, result => { clearTimeout(timer); done(result); });
+  stalled.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: requestId, method, params: {} })}\n`);
+});
+const stalledStarted = Date.now();
+const stalledInitialize = await stalledRequest(1, 'initialize');
+assert.equal(stalledInitialize.serverInfo.name, 'KillerMCP');
+assert.ok(Date.now() - stalledStarted < 6000, 'A hung app delayed initialize.');
+const stalledTools = (await stalledRequest(2, 'tools/list')).tools.map(tool => tool.name);
+assert.ok(stalledTools.includes('text_statistics'));
+assert.ok(!stalledTools.includes('killernotes_search') && !stalledTools.includes('killerpdf_merge'));
+assert.equal(stalledExited, false, 'A broken app ended the server.');
+stalled.stdin.end();
+
 updateServer.close();
 await rm(updateDirectory, { recursive: true, force: true });
 console.log('Native KillerMCP stdio handshake, tool listing, and tool call passed.');

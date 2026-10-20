@@ -1,6 +1,9 @@
 using KillerMCP.Runtime;
 using System.Text.Json;
 
+// Stands in for an app that never answers, so the host checks can show it is left out.
+if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_HANG") == "1") Thread.Sleep(Timeout.Infinite);
+
 if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH") == "1")
 {
     var bench = Environment.GetCommandLineArgs().Skip(1).ToArray();

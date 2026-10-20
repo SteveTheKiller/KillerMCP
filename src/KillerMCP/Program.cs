@@ -29,21 +29,36 @@ var killerScanPath = AppDiscovery.Discover("killerscan");
 var killerPdfPath = AppDiscovery.Discover("killerpdf");
 var killerBenchPath = AppDiscovery.Discover("killerbench");
 var killerShotPath = AppDiscovery.Discover("killershot");
-appAdapters.AddRange(await KillerNotesAdapter.CreateAsync(killerNotesPath));
-var killendar = await KillendarAdapter.CreateAsync(killendarPath);
-if (killendar is not null)
+// Each app is asked for its commands in parallel while requests are already being answered, and an
+// app that hangs or cannot start is left out instead of delaying initialize or ending the server.
+// tools/list and tools/call wait for this; the list keeps the same app order as before.
+var adaptersReady = Task.Run(async () =>
 {
-    appAdapters.Add(killendar);
+    var loads = await Task.WhenAll(
+        LoadApp("KillerNotes", () => KillerNotesAdapter.CreateAsync(killerNotesPath)),
+        LoadApp("Killendar", async () => new[] { await KillendarAdapter.CreateAsync(killendarPath), await KillendarAdapter.CreateAppointmentAsync(killendarPath) }.OfType<AppAdapter>().ToList()),
+        LoadApp("KillerShell", () => KillerShellAdapter.CreateAsync(killerShellPath)),
+        LoadApp("KillerScan", () => KillerScanAdapter.CreateAsync(killerScanPath)),
+        LoadApp("KillerPDF", () => KillerPdfAdapter.CreateAsync(killerPdfPath)),
+        LoadApp("KillerBench", () => KillerBenchAdapter.CreateAsync(killerBenchPath, killerNotesPath)),
+        LoadApp("KillerShot", () => KillerShotAdapter.CreateAsync(killerShotPath)),
+        LoadApp("cross-app tools", () => Task.FromResult<IReadOnlyList<AppAdapter>>(IntegrationAdapter.Create(killerNotesPath, killendarPath, killerShellPath, killerScanPath, killerPdfPath)))).ConfigureAwait(false);
+    foreach (var list in loads) appAdapters.AddRange(list);
+    ToolRegistry.SetAdapters(appAdapters);
+});
+
+static async Task<IReadOnlyList<AppAdapter>> LoadApp(string app, Func<Task<IReadOnlyList<AppAdapter>>> create)
+{
+    try
+    {
+        return await Task.Run(create).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"KillerMCP left out {app} because it did not answer: {exception.Message}");
+        return [];
+    }
 }
-var killendarCreate = await KillendarAdapter.CreateAppointmentAsync(killendarPath);
-if (killendarCreate is not null) appAdapters.Add(killendarCreate);
-appAdapters.AddRange(await KillerShellAdapter.CreateAsync(killerShellPath));
-appAdapters.AddRange(await KillerScanAdapter.CreateAsync(killerScanPath));
-appAdapters.AddRange(await KillerPdfAdapter.CreateAsync(killerPdfPath));
-appAdapters.AddRange(await KillerBenchAdapter.CreateAsync(killerBenchPath, killerNotesPath));
-appAdapters.AddRange(await KillerShotAdapter.CreateAsync(killerShotPath));
-appAdapters.AddRange(IntegrationAdapter.Create(killerNotesPath, killendarPath, killerShellPath, killerScanPath, killerPdfPath));
-ToolRegistry.SetAdapters(appAdapters);
 
 // Tool calls run on their own tasks so a slow one never holds up ping, tools/list or other calls.
 // Each keeps a cancellation source by request id for notifications/cancelled, and every reply is
@@ -94,10 +109,11 @@ while ((line = Console.ReadLine()) is not null)
         }
         var callParams = request.TryGetProperty("params", out var givenParams) ? givenParams : default;
         calls.RemoveAll(task => task.IsCompleted);
-        calls.Add(Task.Run(() =>
+        calls.Add(Task.Run(async () =>
         {
             try
             {
+                await adaptersReady.ConfigureAwait(false);
                 var result = ToolRegistry.Call(callParams, json, source.Token);
                 // A cancelled request gets no reply.
                 if (!source.IsCancellationRequested) Send(new { jsonrpc = "2.0", id, result });
@@ -110,6 +126,15 @@ while ((line = Console.ReadLine()) is not null)
             {
                 running.TryRemove(key, out _);
             }
+        }));
+        continue;
+    }
+    if (method == "tools/list" && !adaptersReady.IsCompleted)
+    {
+        calls.Add(Task.Run(async () =>
+        {
+            await adaptersReady.ConfigureAwait(false);
+            Send(new { jsonrpc = "2.0", id, result = new { tools = ToolRegistry.Tools } });
         }));
         continue;
     }
