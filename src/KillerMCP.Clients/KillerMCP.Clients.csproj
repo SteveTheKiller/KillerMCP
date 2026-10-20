@@ -2,4 +2,7 @@
   <PropertyGroup>
     <Description>Cross-platform client registration for the native KillerMCP host.</Description>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="KillerMCP.Clients.Checks" />
+  </ItemGroup>
 </Project>

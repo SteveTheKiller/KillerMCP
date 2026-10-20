@@ -15,6 +15,7 @@ if (!string.IsNullOrWhiteSpace(fakeCodexState))
     }
     if (command.Length >= 5 && command[..4].SequenceEqual(["mcp", "add", "killermcp", "--"]))
     {
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_CODEX_FAIL_ADD") == "1") { Console.Error.Write("Fixture add failure"); return 1; }
         File.WriteAllText(fakeCodexState, new JsonObject { ["transport"] = new JsonObject { ["type"] = "stdio", ["command"] = command[4], ["args"] = new JsonArray(command.Skip(5).Select(value => JsonValue.Create(value)).ToArray()) } }.ToJsonString());
         return 0;
     }
@@ -181,6 +182,74 @@ try
     File.WriteAllText(ConfigPath("GEMINI"), "{\n  // keep this note\n  \"mcpServers\": { \"killermcp\": { \"command\": " + JsonValue.Create(executable)!.ToJsonString() + ", \"args\": [] } }\n}");
     Equal(1, ClientConfiguration.RemoveAll(executable, environment).Count(message => message.StartsWith("Warning: Gemini CLI", StringComparison.Ordinal)));
     Equal(true, File.ReadAllText(ConfigPath("GEMINI")).Contains("// keep this note", StringComparison.Ordinal));
+
+    // Other apps' entries keep their characters instead of being rewritten as escape sequences.
+    var characters = Path.Combine(root, "characters.json");
+    File.WriteAllText(characters, "{ \"prompt\": \"<a & b> café + 'quote'\" }");
+    ClientRegistration.RegisterJsonClient(characters, "Cursor", executable);
+    Equal(true, File.ReadAllText(characters).Contains("<a & b> café + 'quote'", StringComparison.Ordinal));
+
+    // A client that saves its settings while KillerMCP is changing them keeps its change.
+    var busy = Path.Combine(root, "busy.json");
+    File.WriteAllText(busy, "{ \"theme\": \"dark\" }");
+    var saves = 0;
+    ClientRegistration.BeforeReplace = path => { if (saves++ == 0) File.WriteAllText(path, "{ \"theme\": \"light\", \"recent\": [1] }"); };
+    try { ClientRegistration.RegisterJsonClient(busy, "Claude Code", executable, includeStdioType: true); }
+    finally { ClientRegistration.BeforeReplace = null; }
+    Equal("light", Read(busy)["theme"]!.GetValue<string>());
+    Equal(1, Read(busy)["recent"]!.AsArray().Count);
+    Equal(executable, Read(busy)["mcpServers"]!["killermcp"]!["command"]!.GetValue<string>());
+
+    // A settings file that is a link is changed where it points, and stays a link.
+    var linkedTarget = Path.Combine(root, "dotfiles", "mcp.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(linkedTarget)!);
+    File.WriteAllText(linkedTarget, "{}");
+    var link = Path.Combine(root, "linked-mcp.json");
+    var linked = true;
+    try { File.CreateSymbolicLink(link, linkedTarget); }
+    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { linked = false; Console.WriteLine("SKIP settings link check: this account cannot create symbolic links"); }
+    if (linked)
+    {
+        ClientRegistration.RegisterJsonClient(link, "Cursor", executable);
+        Equal(true, new FileInfo(link).LinkTarget is not null);
+        Equal(executable, Read(linkedTarget)["mcpServers"]!["killermcp"]!["command"]!.GetValue<string>());
+    }
+
+    // Codex installed with npm puts codex.cmd on PATH and the program it starts in the package. That program
+    // is used, and when it cannot be found setup says Codex was left unchanged instead of skipping it silently.
+    var emptyProfile = Path.Combine(root, "empty-profile");
+    Directory.CreateDirectory(emptyProfile);
+    var npm = Path.Combine(root, "npm");
+    var vendored = Path.Combine(npm, "node_modules", "@openai", "codex", "vendor", "x86_64-pc-windows-msvc", "codex", "codex.exe");
+    Directory.CreateDirectory(Path.GetDirectoryName(vendored)!);
+    File.WriteAllText(Path.Combine(npm, "codex.cmd"), "@echo off");
+    File.WriteAllText(vendored, "fixture");
+    var npmEnvironment = new Dictionary<string, string?> { ["PATH"] = npm, ["USERPROFILE"] = emptyProfile, ["APPDATA"] = emptyProfile, ["LOCALAPPDATA"] = emptyProfile, ["ProgramFiles"] = emptyProfile };
+    if (OperatingSystem.IsWindows())
+    {
+        Equal<string?>(vendored, ClientConfiguration.FindCodex(npmEnvironment));
+        File.Delete(vendored);
+        Equal<string?>(null, ClientConfiguration.FindCodex(npmEnvironment));
+        Equal(1, ClientConfiguration.RegisterAll(executable, npmEnvironment).Count(message => message.StartsWith("Warning: Codex", StringComparison.Ordinal) && message.Contains("codex mcp add killermcp", StringComparison.Ordinal)));
+        Equal(1, ClientConfiguration.RemoveAll(executable, npmEnvironment).Count(message => message.StartsWith("Warning: Codex", StringComparison.Ordinal)));
+    }
+
+    // A Codex program that cannot be started is an error setup can show, not a crash.
+    var brokenCodex = Path.Combine(root, "broken-codex.exe");
+    File.WriteAllText(brokenCodex, "not a program");
+    var brokenEnvironment = new Dictionary<string, string?>(npmEnvironment) { ["PATH"] = string.Empty, ["CODEX_CLI_PATH"] = brokenCodex };
+    Equal(true, Caught<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, brokenEnvironment)).Message.Contains("Codex could not be started", StringComparison.Ordinal));
+
+    // When Codex cannot take the new connection and the old one cannot be put back either, the error says so.
+    File.WriteAllText(codexState, new JsonObject { ["transport"] = new JsonObject { ["type"] = "stdio", ["command"] = legacyCommand, ["args"] = new JsonArray(legacyScript) } }.ToJsonString());
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_CODEX_FAIL_ADD", "1");
+    try
+    {
+        var codexOnly = new Dictionary<string, string?>(npmEnvironment) { ["PATH"] = string.Empty, ["CODEX_CLI_PATH"] = Environment.ProcessPath };
+        var lost = Caught<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, codexOnly));
+        Equal(true, lost.Message.Contains("could not be restored", StringComparison.Ordinal) && lost.Message.Contains("codex mcp add killermcp", StringComparison.Ordinal));
+    }
+    finally { Environment.SetEnvironmentVariable("KILLERMCP_FAKE_CODEX_FAIL_ADD", null); }
     Console.WriteLine("PASS native KillerMCP client registration");
 
     // Setup and the update window install an update only when it is signed by the KillerMCP publisher.

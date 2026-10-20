@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -10,13 +11,21 @@ public sealed class CommentedSettingsException(string message) : IOException(mes
 public static class ClientRegistration
 {
     private const string ServerName = "killermcp";
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
+    private const int Attempts = 3;
+    // The settings belong to other apps, so text in their entries is written back as it was instead of escaped.
+    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    // Tests use this to change a settings file between KillerMCP reading it and replacing it.
+    internal static Action<string>? BeforeReplace;
 
     public static string RegisterJsonClient(string configurationPath, string clientName, string executablePath, bool includeStdioType = false, string serverName = ServerName)
     {
-        var (root, message) = Plan(configurationPath, clientName, executablePath, includeStdioType, serverName);
-        if (root is not null) Write(configurationPath, root);
-        return message;
+        for (var attempt = 1; ; attempt++)
+        {
+            var (root, message, original) = Plan(configurationPath, clientName, executablePath, includeStdioType, serverName);
+            if (root is null || Write(configurationPath, root, original)) return message;
+            if (attempt == Attempts) throw new IOException(KeptChanging(clientName, configurationPath));
+        }
     }
 
     /// <summary>Throws the same errors RegisterJsonClient would, without writing anything, so setup can
@@ -24,11 +33,18 @@ public static class ClientRegistration
     public static void CheckJsonClient(string configurationPath, string clientName, string executablePath, bool includeStdioType = false, string serverName = ServerName) =>
         Plan(configurationPath, clientName, executablePath, includeStdioType, serverName);
 
-    // Returns the settings to write, or null when the client already has the right connection.
-    private static (JsonObject? Root, string Message) Plan(string configurationPath, string clientName, string executablePath, bool includeStdioType, string serverName)
+    // Returns the settings to write, or null when the client already has the right connection, with the
+    // file text they were planned from.
+    private static (JsonObject? Root, string Message, string? Original) Plan(string configurationPath, string clientName, string executablePath, bool includeStdioType, string serverName)
     {
         ValidateArguments(configurationPath, clientName, executablePath);
-        var root = ReadRoot(configurationPath, clientName, out var commented);
+        var root = ReadRoot(configurationPath, clientName, out var commented, out var original);
+        var (planned, message) = Plan(root, commented, configurationPath, clientName, executablePath, includeStdioType, serverName);
+        return (planned, message, original);
+    }
+
+    private static (JsonObject? Root, string Message) Plan(JsonObject root, bool commented, string configurationPath, string clientName, string executablePath, bool includeStdioType, string serverName)
+    {
         var servers = ReadServers(root, clientName);
         if (commented)
         {
@@ -64,28 +80,34 @@ public static class ClientRegistration
     public static bool RemoveJsonClient(string configurationPath, string clientName, string executablePath, bool includeStdioType = false, string serverName = ServerName)
     {
         ValidateArguments(configurationPath, clientName, executablePath);
-        if (!File.Exists(configurationPath))
+        for (var attempt = 1; ; attempt++)
         {
-            return false;
-        }
+            if (!File.Exists(configurationPath))
+            {
+                return false;
+            }
 
-        var root = ReadRoot(configurationPath, clientName, out var commented);
-        var servers = ReadServers(root, clientName);
-        if (!servers.TryGetPropertyValue(serverName, out var existing))
-        {
-            return false;
-        }
+            var root = ReadRoot(configurationPath, clientName, out var commented, out var original);
+            var servers = ReadServers(root, clientName);
+            if (!servers.TryGetPropertyValue(serverName, out var existing))
+            {
+                return false;
+            }
 
-        if (!Matches(existing, executablePath, includeStdioType))
-        {
-            throw new InvalidOperationException($"{clientName} has a different killermcp connection. It was left unchanged.");
-        }
+            if (!Matches(existing, executablePath, includeStdioType))
+            {
+                throw new InvalidOperationException($"{clientName} has a different killermcp connection. It was left unchanged.");
+            }
 
-        if (commented) throw new CommentedSettingsException($"{clientName} settings at {configurationPath} contain comments, so KillerMCP left them unchanged.");
-        servers.Remove(serverName);
-        Write(configurationPath, root);
-        return true;
+            if (commented) throw new CommentedSettingsException($"{clientName} settings at {configurationPath} contain comments, so KillerMCP left them unchanged.");
+            servers.Remove(serverName);
+            if (Write(configurationPath, root, original)) return true;
+            if (attempt == Attempts) throw new IOException(KeptChanging(clientName, configurationPath));
+        }
     }
+
+    private static string KeptChanging(string clientName, string configurationPath) =>
+        $"{clientName} kept changing {configurationPath} while KillerMCP was updating it. Close {clientName} and run setup again.";
 
     public static bool Matches(JsonNode? value, string executablePath, bool includeStdioType = false)
     {
@@ -126,11 +148,13 @@ public static class ClientRegistration
 
     // An empty file is an empty object and trailing commas are accepted. A file that parses only when
     // comments are skipped is reported as commented, so callers never write it back without them.
-    private static JsonObject ReadRoot(string path, string clientName, out bool commented)
+    private static JsonObject ReadRoot(string path, string clientName, out bool commented, out string? original)
     {
         commented = false;
+        original = null;
         if (!File.Exists(path)) return new JsonObject();
         var text = File.ReadAllText(path);
+        original = text;
         if (string.IsNullOrWhiteSpace(text)) return new JsonObject();
         try
         {
@@ -166,17 +190,24 @@ public static class ClientRegistration
             ?? throw new InvalidDataException($"{clientName} MCP server configuration is invalid.");
     }
 
-    private static void Write(string path, JsonObject root)
+    // A settings file that is a link is written where it points, so the link stays. The file is read again
+    // just before it is replaced: when its app saved it in between, nothing is written and false comes back,
+    // so the caller plans again from the app's version instead of overwriting it.
+    private static bool Write(string path, JsonObject root, string? original)
     {
-        var fullPath = Path.GetFullPath(path);
-        var directory = Path.GetDirectoryName(fullPath)
+        var target = TargetPath(path);
+        var directory = Path.GetDirectoryName(target)
             ?? throw new InvalidOperationException("The MCP configuration directory is unavailable.");
         Directory.CreateDirectory(directory);
-        var temporary = fullPath + ".tmp-" + Guid.NewGuid().ToString("N");
+        var temporary = target + ".tmp-" + Guid.NewGuid().ToString("N");
         try
         {
             File.WriteAllText(temporary, root.ToJsonString(Json) + Environment.NewLine, new UTF8Encoding(false));
-            File.Move(temporary, fullPath, true);
+            BeforeReplace?.Invoke(target);
+            var current = File.Exists(target) ? File.ReadAllText(target) : null;
+            if (!string.Equals(current, original, StringComparison.Ordinal)) return false;
+            File.Move(temporary, target, true);
+            return true;
         }
         finally
         {
@@ -184,6 +215,19 @@ public static class ClientRegistration
             {
                 File.Delete(temporary);
             }
+        }
+    }
+
+    internal static string TargetPath(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        try
+        {
+            return File.Exists(fullPath) && new FileInfo(fullPath).ResolveLinkTarget(returnFinalTarget: true) is { } target ? target.FullName : fullPath;
+        }
+        catch (IOException)
+        {
+            return fullPath;
         }
     }
 

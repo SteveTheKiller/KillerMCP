@@ -16,7 +16,14 @@ public static class ClientConfiguration
             .ToDictionary(item => (string)item.Key, item => item.Value?.ToString(), StringComparer.OrdinalIgnoreCase);
         var codex = FindCodex(values);
         var clients = JsonClients(values);
-        return remove ? RemoveEverywhere(codex, clients, executablePath) : RegisterEverywhere(codex, clients, executablePath);
+        var messages = remove ? RemoveEverywhere(codex, clients, executablePath) : RegisterEverywhere(codex, clients, executablePath);
+        if (codex is null && OperatingSystem.IsWindows() && FindOnPath("codex.cmd", values) is { } script)
+        {
+            // Codex is installed, but not in a form KillerMCP can run, so the user makes the change.
+            var command = remove ? "codex mcp remove killermcp" : "codex mcp add killermcp -- " + Quote(executablePath);
+            messages = [.. messages, $"Warning: Codex was found at {script}, but KillerMCP could not find the Codex program it starts, so Codex was left unchanged. Run: {command}"];
+        }
+        return messages;
     }
 
     private static string ServerName(JsonClient client) => client.Name == "Claude Desktop" ? "KillerMCP" : "killermcp";
@@ -98,9 +105,10 @@ public static class ClientConfiguration
                 if (File.Exists(path)) File.Delete(path);
                 return;
             }
-            var temporary = path + ".restore-" + Guid.NewGuid().ToString("N");
+            var target = ClientRegistration.TargetPath(path);
+            var temporary = target + ".restore-" + Guid.NewGuid().ToString("N");
             File.WriteAllBytes(temporary, original);
-            File.Move(temporary, path, true);
+            File.Move(temporary, target, true);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -175,8 +183,12 @@ public static class ClientConfiguration
             var upgraded = Run(codex, ["mcp", "add", "killermcp", "--", executablePath]);
             if (upgraded.ExitCode != 0)
             {
-                Run(codex, ["mcp", "add", "killermcp", "--", legacyCommand, .. legacyArguments]);
-                throw new InvalidOperationException("Codex could not add the native KillerMCP connection: " + upgraded.StandardError.Trim());
+                bool restored;
+                try { restored = Run(codex, ["mcp", "add", "killermcp", "--", legacyCommand, .. legacyArguments]).ExitCode == 0; }
+                catch (Exception exception) when (exception is InvalidOperationException or TimeoutException) { restored = false; }
+                var lost = restored ? string.Empty
+                    : " The previous Codex connection could not be restored either, so Codex has no KillerMCP connection. Add it with: codex mcp add killermcp -- " + Quote(executablePath);
+                throw new InvalidOperationException("Codex could not add the native KillerMCP connection: " + upgraded.StandardError.Trim() + lost);
             }
             var upgradedState = Run(codex, ["mcp", "get", "killermcp", "--json"]);
             if (upgradedState.ExitCode != 0 || !MatchesCodex(upgradedState.StandardOutput, executablePath)) throw new InvalidOperationException("Codex did not save the native KillerMCP connection.");
@@ -247,12 +259,13 @@ public static class ClientConfiguration
         return !string.IsNullOrWhiteSpace(configured) && File.Exists(configured) ? Path.GetFullPath(configured) : FindOnPath(executable, environment);
     }
 
-    private static string? FindCodex(IReadOnlyDictionary<string, string?> environment)
+    internal static string? FindCodex(IReadOnlyDictionary<string, string?> environment)
     {
         var configured = Value(environment, "CODEX_CLI_PATH");
         if (!string.IsNullOrWhiteSpace(configured)) return File.Exists(configured) ? Path.GetFullPath(configured) : null;
         var found = FindOnPath(OperatingSystem.IsWindows() ? "codex.exe" : "codex", environment);
         if (found is not null || !OperatingSystem.IsWindows()) return found;
+        if (FindOnPath("codex.cmd", environment) is { } script && NpmCodex(script) is { } bundled) return bundled;
         var local = Value(environment, "LOCALAPPDATA") ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var root = Path.Combine(local, "OpenAI", "Codex", "bin");
         try
@@ -263,6 +276,22 @@ public static class ClientConfiguration
         }
         catch { return null; }
     }
+
+    // npm installs Codex as codex.cmd, which starts the program bundled in its package with the same
+    // arguments, so that program is run directly instead of through cmd.exe.
+    private static string? NpmCodex(string script)
+    {
+        var package = Path.Combine(Path.GetDirectoryName(script)!, "node_modules", "@openai", "codex");
+        try
+        {
+            return Directory.Exists(package)
+                ? Directory.GetFiles(package, "codex.exe", SearchOption.AllDirectories).OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault()
+                : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    private static string Quote(string value) => "\"" + value + "\"";
 
     private static string? FindOnPath(string executable, IReadOnlyDictionary<string, string?> environment)
     {
@@ -278,7 +307,14 @@ public static class ClientConfiguration
     {
         using var process = new Process { StartInfo = new ProcessStartInfo { FileName = executable, UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true } };
         foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
-        if (!process.Start()) return new CommandResult(1, string.Empty, "Process did not start.");
+        try
+        {
+            if (!process.Start()) return new CommandResult(1, string.Empty, "Process did not start.");
+        }
+        catch (System.ComponentModel.Win32Exception exception)
+        {
+            throw new InvalidOperationException($"Codex could not be started from {executable}: {exception.Message}", exception);
+        }
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
         if (!process.WaitForExit(30000)) { process.Kill(true); throw new TimeoutException("Client configuration command timed out."); }

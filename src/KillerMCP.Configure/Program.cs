@@ -12,7 +12,7 @@ try
     foreach (var message in messages) Console.WriteLine(message);
     return 0;
 }
-catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or ArgumentException or TimeoutException)
+catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or ArgumentException or TimeoutException or System.ComponentModel.Win32Exception)
 {
     Console.Error.WriteLine(exception.Message);
     return 1;

@@ -24,6 +24,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - Setup closes running hosts right before it replaces the folder, so a host an agent client restarts during an upgrade no longer stops it. A finished install is no longer reported as failed when the old copy cannot be removed yet; the next install clears it.
 - Setup reinstalls when its copy beside the install folder was deleted or quarantined, ends a client configuration that stops responding instead of waiting forever, and treats an unreadable update preference as the default instead of failing at every sign-in.
 - Downloaded update installers no longer pile up in the temporary folder.
+- Client settings keep their other entries as written instead of escaping their characters, a settings file that is a link stays a link, and a change a client saves while setup is updating its file is kept. Codex installed with npm is found and registered, and a Codex that cannot be started or restored gets a clear message with the command to run.
 - KillerMCP no longer closes when a client asks for something it does not offer, such as resource templates. It answers with a standard error, replies to ping, and treats tools/call without arguments as an empty set.
 - KillerMCP still reports a new release when it cannot save its update status, and the status file the update window reads is replaced whole instead of rewritten in place.
 - A silent install or update that finds KillerMCP running exits with 1618, which Intune, Configuration Manager and RMM tools retry, instead of a general failure.
