@@ -305,12 +305,13 @@ public static partial class IntegrationAdapter
     // anything the content could use to slip it. Base and meta elements are disabled because the
     // policy cannot stop a base or a refresh from pointing the page elsewhere, including a file
     // share. A browser starts one of these elements only at a less-than sign followed by the tag
-    // name and a space, slash or greater-than sign, whatever the attributes say or encode. Escaping
-    // that less-than sign disables the element wherever it appears, including in nested or split
-    // markup, and removes no text, so it cannot join the pieces around it into a new element.
+    // name and a space, slash or greater-than sign, whatever the attributes say or encode. Renaming
+    // the tag to an unknown x-base or x-meta element there disables it wherever it appears, including
+    // in nested or split markup, shows nothing on the page, and removes no text, so it cannot join the
+    // pieces around it into a new element. The policy element added here supplies the character set.
     internal static string Harden(string html)
     {
-        var body = LeadingDoctype().Replace(BaseOrMeta().Replace(html, "&lt;"), string.Empty, 1);
+        var body = LeadingDoctype().Replace(BaseOrMeta().Replace(html, "<x-"), string.Empty, 1);
         return "<!doctype html><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"" + ContentPolicy + "\">" + body;
     }
 

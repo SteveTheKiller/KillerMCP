@@ -659,6 +659,8 @@ try
     var hardened = IntegrationAdapter.Harden(tricks);
     Equal(2, System.Text.RegularExpressions.Regex.Matches(hardened, @"<(?:meta|base)(?:[\t\n\f\r />]|\z)", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Count);
     Equal(true, hardened.Contains("<p>kept</p>", StringComparison.Ordinal));
+    // Disabled tags leave no visible markup in the page, so a report's own head stays out of its PDF.
+    Equal(false, IntegrationAdapter.Harden("<!doctype html><html><head><meta charset=\"utf-8\"><title>Report</title></head><body><p>x</p></body></html>").Contains("&lt;", StringComparison.Ordinal));
 
     // A call cancelled while its input is written still stops the app it started.
     if (OperatingSystem.IsWindows())
