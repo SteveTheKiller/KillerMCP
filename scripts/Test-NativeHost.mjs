@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { brotliDecompressSync } from 'node:zlib';
 
+const releaseVersion = (await readFile(resolve('src/KillerMCP/KillerMCP.csproj'), 'utf8')).match(/<Version>(\d+\.\d+\.\d+)<\/Version>/)[1];
 const updateDirectory = await mkdtemp(join(tmpdir(), 'killermcp-update-'));
 const pdfSourceOne = join(updateDirectory, 'source-one.pdf');
 const pdfSourceTwo = join(updateDirectory, 'source-two.pdf');
@@ -76,7 +77,7 @@ function request(method, params = {}) {
 
 const initialized = await request('initialize', { protocolVersion: '2025-06-18' });
 assert.equal(initialized.serverInfo.name, 'KillerMCP');
-assert.equal(initialized.serverInfo.version, '0.7.0');
+assert.equal(initialized.serverInfo.version, releaseVersion);
 assert.match(initialized.instructions, /KillerMCP 99\.0\.0 is available/);
 const cachedStatus = JSON.parse(await readFile(join(updateDirectory, 'status.json'), 'utf8'));
 assert.equal(cachedStatus.LatestVersion, '99.0.0');

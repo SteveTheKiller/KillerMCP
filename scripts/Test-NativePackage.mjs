@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
+const releaseVersion = (await readFile(new URL('../src/KillerMCP/KillerMCP.csproj', import.meta.url), 'utf8')).match(/<Version>(\d+\.\d+\.\d+)<\/Version>/)[1];
 const directory = process.argv[2];
 if (!directory || !isAbsolute(directory)) throw new Error('Pass an absolute native package directory');
 const executable = join(directory, process.platform === 'win32' ? 'KillerMCP.exe' : 'KillerMCP');
@@ -46,7 +47,7 @@ function request(method, params = {}) {
 try {
   const initialized = await request('initialize', { protocolVersion: '2025-06-18' });
   assert.equal(initialized.serverInfo.name, 'KillerMCP');
-  assert.equal(initialized.serverInfo.version, '0.7.0');
+  assert.equal(initialized.serverInfo.version, releaseVersion);
   const listed = await request('tools/list');
   assert.ok(listed.tools.some(tool => tool.name === 'killermcp_update_status'));
   assert.ok(listed.tools.some(tool => tool.name === 'convert_case'));

@@ -3,6 +3,8 @@ param([string]$Installer = '', [string]$PreviousSignedSetup = '', [string]$Previ
 $ErrorActionPreference = 'Stop'
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) { throw 'The KillerMCP Windows installer test requires Windows.' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+[xml]$hostProject = Get-Content -LiteralPath (Join-Path $root 'src\KillerMCP\KillerMCP.csproj') -Raw
+$releaseVersion = [string]$hostProject.Project.PropertyGroup.Version
 $utf8NoBom = New-Object Text.UTF8Encoding($false)
 
 function Write-Utf8NoBom([string]$Path, [string]$Value) {
@@ -117,7 +119,7 @@ try {
     }
 
     $entry = Get-ItemProperty -LiteralPath $uninstallKey
-    if (-not (Test-Path -LiteralPath $setupCopy -PathType Leaf) -or $entry.DisplayVersion -ne '0.7.0' -or $entry.InstallLocation -ne $installed) { throw 'Installed Apps registration is incorrect.' }
+    if (-not (Test-Path -LiteralPath $setupCopy -PathType Leaf) -or $entry.DisplayVersion -ne $releaseVersion -or $entry.InstallLocation -ne $installed) { throw 'Installed Apps registration is incorrect.' }
     $updateRunKey = 'HKCU:\Software\KillerMCP\InstallerTests\' + (Split-Path $scratch -Leaf) + '\Run'
     $updateCommand = (Get-ItemProperty -LiteralPath $updateRunKey).'KillerMCP Update Check'
     if ($updateCommand -ne ('"' + $setupCopy + '" /check-update')) { throw 'Independent update check was not registered.' }
@@ -232,7 +234,7 @@ try {
         }
         finally { [IO.File]::WriteAllBytes($setupCopy, $previousSetupBytes) }
         $upgrade = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
-        if ($upgrade.ExitCode -ne 0 -or (Get-ItemProperty -LiteralPath $uninstallKey).DisplayVersion -ne '0.7.0') { throw 'Upgrade from a signed previous setup with a stale uninstall entry failed.' }
+        if ($upgrade.ExitCode -ne 0 -or (Get-ItemProperty -LiteralPath $uninstallKey).DisplayVersion -ne $releaseVersion) { throw 'Upgrade from a signed previous setup with a stale uninstall entry failed.' }
         $uninstall = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
         if ($uninstall.ExitCode -ne 0 -or (Test-Path -LiteralPath $installed) -or (Test-Path -LiteralPath $setupCopy)) { throw 'Previous setup upgrade fixture did not uninstall cleanly.' }
         Write-Output 'Signed previous setup and stale uninstall entry upgrade passed.'

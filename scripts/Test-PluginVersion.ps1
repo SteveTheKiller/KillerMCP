@@ -15,7 +15,23 @@ if ([string]$plugin.version -cne $appVersion) {
 if ([string]$plugin.author.name -cne 'Steve the Killer') {
     throw 'KillerMCP plugin author must be Steve the Killer.'
 }
-Write-Output "KillerMCP app and plugin versions match: $appVersion. Publisher: Steve the Killer."
+# Setup reports its own assembly version in Installed Apps and compares it with the installed host,
+# so every shipped project has to carry the same release number.
+$projects = @{
+    'installer\KillerMCP.Setup.csproj' = @{ Version = $appVersion; AssemblyVersion = "$appVersion.0"; FileVersion = "$appVersion.0" }
+    'src\KillerMCP.Configure\KillerMCP.Configure.csproj' = @{ Version = $appVersion }
+    'src\KillerMCP.Notify\KillerMCP.Notify.csproj' = @{ Version = $appVersion }
+}
+foreach ($entry in $projects.GetEnumerator()) {
+    [xml]$other = Get-Content -LiteralPath (Join-Path $Root $entry.Key) -Raw
+    foreach ($property in $entry.Value.GetEnumerator()) {
+        $actual = @($other.Project.PropertyGroup | ForEach-Object { $_.($property.Key) } | Where-Object { $_ }) | Select-Object -First 1
+        if ([string]$actual -cne $property.Value) {
+            throw "$($entry.Key) $($property.Key) '$actual' must be '$($property.Value)' to match KillerMCP.csproj."
+        }
+    }
+}
+Write-Output "KillerMCP app, setup, helper and plugin versions match: $appVersion. Publisher: Steve the Killer."
 
 if ($env:OS -eq 'Windows_NT') {
     $manifest = Get-Content -LiteralPath (Join-Path $Root 'claude-plugin\.mcp.json') -Raw | ConvertFrom-Json
