@@ -1,7 +1,9 @@
 param([Parameter(Mandatory = $true)][string]$AssemblyPath, [Parameter(Mandatory = $true)][string]$ScratchPath)
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath($ScratchPath)
-if (-not $root.StartsWith('C:\Users\steve\scratch\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Use a task folder under scratch.' }
+# The test writes and replaces files in this folder, so it has to be a throwaway folder.
+$allowed = @([IO.Path]::GetFullPath([IO.Path]::GetTempPath()), (Join-Path $env:USERPROFILE 'scratch\')) | ForEach-Object { $_.TrimEnd('\') + '\' }
+if (-not ($allowed | Where-Object { $root.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) -and $root.Length -gt $_.Length })) { throw 'Use a task folder under the temporary folder or scratch.' }
 [IO.Directory]::CreateDirectory($root) | Out-Null
 $assembly = [Reflection.Assembly]::LoadFrom((Resolve-Path $AssemblyPath))
 $type = $assembly.GetType('KillerMCP.Setup.UpdatePreferences', $true)

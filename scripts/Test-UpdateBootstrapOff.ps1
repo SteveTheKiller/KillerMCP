@@ -5,7 +5,12 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath($ScratchPath)
-if (-not $root.StartsWith('C:\Users\steve\scratch\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Use a task folder under scratch.' }
+# The test writes and replaces files in this folder, so it has to be a throwaway folder.
+$allowed = @([IO.Path]::GetFullPath([IO.Path]::GetTempPath()), (Join-Path $env:USERPROFILE 'scratch\')) | ForEach-Object { $_.TrimEnd('\') + '\' }
+if (-not ($allowed | Where-Object { $root.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) -and $root.Length -gt $_.Length })) { throw 'Use a task folder under the temporary folder or scratch.' }
+# The test changes these for the setup it starts; the calling session gets its own values back.
+$savedVariables = @{}
+foreach ($name in 'TEMP', 'TMP', 'KILLERMCP_TEST_INSTALL_ROOT', 'KILLERMCP_TEST_UPDATE_API', 'KILLERMCP_TEST_CAPTURE') { $savedVariables[$name] = [Environment]::GetEnvironmentVariable($name) }
 $destination = Join-Path $root 'install'
 [IO.Directory]::CreateDirectory($destination) | Out-Null
 [IO.File]::Copy((Resolve-Path $SetupPath), (Join-Path $destination 'KillerMCP.exe'), $true)
@@ -56,4 +61,7 @@ try {
         if ($index -lt 0 -or $arguments[$index + 1] -ne '99.0.0') { throw 'Startup did not forward the discovered version.' }
         Write-Output "PASS: $Behavior launches the notifier with the saved behavior and discovered update."
     }
-} finally { $listener.Stop(); if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }
+} finally {
+    $listener.Stop(); if (-not $process.HasExited) { $process.Kill() }; $process.Dispose()
+    foreach ($name in $savedVariables.Keys) { [Environment]::SetEnvironmentVariable($name, $savedVariables[$name]) }
+}

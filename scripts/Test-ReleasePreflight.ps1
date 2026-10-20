@@ -2,7 +2,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent $PSScriptRoot
-$scratch = Join-Path 'C:\Users\steve\scratch' ('killermcp-release-preflight-' + [guid]::NewGuid().ToString('N'))
+$scratch = Join-Path ([IO.Path]::GetTempPath()) ('killermcp-release-preflight-' + [guid]::NewGuid().ToString('N'))
 $seed = Join-Path $scratch 'seed'
 $engine = Join-Path $scratch 'engine'
 $remote = Join-Path $scratch 'remote.git'
@@ -125,4 +125,5 @@ finally {
     Remove-Item -Path Function:\gh -ErrorAction SilentlyContinue
 }
 Write-Output 'PASS: a failed GitHub release removes the tag it pushed.'
-Write-Output "Fixture retained at $scratch"
+# A failure keeps the fixture for inspection; a pass removes it.
+Remove-Item -LiteralPath $scratch -Recurse -Force

@@ -1,14 +1,32 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { createConnection } from 'node:net';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { brotliDecompressSync } from 'node:zlib';
+
+// Fixture paths are relative to the repository, so the checks run the same from any folder.
+process.chdir(fileURLToPath(new URL('..', import.meta.url)));
+// Tools that reach outside services would make the result depend on them, so they run only on request.
+const live = process.env.KILLERMCP_LIVE_TESTS === '1';
 
 const releaseVersion = (await readFile(resolve('src/KillerMCP/KillerMCP.csproj'), 'utf8')).match(/<Version>(\d+\.\d+\.\d+)<\/Version>/)[1];
 const updateDirectory = await mkdtemp(join(tmpdir(), 'killermcp-update-'));
+// However the checks end, the hosts they started stop and the fixture folder is removed. dotnet run
+// starts the host as its own child, so the whole process tree is ended.
+const hosts = [];
+process.on('exit', () => {
+  for (const host of hosts) {
+    if (host.exitCode !== null || host.signalCode !== null) continue;
+    if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(host.pid), '/T', '/F'], { stdio: 'ignore' });
+    else host.kill();
+  }
+  rmSync(updateDirectory, { recursive: true, force: true });
+});
 const pdfSourceOne = join(updateDirectory, 'source-one.pdf');
 const pdfSourceTwo = join(updateDirectory, 'source-two.pdf');
 const signedPdf = join(updateDirectory, 'signed.pdf');
@@ -48,6 +66,7 @@ const environment = {
   KILLERBENCH_STATE_DIR: join(updateDirectory, 'bench-state'),
 };
 const child = spawn('dotnet', ['run', '--project', 'src/KillerMCP/KillerMCP.csproj', '-c', 'Release', '--no-build'], { stdio: ['pipe', 'pipe', 'inherit'], env: environment });
+hosts.push(child);
 let closing = false;
 child.on('exit', code => {
   if (closing) return;
@@ -68,10 +87,15 @@ child.stdout.on('data', chunk => {
   }
 });
 let id = 0;
+// A host that stops answering fails the checks instead of holding them open.
 function request(method, params = {}) {
   const requestId = ++id;
-  return new Promise(resolve => {
-    pending.set(requestId, resolve);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pending.delete(requestId);
+      reject(new Error(`KillerMCP did not answer ${method} within two minutes.`));
+    }, 120000);
+    pending.set(requestId, result => { clearTimeout(timer); resolve(result); });
     child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: requestId, method, params })}\n`);
   });
 }
@@ -204,10 +228,12 @@ const statuses = await request('tools/call', { name: 'lookup_http_status', argum
 assert.equal(JSON.parse(statuses.content[0].text)[0].code, 404);
 const policies = await request('tools/call', { name: 'lookup_group_policy', arguments: { query: 'minimum password length', limit: 1 } });
 assert.equal(JSON.parse(policies.content[0].text)[0].name, 'Minimum Password Length');
-const modules = await request('tools/call', { name: 'list_killer_modules', arguments: { name: 'pivot' } });
-assert.equal(JSON.parse(modules.content[0].text)[0].name, 'KillerPivot');
-const scripts = await request('tools/call', { name: 'list_killer_scripts', arguments: { query: 'AMORT' } });
-assert.equal(JSON.parse(scripts.content[0].text)[0].filename, 'AMORT.ps1');
+if (live) {
+  const modules = await request('tools/call', { name: 'list_killer_modules', arguments: { name: 'pivot' } });
+  assert.equal(JSON.parse(modules.content[0].text)[0].name, 'KillerPivot');
+  const scripts = await request('tools/call', { name: 'list_killer_scripts', arguments: { query: 'AMORT' } });
+  assert.equal(JSON.parse(scripts.content[0].text)[0].filename, 'AMORT.ps1');
+}
 const cmdlets = JSON.parse((await request('tools/call', { name: 'search_powershell_cmdlets', arguments: { query: 'ActiveDirectory', limit: 20 } })).content[0].text);
 assert.equal(cmdlets.some(item => item.cmdlet === 'Get-ADUser'), true);
 const cmdlet = JSON.parse((await request('tools/call', { name: 'get_powershell_cmdlet', arguments: { cmdlet: 'get-aduser' } })).content[0].text);
@@ -242,8 +268,10 @@ assert.match(qrCode.svg, /^<svg/);
 assert.match(qrCode.svg, /width="256"/);
 const wifiQr = await request('tools/call', { name: 'generate_qr_code', arguments: { mode: 'wifi', wifi: { ssid: 'Example', password: 'secret', encryption: 'WPA' } } });
 assert.equal(wifiQr.isError, undefined);
-const cve = JSON.parse((await request('tools/call', { name: 'lookup_cve', arguments: { query: 'CVE-2021-44228' } })).content[0].text);
-assert.equal(cve.results[0].id, 'CVE-2021-44228');
+if (live) {
+  const cve = JSON.parse((await request('tools/call', { name: 'lookup_cve', arguments: { query: 'CVE-2021-44228' } })).content[0].text);
+  assert.equal(cve.results[0].id, 'CVE-2021-44228');
+}
 const xmlJson = await request('tools/call', { name: 'convert_xml_json', arguments: { text: '<a x="1"/>', direction: 'xml_to_json' } });
 assert.match(JSON.parse(xmlJson.content[0].text).text, /"_attributes"/);
 const formattedXml = await request('tools/call', { name: 'format_xml', arguments: { text: '<a><b>text</b></a>' } });
@@ -492,6 +520,7 @@ const stalled = spawn('dotnet', ['run', '--project', 'src/KillerMCP/KillerMCP.cs
   stdio: ['pipe', 'pipe', 'ignore'],
   env: { ...environment, KILLERMCP_FAKE_HANG: '1', KILLERNOTES_CLI: fakeApp, KILLERPDF_CLI: brokenApp, KILLENDAR_CLI: missingApp, KILLERSHELL_CLI: missingApp, KILLERSCAN_CLI: missingApp, KILLERBENCH_CLI: missingApp, KILLERSHOT_CLI: missingApp },
 });
+hosts.push(stalled);
 let stalledExited = false;
 stalled.on('exit', () => { stalledExited = true; });
 const stalledReplies = new Map();
@@ -526,6 +555,7 @@ const uncached = spawn('dotnet', ['run', '--project', 'src/KillerMCP/KillerMCP.c
   stdio: ['pipe', 'pipe', 'ignore'],
   env: { ...environment, KILLERMCP_UPDATE_CACHE: join(pdfSourceOne, 'status.json') },
 });
+hosts.push(uncached);
 let uncachedBuffer = '';
 const uncachedInitialize = await new Promise((done, fail) => {
   const timer = setTimeout(() => fail(new Error('No initialize reply when the update cache cannot be written.')), 45000);
@@ -543,3 +573,7 @@ uncached.stdin.end();
 updateServer.close();
 await rm(updateDirectory, { recursive: true, force: true });
 console.log('Native KillerMCP stdio handshake, tool listing, and tool call passed.');
+if (!live) console.log('Skipped the tools that reach outside services; set KILLERMCP_LIVE_TESTS=1 to include them.');
+// An app process a host left running can keep a pipe to this script open, so the checks end here
+// instead of waiting for it.
+process.exit(0);

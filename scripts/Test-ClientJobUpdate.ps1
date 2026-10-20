@@ -32,9 +32,15 @@ $hostProcess = $null
 $job = $null
 $success = $false
 
+# A setup the user already had running is not this test's, so the test neither waits for it nor ends it.
+$preexistingSetups = @(Get-CimInstance Win32_Process -Filter "Name = 'KillerMCP-Setup.exe'" | ForEach-Object { $_.ProcessId })
+
 function Get-SetupProcesses {
-    # Setup may rerun itself outside the job, so any running setup counts until the upgrade ends.
-    Get-CimInstance Win32_Process -Filter "Name = 'KillerMCP-Setup.exe'"
+    # Setup may rerun itself outside the job, so any setup this test started counts until the upgrade ends.
+    Get-CimInstance Win32_Process -Filter "Name = 'KillerMCP-Setup.exe'" | Where-Object {
+        $preexistingSetups -notcontains $_.ProcessId -and $_.ExecutablePath -and
+        ($_.ExecutablePath -eq $setup -or $_.ExecutablePath.StartsWith($scratch, [StringComparison]::OrdinalIgnoreCase))
+    }
 }
 
 try {
