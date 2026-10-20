@@ -43,6 +43,9 @@ namespace KillerMCP.Setup
             bool checkUpdate = args.Any(value => value.Equals("/check-update", StringComparison.OrdinalIgnoreCase));
             try
             {
+                // An update can inherit the installed host's working directory. Windows keeps
+                // that directory open even after every host exits, preventing its replacement.
+                Environment.CurrentDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
                 int waitIndex = Array.FindIndex(args, value => value.Equals("/wait-for", StringComparison.OrdinalIgnoreCase));
                 if (waitIndex >= 0 && waitIndex + 1 < args.Length && int.TryParse(args[waitIndex + 1], out int parentId))
                 {

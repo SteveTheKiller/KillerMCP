@@ -104,18 +104,25 @@ try {
     $runningStart.RedirectStandardInput = $true
     $runningStart.RedirectStandardOutput = $true
     $runningStart.RedirectStandardError = $true
-    $runningHost = [Diagnostics.Process]::new()
-    $runningHost.StartInfo = $runningStart
+    $runningHosts = @()
     try {
-        if (-not $runningHost.Start()) { throw 'The installed MCP host did not start for the active-process reinstall test.' }
+        foreach ($connection in 1..3) {
+            $runningHost = [Diagnostics.Process]::new()
+            $runningHost.StartInfo = $runningStart
+            if (-not $runningHost.Start()) { throw 'The installed MCP host did not start for the active-process reinstall test.' }
+            $runningHosts += $runningHost
+        }
         Start-Sleep -Milliseconds 500
-        if ($runningHost.HasExited) { throw 'The installed MCP host exited before the active-process reinstall test.' }
-        $reinstall = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
-        if ($reinstall.ExitCode -ne 0 -or -not $runningHost.HasExited) { throw "Reinstall did not close and replace the active MCP host (exit $($reinstall.ExitCode), host exited $($runningHost.HasExited))." }
+        if (@($runningHosts | Where-Object HasExited).Count -ne 0) { throw 'An installed MCP host exited before the active-process reinstall test.' }
+        # Updates can inherit the installation folder as their working directory.
+        $reinstall = Start-Process -FilePath $setup -ArgumentList '/silent' -WorkingDirectory $installed -Wait -PassThru -WindowStyle Hidden
+        if ($reinstall.ExitCode -ne 0 -or @($runningHosts | Where-Object { -not $_.HasExited }).Count -ne 0) { throw "Reinstall did not close every active MCP host and replace its working directory (exit $($reinstall.ExitCode))." }
     }
     finally {
-        if (-not $runningHost.HasExited) { $runningHost.Kill() }
-        $runningHost.Dispose()
+        foreach ($runningHost in $runningHosts) {
+            if (-not $runningHost.HasExited) { $runningHost.Kill() }
+            $runningHost.Dispose()
+        }
     }
 
     $entry = Get-ItemProperty -LiteralPath $uninstallKey
