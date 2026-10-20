@@ -293,6 +293,15 @@ public static partial class KillerPdfAdapter
         new(marker, OutputKind.Report, new RuntimeTool(name, description, Schema(new JsonObject { ["path"] = PdfPath() }, "path")),
             (input, _) => [marker[..marker.IndexOf(' ', StringComparison.Ordinal)], String(input, "path"), "--json"], 120) { SuccessCodes = [0, 3] };
 
+    // Schema patterns are JSON Schema (ECMAScript) patterns, where \d is an ASCII digit and $ is the end
+    // of the text. .NET reads them the same way only with ECMAScript matching and a match that reaches
+    // the end, since its $ also matches before a final line break.
+    private static bool MatchesPattern(string text, string pattern)
+    {
+        var match = Regex.Match(text, pattern, RegexOptions.ECMAScript, TimeSpan.FromSeconds(1));
+        return match.Success && (!pattern.EndsWith('$') || match.Index + match.Length == text.Length);
+    }
+
     private static JsonObject Text(int maxLength, string? pattern = null, string? description = null)
     {
         var value = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = maxLength };
@@ -339,7 +348,7 @@ public static partial class KillerPdfAdapter
                 var text = value.GetString()!;
                 if (Limit(schema, "minLength") is double minLength && text.Length < minLength) return false;
                 if (Limit(schema, "maxLength") is double maxLength && text.Length > maxLength) return false;
-                return schema["pattern"] is not JsonValue pattern || Regex.IsMatch(text, pattern.GetValue<string>(), RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+                return schema["pattern"] is not JsonValue pattern || MatchesPattern(text, pattern.GetValue<string>());
             case "integer":
                 return value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var whole) && InRange(whole, schema);
             case "number":

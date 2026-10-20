@@ -568,6 +568,9 @@ try
     Equal(true, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-bad-keep"), keepScanned = new[] { "first" } })).IsError);
     Equal(true, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-bad-review"), reviewFolder = root })).IsError);
     Equal(false, (await Pdf("killerpdf_reverse_pages", new { path = sourceOne, output = NewPdf("reversed"), pages = "1-2" })).IsError);
+    // Checked text ends where the value ends and takes ASCII digits only.
+    Equal(true, (await Pdf("killerpdf_reverse_pages", new { path = sourceOne, output = NewPdf("reversed-newline"), pages = "1-2\n" })).IsError);
+    Equal(true, (await Pdf("killerpdf_nup", new { path = sourceOne, output = NewPdf("nup-digits"), grid = "٢x2" })).IsError);
     Equal(false, (await Pdf("killerpdf_fix_orientation", new { path = sourceOne, output = NewPdf("upright") })).IsError);
     Equal(false, (await Pdf("killerpdf_straighten", new { path = sourceOne, output = NewPdf("level") })).IsError);
     Equal(false, (await Pdf("killerpdf_divide_spreads", new { path = sourceOne, output = NewPdf("divided"), direction = "vertical", splitAt = 0.5 })).IsError);
