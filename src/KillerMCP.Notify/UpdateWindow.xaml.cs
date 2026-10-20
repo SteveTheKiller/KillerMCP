@@ -19,7 +19,7 @@ public partial class UpdateWindow : Window
     private string _behavior = "check";
     private bool _updated;
     private bool _loadingPreferences = true;
-    private bool _busy;
+    private readonly UpdateRuns _runs = new();
     // Set when the automatic download failed: the button then opens the release page, as its label says.
     private bool _openReleaseOnClick;
     private string? _downloadedInstaller;
@@ -34,7 +34,7 @@ public partial class UpdateWindow : Window
 
     internal bool OffersUpdate => !_updated && _latestVersion is not null;
 
-    internal string TrayTip => _busy && Automatic
+    internal string TrayTip => _runs.Busy && Automatic
         ? $"Downloading KillerMCP {_latestVersion}"
         : $"KillerMCP {_latestVersion} is available";
 
@@ -61,7 +61,7 @@ public partial class UpdateWindow : Window
     /// without opening a second window.</summary>
     internal void Reload(string[] args)
     {
-        if (_busy && Same(args)) return;
+        if (_runs.Busy && Same(args)) return;
         Apply(args);
         Start();
     }
@@ -80,6 +80,8 @@ public partial class UpdateWindow : Window
         _behavior = Value(args, "--behavior") ?? "check";
         _updated = Has(args, "--updated");
         _statusPath = Value(args, "--status") ?? ReleaseNotes.DefaultStatusPath();
+        // A download started for the notification this one replaces no longer owns the window.
+        _runs.Supersede();
         _downloadedInstaller = null;
         _openReleaseOnClick = false;
         _loadingPreferences = true;
@@ -123,13 +125,13 @@ public partial class UpdateWindow : Window
     {
         string? version = _latestVersion;
         if (version is null) return;
-        _busy = true;
+        int run = _runs.Begin();
         UpdateButton.IsEnabled = false;
         UpdateStateChanged?.Invoke();
         try
         {
             string installer = await UpdateInstaller.DownloadAndVerifyAsync(version, _installerUrl);
-            if (version != _latestVersion) return;
+            if (!_runs.IsCurrent(run)) return;
             _downloadedInstaller = installer;
             if (_behavior == "install")
             {
@@ -145,7 +147,7 @@ public partial class UpdateWindow : Window
         }
         catch (Exception exception)
         {
-            if (version != _latestVersion) return;
+            if (!_runs.IsCurrent(run)) return;
             SetHeading("The update needs your attention");
             BodyText.Text = "KillerMCP could not download and verify the update automatically.";
             SetStatus(exception.Message);
@@ -155,9 +157,12 @@ public partial class UpdateWindow : Window
         }
         finally
         {
-            _busy = false;
-            UpdateButton.IsEnabled = true;
-            UpdateStateChanged?.Invoke();
+            // A run a newer notification replaced leaves the button and tray to the newer one.
+            if (_runs.End(run))
+            {
+                UpdateButton.IsEnabled = true;
+                UpdateStateChanged?.Invoke();
+            }
         }
     }
 
@@ -165,16 +170,19 @@ public partial class UpdateWindow : Window
     {
         if (_updated || _latestVersion is null) { Close(); return; }
         // The background download is still running; a second one would start a second installer.
-        if (_busy) return;
+        if (_runs.Busy) return;
         if (_openReleaseOnClick) { OpenUrl(_releaseUrl); return; }
         UpdateButton.IsEnabled = false;
-        _busy = true;
+        int run = _runs.Begin();
         try
         {
             if (_downloadedInstaller is null)
             {
                 SetStatus("Downloading and verifying the signed update...");
-                _downloadedInstaller = await UpdateInstaller.DownloadAndVerifyAsync(_latestVersion, _installerUrl);
+                string installer = await UpdateInstaller.DownloadAndVerifyAsync(_latestVersion, _installerUrl);
+                // A newer notification arrived during the download; the window now offers that one.
+                if (!_runs.IsCurrent(run)) return;
+                _downloadedInstaller = installer;
             }
             SetStatus("Starting the verified upgrade...");
             Process.Start(new ProcessStartInfo(_downloadedInstaller, "/silent /notify") { UseShellExecute = true });
@@ -182,6 +190,7 @@ public partial class UpdateWindow : Window
         }
         catch (Exception exception)
         {
+            if (!_runs.IsCurrent(run)) return;
             SetStatus("Automatic update failed. Opening the release page.");
             UpdateButton.IsEnabled = true;
             Process.Start(new ProcessStartInfo(_releaseUrl) { UseShellExecute = true });
@@ -189,7 +198,7 @@ public partial class UpdateWindow : Window
         }
         finally
         {
-            _busy = false;
+            _runs.End(run);
         }
     }
 

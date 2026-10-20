@@ -320,6 +320,22 @@ try
     KillerMCP.Notify.BehaviorPreference.Write(preferences, "off");
     Equal("off", KillerMCP.Notify.BehaviorPreference.Read(preferences));
     Console.WriteLine("PASS update preference file");
+
+    // A download that a newer notification replaced neither clears the busy state nor acts on its result.
+    var runs = new KillerMCP.Notify.UpdateRuns();
+    var firstRun = runs.Begin();
+    var secondRun = runs.Begin();
+    Equal(false, runs.IsCurrent(firstRun));
+    Equal(false, runs.End(firstRun));
+    Equal(true, runs.Busy);
+    Equal(true, runs.End(secondRun));
+    Equal(false, runs.Busy);
+    var replacedRun = runs.Begin();
+    runs.Supersede();
+    Equal(false, runs.Busy);
+    Equal(false, runs.IsCurrent(replacedRun));
+    Equal(false, runs.End(replacedRun));
+    Console.WriteLine("PASS update download ownership");
 }
 finally
 {

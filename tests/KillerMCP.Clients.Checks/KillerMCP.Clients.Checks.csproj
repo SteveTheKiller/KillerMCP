@@ -7,5 +7,6 @@
     <Compile Include="../../installer/ReleaseSignature.cs" Link="ReleaseSignature.cs" />
     <Compile Include="../../installer/DownloadedSetups.cs" Link="DownloadedSetups.cs" />
     <Compile Include="../../src/KillerMCP.Notify/BehaviorPreference.cs" Link="BehaviorPreference.cs" />
+    <Compile Include="../../src/KillerMCP.Notify/UpdateRuns.cs" Link="UpdateRuns.cs" />
   </ItemGroup>
 </Project>
