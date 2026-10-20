@@ -59,9 +59,7 @@ internal static class UpdateChecker
             }
 
             var checkedAt = DateTimeOffset.UtcNow;
-            var directory = Path.GetDirectoryName(cachePath)!;
-            Directory.CreateDirectory(directory);
-            await File.WriteAllTextAsync(cachePath, JsonSerializer.Serialize(new Cache(latestVersion!, checkedAt, notes)) + Environment.NewLine).ConfigureAwait(false);
+            await WriteCacheAsync(cachePath, new Cache(latestVersion!, checkedAt, notes)).ConfigureAwait(false);
             return MakeStatus(currentVersion, latestVersion!, checkedAt, false);
         }
         catch
@@ -116,6 +114,23 @@ internal static class UpdateChecker
         catch
         {
             return null;
+        }
+    }
+
+    // A cache that cannot be saved only means the next check fetches again; the release just fetched still counts.
+    // The update window reads this file, so it is replaced whole instead of rewritten in place.
+    private static async Task WriteCacheAsync(string path, Cache cache)
+    {
+        string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(cache) + Environment.NewLine).ConfigureAwait(false);
+            File.Move(temporary, path, true);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            try { File.Delete(temporary); } catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
         }
     }
 

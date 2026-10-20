@@ -22,6 +22,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - Tools check page ranges, DPI, note IDs and MAC addresses before running an app, and a number sent as text gets a clear error. Saving PDF pages as notes reports the notes already made when a later page fails, and a failed MAC vendor lookup is reported as an error.
 - Uninstall closes a running KillerMCP before removing it instead of failing partway and leaving a broken folder, and setup can now uninstall or reinstall over a folder an earlier uninstall left half removed.
 - KillerMCP no longer closes when a client asks for something it does not offer, such as resource templates. It answers with a standard error, replies to ping, and treats tools/call without arguments as an empty set.
+- KillerMCP still reports a new release when it cannot save its update status, and the status file the update window reads is replaced whole instead of rewritten in place.
 - A silent install or update that finds KillerMCP running exits with 1618, which Intune, Configuration Manager and RMM tools retry, instead of a general failure.
 
 ## [0.6.1] - 2026-10-19

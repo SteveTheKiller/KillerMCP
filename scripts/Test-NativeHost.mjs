@@ -521,6 +521,25 @@ assert.ok(!stalledTools.includes('killernotes_search') && !stalledTools.includes
 assert.equal(stalledExited, false, 'A broken app ended the server.');
 stalled.stdin.end();
 
+// A release fetched while the update cache cannot be written is still reported.
+const uncached = spawn('dotnet', ['run', '--project', 'src/KillerMCP/KillerMCP.csproj', '-c', 'Release', '--no-build'], {
+  stdio: ['pipe', 'pipe', 'ignore'],
+  env: { ...environment, KILLERMCP_UPDATE_CACHE: join(pdfSourceOne, 'status.json') },
+});
+let uncachedBuffer = '';
+const uncachedInitialize = await new Promise((done, fail) => {
+  const timer = setTimeout(() => fail(new Error('No initialize reply when the update cache cannot be written.')), 45000);
+  uncached.stdout.setEncoding('utf8');
+  uncached.stdout.on('data', chunk => {
+    uncachedBuffer += chunk;
+    const end = uncachedBuffer.indexOf('\n');
+    if (end >= 0) { clearTimeout(timer); done(JSON.parse(uncachedBuffer.slice(0, end)).result); }
+  });
+  uncached.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } })}\n`);
+});
+assert.match(uncachedInitialize.instructions, /KillerMCP 99\.0\.0 is available/);
+uncached.stdin.end();
+
 updateServer.close();
 await rm(updateDirectory, { recursive: true, force: true });
 console.log('Native KillerMCP stdio handshake, tool listing, and tool call passed.');
