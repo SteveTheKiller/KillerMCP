@@ -307,8 +307,10 @@ public static partial class IntegrationAdapter
     // share. A browser starts one of these elements only at a less-than sign followed by the tag
     // name and a space, slash or greater-than sign, whatever the attributes say or encode. Renaming
     // the tag to an unknown x-base or x-meta element there disables it wherever it appears, including
-    // in nested or split markup, shows nothing on the page, and removes no text, so it cannot join the
-    // pieces around it into a new element. The policy element added here supplies the character set.
+    // in nested or split markup, and removes no text, so it cannot join the pieces around it into a new
+    // element. A real tag renamed this way shows nothing; the same letters inside an attribute value,
+    // a comment or text such as a textarea read x-base or x-meta instead. The policy element added here
+    // supplies the character set.
     internal static string Harden(string html)
     {
         var body = LeadingDoctype().Replace(BaseOrMeta().Replace(html, "<x-"), string.Empty, 1);
