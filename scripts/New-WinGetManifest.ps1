@@ -29,8 +29,12 @@ if (Test-Path -LiteralPath $directory) { throw 'Use a new output directory to av
 $installerPath = "$directory.exe"
 if (Test-Path -LiteralPath $installerPath) { throw 'The installer download path already exists.' }
 Invoke-WebRequest -Uri $url -OutFile $installerPath -UseBasicParsing
+# WinGet publishes the hash of this download, so it has to match the release digest and carry the
+# KillerMCP signature.
+& (Join-Path $PSScriptRoot 'Assert-ReleaseInstaller.ps1') -Path $installerPath
 $hash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
-if ($assets[0].digest -and $assets[0].digest -ne "sha256:$($hash.ToLowerInvariant())") {
+if (-not $assets[0].digest) { throw 'The GitHub release does not list a digest for the installer.' }
+if ($assets[0].digest -ne "sha256:$($hash.ToLowerInvariant())") {
     throw 'Downloaded installer does not match the GitHub release digest.'
 }
 $date = ([datetime]$release.published_at).ToUniversalTime().ToString('yyyy-MM-dd')

@@ -1,7 +1,9 @@
 param([string]$WorkflowFolder = '')
 
 # Release workflows hold signing and publishing tokens, so everything they download must be pinned:
-# PowerShell modules by exact version, and tools from other projects by exact release and SHA-256.
+# PowerShell modules by exact version, actions by commit, and tools from other projects by exact
+# release and SHA-256. Event data reaches scripts only through env, every workflow limits its token,
+# and a KillerMCP installer is published only after its signature is checked.
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $folder = if ($WorkflowFolder) { $WorkflowFolder } else { Join-Path $root '.github\workflows' }
@@ -9,6 +11,11 @@ $problems = New-Object System.Collections.Generic.List[string]
 
 foreach ($workflow in Get-ChildItem -LiteralPath $folder -Filter '*.yml') {
     $text = Get-Content -LiteralPath $workflow.FullName -Raw
+    if ($text -notmatch '(?m)^\s*permissions:') { $problems.Add("$($workflow.Name) does not limit its token with permissions.") }
+    foreach ($line in ($text -split '\r?\n')) {
+        if ($line -match '\$\{\{\s*(github\.event\.|inputs\.)' -and $line -notmatch '^\s*[A-Za-z_][A-Za-z0-9_]*:\s*\$\{\{[^}]*\}\}\s*$') { $problems.Add("$($workflow.Name) expands event data inside a script; pass it through env: $($line.Trim())") }
+        if ($line -match '^\s*-?\s*uses:\s*(?<action>[^@\s]+)@(?<ref>\S+)' -and $Matches['ref'] -notmatch '^[0-9a-f]{40}$') { $problems.Add("$($workflow.Name) uses $($Matches['action']) by tag instead of by commit.") }
+    }
     $steps = [regex]::Split($text, '(?m)^\s*- (?=name:|uses:)')
     foreach ($step in $steps) {
         $name = ([regex]::Match($step, '^name:\s*(.+)$', 'Multiline')).Groups[1].Value.Trim()
@@ -18,15 +25,62 @@ foreach ($workflow in Get-ChildItem -LiteralPath $folder -Filter '*.yml') {
         }
         if ($step -match 'releases/latest') { $problems.Add("$label looks up a latest release instead of a pinned one.") }
         foreach ($download in [regex]::Matches($step, 'https://github\.com/(?<owner>[^/\s"'']+)/[^\s"'']+/releases/download/[^\s"'']+')) {
-            if ($download.Groups['owner'].Value -eq 'SteveTheKiller') { continue }
+            if ($download.Groups['owner'].Value -eq 'SteveTheKiller') {
+                if ($download.Value -match 'KillerMCP-Setup\.exe' -and $step -notmatch 'Assert-ReleaseInstaller') { $problems.Add("$label publishes a KillerMCP installer without checking its signature.") }
+                continue
+            }
             if ($step -notmatch 'Get-FileHash' -or $step -notmatch "(?i)'[0-9a-f]{64}'") { $problems.Add("$label downloads $($download.Value) without checking a pinned SHA-256.") }
             if ($download.Value -match '\$tag\b|latest') { $problems.Add("$label downloads a release that is not pinned.") }
         }
     }
 }
 
+if ((Get-Content -LiteralPath (Join-Path $PSScriptRoot 'New-WinGetManifest.ps1') -Raw) -notmatch 'Assert-ReleaseInstaller') { $problems.Add('New-WinGetManifest.ps1 submits an installer without checking its signature.') }
+
 if ($problems.Count -gt 0) {
     $problems | ForEach-Object { Write-Host $_ }
-    throw "Release workflows have $($problems.Count) unpinned download(s)."
+    throw "Release workflows have $($problems.Count) problem(s)."
 }
-Write-Output 'Release workflows pin every download.'
+Write-Output 'Release workflows pin every download and action, keep event data out of scripts and check installer signatures.'
+
+# The installer check accepts only the KillerMCP publisher's timestamped signature.
+$assert = Join-Path $PSScriptRoot 'Assert-ReleaseInstaller.ps1'
+$unsigned = Join-Path ([IO.Path]::GetTempPath()) ('killermcp-unsigned-' + [guid]::NewGuid().ToString('N') + '.exe')
+[IO.File]::WriteAllText($unsigned, 'not signed')
+try {
+    $refused = $false
+    try { & $assert -Path $unsigned } catch { $refused = $true }
+    if (-not $refused) { throw 'The installer check accepted an unsigned file.' }
+}
+finally { Remove-Item -LiteralPath $unsigned -Force }
+$otherPublisher = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
+if (Test-Path -LiteralPath $otherPublisher) {
+    $refused = $false
+    try { & $assert -Path $otherPublisher } catch { $refused = $true }
+    if (-not $refused) { throw 'The installer check accepted another publisher.' }
+}
+if ($env:KILLERMCP_SIGNED_SETUP -and (Test-Path -LiteralPath $env:KILLERMCP_SIGNED_SETUP)) { & $assert -Path $env:KILLERMCP_SIGNED_SETUP }
+Write-Output 'The release installer check accepts only the KillerMCP signature.'
+
+# Chocolatey validation fails the job when it fails again after the one re-push, whether or not a
+# poll saw it pending in between, and passes or warns otherwise.
+$wait = Join-Path $PSScriptRoot 'Wait-ChocolateyValidation.ps1'
+function Invoke-Wait([string[]]$States) {
+    $queue = [Collections.Generic.Queue[string]]::new([string[]]$States)
+    $pushes = [ref]0
+    $outcome = try { & $wait -Version '0.0.0' -Package 'fixture.nupkg' -PollSeconds 0 -Polls $States.Count -ConfirmFailPolls 3 -ReadState { if ($queue.Count) { $queue.Dequeue() } else { 'Pending' } }.GetNewClosure() -Push { $pushes.Value++ }.GetNewClosure(); 'ok' } catch { 'failed' }
+    [pscustomobject]@{ Outcome = $outcome; Pushes = $pushes.Value }
+}
+$cases = @(
+    @{ States = @('Pending', 'Passed'); Outcome = 'ok'; Pushes = 0 },
+    @{ States = @('Failed', 'Pending', 'Passed'); Outcome = 'ok'; Pushes = 1 },
+    @{ States = @('Failed', 'Pending', 'Failed'); Outcome = 'failed'; Pushes = 1 },
+    @{ States = @('Failed', 'Failed', 'Failed', 'Failed'); Outcome = 'failed'; Pushes = 1 },
+    @{ States = @('Pending', 'Pending'); Outcome = 'ok'; Pushes = 0 },
+    @{ States = @('Failed', 'Failed'); Outcome = 'failed'; Pushes = 1 }
+)
+foreach ($case in $cases) {
+    $result = Invoke-Wait $case.States
+    if ($result.Outcome -ne $case.Outcome -or $result.Pushes -ne $case.Pushes) { throw "Chocolatey validation wait for $($case.States -join ', ') ended $($result.Outcome) after $($result.Pushes) push(es)." }
+}
+Write-Output 'Chocolatey validation fails the job on a second validation failure.'

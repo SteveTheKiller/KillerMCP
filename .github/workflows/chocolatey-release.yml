@@ -12,21 +12,31 @@ on:
 jobs:
   push:
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Build and push Chocolatey package
         shell: pwsh
         env:
           CHOCO_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
         run: |
-          $releaseTag = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "${{ github.event.inputs.tag }}" } else { "${{ github.event.release.tag_name }}" }
+          # The tag comes from the release or from whoever runs the workflow, so it reaches this script
+          # only through env and has to be a version tag before anything uses it.
+          $releaseTag = $env:RELEASE_TAG
+          if ($releaseTag -notmatch '^v\d+\.\d+\.\d+$') { throw "Release tag '$releaseTag' is not a version tag such as v1.2.3." }
           $version = $releaseTag.TrimStart('v')
           $exeUrl  = "https://github.com/SteveTheKiller/KillerMCP/releases/download/$releaseTag/KillerMCP-Setup.exe"
 
           # Download release installer and compute hash
           Write-Host "Downloading $exeUrl..."
           Invoke-WebRequest -Uri $exeUrl -OutFile "$env:RUNNER_TEMP\KillerMCP-Setup.exe"
+          # The package carries the hash of this download, so it is published only if the KillerMCP publisher signed it.
+          ./scripts/Assert-ReleaseInstaller.ps1 -Path "$env:RUNNER_TEMP\KillerMCP-Setup.exe"
           $hash = (Get-FileHash "$env:RUNNER_TEMP\KillerMCP-Setup.exe" -Algorithm SHA256).Hash
           Write-Host "SHA256: $hash"
 
@@ -83,46 +93,11 @@ jobs:
           "CHOCO_VERSION=$version" >> $env:GITHUB_ENV
           "CHOCO_PACKAGE=$package" >> $env:GITHUB_ENV
 
-      # A successful push is not an accepted package. Chocolatey validates it later, and its
-      # validator sometimes fails with "We were unable to find a package" while its own service
-      # is degraded; its instruction is to upload the package again. Watch the result, re-push
-      # once on a failure, and fail this job if validation still fails so it never goes unnoticed.
-      # The package page is cached and can show Pending for hours after validation passes, so the
-      # result is read from the package feed instead.
+      # A successful push is not an accepted package. The script watches Chocolatey's validation,
+      # pushes again once on a failure, and fails this job if validation fails again.
       - name: Wait for Chocolatey validation
         shell: pwsh
         timeout-minutes: 170
         env:
           CHOCO_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
-        run: |
-          $page = "https://community.chocolatey.org/packages/killermcp/$env:CHOCO_VERSION"
-          $feed = "https://community.chocolatey.org/api/v2/Packages(Id='killermcp',Version='$env:CHOCO_VERSION')"
-          $repushed = $false
-          $pendingSinceRepush = $false
-          $deadline = (Get-Date).AddMinutes(160)
-          while ((Get-Date) -lt $deadline) {
-              Start-Sleep -Seconds 300
-              try {
-                  $entry = (Invoke-WebRequest $feed -UseBasicParsing -TimeoutSec 90).Content
-              } catch {
-                  Write-Host "Package feed unavailable: $($_.Exception.Message). Retrying."
-                  continue
-              }
-              $state = [regex]::Match($entry, '<d:PackageValidationResultStatus>(\w+)</d:PackageValidationResultStatus>').Groups[1].Value
-              Write-Host "$(Get-Date -Format HH:mm:ss) validation: $(if ($state) { $state } else { 'not shown' })"
-              if ($state -like 'Pass*') { exit 0 }
-              if ($repushed -and $state -and $state -notlike 'Fail*') { $pendingSinceRepush = $true }
-              if ($state -notlike 'Fail*') { continue }
-              if (-not $repushed) {
-                  Write-Host "Validation failed. Pushing the same package again as Chocolatey instructs."
-                  choco push $env:CHOCO_PACKAGE --source https://push.chocolatey.org --api-key $env:CHOCO_API_KEY
-                  if ($LASTEXITCODE -ne 0) { throw "Re-push to Chocolatey failed." }
-                  $repushed = $true
-              } elseif ($pendingSinceRepush) {
-                  throw "Chocolatey validation failed twice. See $page"
-              }
-          }
-          # Chocolatey's queue often takes longer than this. The package is already pushed, so a
-          # validation that is still pending is a warning, not a failed release.
-          Write-Host "::warning::Chocolatey validation was still pending after 160 minutes. The package was pushed. See $page"
-          exit 0
+        run: ./scripts/Wait-ChocolateyValidation.ps1 -Version $env:CHOCO_VERSION -Package $env:CHOCO_PACKAGE
