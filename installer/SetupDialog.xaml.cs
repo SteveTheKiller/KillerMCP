@@ -10,7 +10,7 @@ namespace KillerMCP.Setup
     {
         private bool _confirmed;
 
-        private SetupDialog(string heading, string detail, bool confirmation, string? confirmLabel = null)
+        private SetupDialog(string heading, string detail, bool confirmation, string? confirmLabel = null, bool cancelIsDefault = false)
         {
             InitializeComponent();
             TaskbarIdentity.Track(this);
@@ -18,6 +18,10 @@ namespace KillerMCP.Setup
             DetailText.Text = detail;
             CancelButton.Visibility = confirmation ? Visibility.Visible : Visibility.Collapsed;
             OkButton.Content = confirmLabel ?? (confirmation ? "Uninstall" : "OK");
+            // For a step that cannot be undone, a stray Enter cancels instead of confirming.
+            OkButton.IsDefault = !cancelIsDefault;
+            CancelButton.IsDefault = cancelIsDefault;
+            if (cancelIsDefault) Loaded += (_, _) => CancelButton.Focus();
             NoticeGlyph.Text = confirmation ? "!" : "×";
             NoticeGlyph.Foreground = new SolidColorBrush(confirmation
                 ? Color.FromRgb(255, 190, 80)
@@ -33,7 +37,8 @@ namespace KillerMCP.Setup
             var dialog = new SetupDialog(
                 "Uninstall KillerMCP?",
                 "This removes KillerMCP and disconnects it from compatible agent clients on this computer.",
-                confirmation: true);
+                confirmation: true,
+                cancelIsDefault: true);
             if (owner != null) { dialog.Owner = owner; dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner; }
             dialog.ShowDialog();
             bool result = dialog._confirmed;

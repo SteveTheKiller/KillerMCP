@@ -248,7 +248,7 @@
                                 </Grid>
                                 <StackPanel Grid.Row="1">
                                     <TextBlock Text="Future updates" FontSize="10" Foreground="#929292" Margin="1,0,0,4"/>
-                                    <ComboBox x:Name="BehaviorBox" Width="210" Height="28" HorizontalAlignment="Left" SelectionChanged="BehaviorBox_SelectionChanged">
+                                    <ComboBox x:Name="BehaviorBox" Width="210" Height="28" HorizontalAlignment="Left" AutomationProperties.Name="Future updates" SelectionChanged="BehaviorBox_SelectionChanged">
                                         <ComboBoxItem Tag="off">Do not check</ComboBoxItem>
                                         <ComboBoxItem Tag="check">Check and ask</ComboBoxItem>
                                         <ComboBoxItem Tag="download">Download and ask</ComboBoxItem>

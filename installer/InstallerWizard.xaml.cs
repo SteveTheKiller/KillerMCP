@@ -129,7 +129,7 @@ namespace KillerMCP.Setup
             }
         }
 
-        private void RuntimeLink_Click(object sender, MouseButtonEventArgs e) => Process.Start(new ProcessStartInfo("https://dotnet.microsoft.com/en-us/download/dotnet/10.0") { UseShellExecute = true });
+        private void RuntimeLink_Click(object sender, RoutedEventArgs e) => Process.Start(new ProcessStartInfo("https://dotnet.microsoft.com/en-us/download/dotnet/10.0") { UseShellExecute = true });
         private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (e.LeftButton == MouseButtonState.Pressed) DragMove(); }
 

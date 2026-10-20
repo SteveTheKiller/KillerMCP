@@ -60,7 +60,7 @@
                             <icons:AppIcon Source="Assets/mcp.png" Width="27" Height="27" VerticalAlignment="Center" Margin="0,0,7,0" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                             <Grid VerticalAlignment="Center" Margin="0,-18,0,-22"><Grid.RenderTransform><TranslateTransform Y="-5"/></Grid.RenderTransform><TextBlock Foreground="#D8000000" Opacity="0.45" Margin="1,2,-1,-2" IsHitTestVisible="False" FontFamily="{StaticResource Wordmark}" FontSize="15"><TextBlock.Effect><BlurEffect Radius="3"/></TextBlock.Effect><Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="22.52"/></TextBlock><TextBlock FontFamily="{StaticResource Wordmark}" FontSize="15"><Run Text="Killer"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="22.52" Foreground="{StaticResource Accent}"/></TextBlock></Grid>
                         </StackPanel>
-                        <Button Width="28" Height="28" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click">
+                        <Button Width="28" Height="28" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click" ToolTip="Close" AutomationProperties.Name="Close">
                             <Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><TextBlock x:Name="CloseGlyph" Text="&#x2715;" FontSize="11" Foreground="#b8b8b8" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Foreground" Value="#e04444"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template>
                         </Button>
                     </Grid>
@@ -76,8 +76,8 @@
                     </StackPanel>
                 </Grid>
                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="24,0,24,20">
-                    <Button x:Name="CancelButton" Content="Cancel" Style="{StaticResource SurfaceButton}" Margin="0,0,8,0" Click="Cancel_Click"/>
-                    <Button x:Name="OkButton" Content="Uninstall" Style="{StaticResource OutlineButton}" IsDefault="True" Click="Ok_Click"/>
+                    <Button x:Name="CancelButton" Content="Cancel" Style="{StaticResource SurfaceButton}" Margin="0,0,8,0" IsCancel="True" Click="Cancel_Click"/>
+                    <Button x:Name="OkButton" Content="Uninstall" Style="{StaticResource OutlineButton}" Click="Ok_Click"/>
                 </StackPanel>
             </Grid>
         </Grid>

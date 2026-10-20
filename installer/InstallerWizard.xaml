@@ -108,7 +108,7 @@
                 <Border Background="#0a0a0a" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="6">
                   <Grid>
                     <Border x:Name="GrainLayer" CornerRadius="6" IsHitTestVisible="False" Opacity="0.24"/>
-                    <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click" Panel.ZIndex="3"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><TextBlock x:Name="CloseGlyph" Text="&#x2715;" FontSize="11" Foreground="#b8b8b8" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Foreground" Value="#e04444"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
+                    <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click" Panel.ZIndex="3" ToolTip="Close" AutomationProperties.Name="Close"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><TextBlock x:Name="CloseGlyph" Text="&#x2715;" FontSize="11" Foreground="#b8b8b8" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Foreground" Value="#e04444"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
                   <Grid Margin="24,22,24,16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <TextBlock x:Name="Heading" Text="Welcome to KillerMCP Setup" FontFamily="{StaticResource BrandSans}" FontSize="20" TextOptions.TextFormattingMode="Ideal" Margin="0,0,28,0"/>
@@ -119,7 +119,7 @@
                         </Border>
                         <TextBlock x:Name="RuntimeStatus" Margin="1,13,0,0" FontFamily="{StaticResource UiFont}" FontSize="10.5" TextWrapping="Wrap"/>
                         <TextBlock Margin="1,10,0,0" Foreground="#cfcfcf" TextWrapping="Wrap" Text="Setup installs the verified runtime, detects supported Killer apps, and registers one shared MCP connection."/>
-                        <TextBlock x:Name="RuntimeLink" Margin="1,12,0,0" Foreground="#ff52c9" TextDecorations="Underline" Cursor="Hand" MouseLeftButtonDown="RuntimeLink_Click" Text="Download .NET 10 runtime"/>
+                        <TextBlock x:Name="RuntimeLink" Margin="1,12,0,0"><Hyperlink Foreground="#ff52c9" Click="RuntimeLink_Click">Download .NET 10 runtime</Hyperlink></TextBlock>
                         <TextBlock Margin="1,12,0,4" Foreground="#929292" FontSize="10" Text="Update behavior"/>
                         <ComboBox x:Name="UpdateBehaviorBox" Width="210" Height="28" HorizontalAlignment="Left" AutomationProperties.Name="Update behavior">
                             <ComboBoxItem Tag="off">Do not check</ComboBoxItem>
