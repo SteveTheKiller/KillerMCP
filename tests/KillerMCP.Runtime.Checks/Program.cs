@@ -323,59 +323,6 @@ try
     Equal<string?>(null, AgentPaths.AccessRefusal(Path.Combine(root, "a.pdf")));
     Console.WriteLine("PASS network path rule");
 
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", "1");
-    var notesAdapters = await KillerNotesAdapter.CreateAsync(Environment.ProcessPath);
-    var adapter = notesAdapters.FirstOrDefault(item => item.Tool.Name == "killernotes_search");
-    if (adapter is null)
-    {
-        throw new InvalidOperationException("The KillerNotes fixture adapter was not discovered.");
-    }
-    Equal("killernotes_search", adapter.Tool.Name);
-    Equal(16, notesAdapters.Count);
-    using var valid = JsonDocument.Parse("{\"query\":\"subnet\",\"limit\":1}");
-    var result = await adapter.CallAsync(valid.RootElement, CancellationToken.None);
-    Equal(false, result.IsError);
-    Equal("Subnet plans", JsonDocument.Parse(result.Text).RootElement[0].GetProperty("title").GetString());
-    using var invalid = JsonDocument.Parse("{\"query\":\"\"}");
-    Equal(true, (await adapter.CallAsync(invalid.RootElement, CancellationToken.None)).IsError);
-    using var longNote = JsonDocument.Parse(JsonSerializer.Serialize(new { title = "Long", content = new string('x', 40000) }));
-    var longCreated = await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(longNote.RootElement, CancellationToken.None);
-    Equal(false, longCreated.IsError);
-    Equal(40000, JsonDocument.Parse(longCreated.Text).RootElement.GetProperty("characters").GetInt32());
-    using var quotedNote = JsonDocument.Parse(JsonSerializer.Serialize(new { title = "Quoted", content = new string('"', 20000) }));
-    var quotedCreated = await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(quotedNote.RootElement, CancellationToken.None);
-    Equal(false, quotedCreated.IsError);
-    Equal(20000, JsonDocument.Parse(quotedCreated.Text).RootElement.GetProperty("characters").GetInt32());
-    using var flagTitle = JsonDocument.Parse(JsonSerializer.Serialize(new { title = "--content", content = new string('x', 40000) }));
-    var flagTitleCreated = await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(flagTitle.RootElement, CancellationToken.None);
-    Equal(false, flagTitleCreated.IsError);
-    Equal(40000, JsonDocument.Parse(flagTitleCreated.Text).RootElement.GetProperty("characters").GetInt32());
-    var noteTemp = Path.Combine(root, "cancelled-note-temp");
-    Directory.CreateDirectory(noteTemp);
-    var previousTemp = Environment.GetEnvironmentVariable("TEMP");
-    var previousTmp = Environment.GetEnvironmentVariable("TMP");
-    try
-    {
-        Environment.SetEnvironmentVariable("TEMP", noteTemp);
-        Environment.SetEnvironmentVariable("TMP", noteTemp);
-        Equal(Path.GetFullPath(noteTemp), Path.TrimEndingDirectorySeparator(Path.GetTempPath()));
-        using var cancelled = new CancellationTokenSource();
-        cancelled.Cancel();
-        try { await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(longNote.RootElement, cancelled.Token); }
-        catch (OperationCanceledException) { }
-        Equal(0, Directory.GetFileSystemEntries(noteTemp).Length);
-    }
-    finally
-    {
-        Environment.SetEnvironmentVariable("TEMP", previousTemp);
-        Environment.SetEnvironmentVariable("TMP", previousTmp);
-    }
-    using var textId = JsonDocument.Parse("{\"id\":\"5\"}");
-    Equal(true, (await notesAdapters.First(item => item.Tool.Name == "killernotes_get").CallAsync(textId.RootElement, CancellationToken.None)).IsError);
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", null);
-    Console.WriteLine("PASS native KillerNotes adapter");
-    if (args.Contains("--notes-only", StringComparer.Ordinal)) return;
-
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", "1");
     var calendarAdapter = await KillendarAdapter.CreateAsync(Environment.ProcessPath);
     if (calendarAdapter is null)
@@ -400,377 +347,6 @@ try
     Equal(true, (await createAdapter.CallAsync(invalidAppointment.RootElement, CancellationToken.None)).IsError);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", null);
     Console.WriteLine("PASS native Killendar adapter");
-
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", "1");
-    var shellAdapters = await KillerShellAdapter.CreateAsync(Environment.ProcessPath);
-    Equal(10, shellAdapters.Count);
-    var shellByName = shellAdapters.ToDictionary(item => item.Tool.Name);
-    using var search = JsonDocument.Parse(JsonSerializer.Serialize(new { root, name = "*.txt", limit = 2 }));
-    var searchResult = await shellByName["killershell_search_files"].CallAsync(search.RootElement, CancellationToken.None);
-    Equal(false, searchResult.IsError);
-    Equal("notes.txt", Path.GetFileName(JsonDocument.Parse(searchResult.Text).RootElement.GetProperty("results")[0].GetProperty("path").GetString()));
-    using var missingSearch = JsonDocument.Parse(JsonSerializer.Serialize(new { root }));
-    Equal(true, (await shellByName["killershell_search_files"].CallAsync(missingSearch.RootElement, CancellationToken.None)).IsError);
-    using var shellPath = JsonDocument.Parse(JsonSerializer.Serialize(new { path = root }));
-    Equal("notes.txt", JsonDocument.Parse((await shellByName["killershell_list_directory"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("entries")[0].GetProperty("name").GetString());
-    Equal(false, JsonDocument.Parse((await shellByName["killershell_file_info"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("isDirectory").GetBoolean());
-    Equal("fixture text", JsonDocument.Parse((await shellByName["killershell_read_text_file"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("text").GetString());
-    using var emptyShell = JsonDocument.Parse("{}");
-    Equal("fixture", JsonDocument.Parse((await shellByName["killershell_list_processes"].CallAsync(emptyShell.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("processes")[0].GetProperty("name").GetString());
-    Equal("Fixture", JsonDocument.Parse((await shellByName["killershell_list_services"].CallAsync(emptyShell.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("services")[0].GetProperty("name").GetString());
-    using var eventArgs = JsonDocument.Parse("{\"log\":\"System\",\"limit\":1}");
-    Equal(1000, JsonDocument.Parse((await shellByName["killershell_read_event_log"].CallAsync(eventArgs.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("events")[0].GetProperty("id").GetInt32());
-    using var registryArgs = JsonDocument.Parse("{\"path\":\"HKEY_CURRENT_USER\\\\Software\",\"limit\":1}");
-    Equal("Fixture", JsonDocument.Parse((await shellByName["killershell_read_registry_key"].CallAsync(registryArgs.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("values")[0].GetProperty("name").GetString());
-    Equal("C:\\", JsonDocument.Parse((await shellByName["killershell_list_drives"].CallAsync(emptyShell.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("drives")[0].GetProperty("name").GetString());
-    Equal(64, JsonDocument.Parse((await shellByName["killershell_hash_file"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("hash").GetString()!.Length);
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", null);
-    Console.WriteLine("PASS native KillerShell adapter");
-
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", "1");
-    var scanAdapters = await KillerScanAdapter.CreateAsync(Environment.ProcessPath);
-    Equal(9, scanAdapters.Count);
-    var scanByName = scanAdapters.ToDictionary(item => item.Tool.Name);
-    using var empty = JsonDocument.Parse("{}");
-    var networkResult = await scanByName["killerscan_local_network"].CallAsync(empty.RootElement, CancellationToken.None);
-    Equal("192.0.2.10", JsonDocument.Parse(networkResult.Text).RootElement.GetProperty("localIp").GetString());
-    var scanResult = await scanByName["killerscan_scan_network"].CallAsync(empty.RootElement, CancellationToken.None);
-    Equal(2, JsonDocument.Parse(scanResult.Text).RootElement.GetArrayLength());
-    using var probe = JsonDocument.Parse("{\"target\":\"192.0.2.20\"}");
-    Equal(false, (await scanByName["killerscan_probe_host"].CallAsync(probe.RootElement, CancellationToken.None)).IsError);
-    using var vendor = JsonDocument.Parse("{\"mac\":\"00:00:0C:00:00:00\"}");
-    Equal("Cisco Systems", JsonDocument.Parse((await scanByName["killerscan_mac_vendor"].CallAsync(vendor.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("vendor").GetString());
-    using var target = JsonDocument.Parse("{\"target\":\"example.com\"}");
-    Equal(false, (await scanByName["killerscan_ping"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
-    Equal(false, (await scanByName["killerscan_trace_route"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
-    Equal(false, (await scanByName["killerscan_diagnose_host"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
-    using var targets = JsonDocument.Parse("{\"targets\":[\"192.0.2.20\"]}");
-    Equal(false, (await scanByName["killerscan_watch_hosts"].CallAsync(targets.RootElement, CancellationToken.None)).IsError);
-    Equal(false, (await scanByName["killerscan_speed_test"].CallAsync(empty.RootElement, CancellationToken.None)).IsError);
-    using var badTarget = JsonDocument.Parse("{\"target\":\"example.com\"}");
-    Equal(true, (await scanByName["killerscan_probe_host"].CallAsync(badTarget.RootElement, CancellationToken.None)).IsError);
-    // A MAC address has a fixed shape, and a vendor lookup that fails is an error even if it printed something.
-    foreach (var mac in new[] { "00:00:0C:00:00:00 /speedtest", "0x0000.0C00.0000", "00:00:0C:00:00:00:00", "zz00:0C:00:00:00:00", "00:00:0C:00:00:00\n" })
-    {
-        using var badMac = JsonDocument.Parse(JsonSerializer.Serialize(new { mac }));
-        Equal(true, (await scanByName["killerscan_mac_vendor"].CallAsync(badMac.RootElement, CancellationToken.None)).IsError);
-    }
-    foreach (var mac in new[] { "00-00-0C-00-00-00", "00000C000000", "0000.0C00.0000" })
-    {
-        using var goodMac = JsonDocument.Parse(JsonSerializer.Serialize(new { mac }));
-        Equal(false, (await scanByName["killerscan_mac_vendor"].CallAsync(goodMac.RootElement, CancellationToken.None)).IsError);
-    }
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_EXIT", "4");
-    Equal(true, (await scanByName["killerscan_mac_vendor"].CallAsync(vendor.RootElement, CancellationToken.None)).IsError);
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_EXIT", null);
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", null);
-    Console.WriteLine("PASS native KillerScan adapters");
-
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
-    var pdfAdapters = await KillerPdfAdapter.CreateAsync(Environment.ProcessPath);
-    Equal(70, pdfAdapters.Count);
-    var pdfByName = pdfAdapters.ToDictionary(item => item.Tool.Name);
-    var sourceOne = Path.Combine(root, "source-one.pdf");
-    var sourceTwo = Path.Combine(root, "source-two.pdf");
-    File.WriteAllText(sourceOne, "fixture one");
-    File.WriteAllText(sourceTwo, "fixture two");
-    async Task<AppCallResult> Pdf(string name, object arguments)
-    {
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(arguments));
-        return await pdfByName[name].CallAsync(document.RootElement, CancellationToken.None);
-    }
-    Equal(false, (await Pdf("killerpdf_preflight", new { path = sourceOne, profile = "print" })).IsError);
-    foreach (var template in new[] { "../escaped", "..\\escaped", "C:\\escaped", "sub/name", ".." })
-        Equal(true, (await Pdf("killerpdf_split", new { path = sourceOne, outputFolder = Path.Combine(root, "unsafe-split"), nameTemplate = template })).IsError);
-    Equal(false, (await Pdf("killerpdf_accessibility", new { path = sourceOne })).IsError);
-    var verified = await Pdf("killerpdf_verify_install", new { });
-    Equal(false, verified.IsError);
-    Equal(true, JsonDocument.Parse(verified.Text).RootElement.GetProperty("passed").GetBoolean());
-    Equal(true, (await Pdf("killerpdf_verify_install", new { path = sourceOne })).IsError);
-    Equal(false, (await Pdf("killerpdf_merge", new { inputs = new[] { sourceOne, sourceTwo }, output = Path.Combine(root, "merged.pdf") })).IsError);
-    Equal(false, (await Pdf("killerpdf_extract_pages", new { path = sourceOne, pages = "1", output = Path.Combine(root, "extract.pdf") })).IsError);
-    Equal(false, (await Pdf("killerpdf_split", new { path = sourceOne, outputFolder = Path.Combine(root, "split") })).IsError);
-    Equal(false, (await Pdf("killerpdf_decrypt", new { path = sourceOne, output = Path.Combine(root, "decrypted.pdf"), password = "secret" })).IsError);
-    // A KillerPDF that accepts passwords on standard input gets them there, never on its command line,
-    // where other programs and process logs can read them. Text that happens to read like a password
-    // option stays an ordinary value, and a KillerPDF without the option still gets passwords as before.
-    var argumentsLog = Path.Combine(root, "pdf-arguments.json");
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_ARGS_LOG", argumentsLog);
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS", "1");
-    try
-    {
-        var secretAdapters = (await KillerPdfAdapter.CreateAsync(Environment.ProcessPath)).ToDictionary(item => item.Tool.Name);
-        async Task<JsonElement> Logged(string tool, object arguments)
-        {
-            using var request = JsonDocument.Parse(JsonSerializer.Serialize(arguments));
-            Equal(false, (await secretAdapters[tool].CallAsync(request.RootElement, CancellationToken.None)).IsError);
-            return JsonDocument.Parse(File.ReadAllText(argumentsLog)).RootElement.Clone();
-        }
-        var decrypted = await Logged("killerpdf_decrypt", new { path = sourceOne, output = Path.Combine(root, "stdin-decrypted.pdf"), password = "s3cret é" });
-        var decryptArguments = decrypted.GetProperty("args").EnumerateArray().Select(item => item.GetString()).ToArray();
-        Equal(false, decryptArguments.Contains("s3cret é") || decryptArguments.Contains("--password"));
-        Equal(true, decryptArguments.Contains("--secrets-stdin"));
-        Equal("s3cret é", JsonDocument.Parse(decrypted.GetProperty("input").GetString()!).RootElement.GetProperty("password").GetString());
-        var protectedCopy = await Logged("killerpdf_protect", new { path = sourceOne, output = Path.Combine(root, "stdin-protected.pdf"), userPassword = "open", ownerPassword = "owner" });
-        var protectSecrets = JsonDocument.Parse(protectedCopy.GetProperty("input").GetString()!).RootElement;
-        Equal("open", protectSecrets.GetProperty("user-password").GetString());
-        Equal("owner", protectSecrets.GetProperty("owner-password").GetString());
-        Equal(false, protectedCopy.GetProperty("args").EnumerateArray().Any(item => item.GetString() is "open" or "owner"));
-        var redacted = await Logged("killerpdf_redact", new { path = sourceOne, output = Path.Combine(root, "stdin-redacted.pdf"), text = "--password" });
-        var redactArguments = redacted.GetProperty("args").EnumerateArray().Select(item => item.GetString()).ToArray();
-        Equal("--password", redactArguments[Array.IndexOf(redactArguments, "--text") + 1]);
-        Equal(false, redactArguments.Contains("--secrets-stdin"));
-        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS", null);
-        var olderAdapters = (await KillerPdfAdapter.CreateAsync(Environment.ProcessPath)).ToDictionary(item => item.Tool.Name);
-        using var olderRequest = JsonDocument.Parse(JsonSerializer.Serialize(new { path = sourceOne, output = Path.Combine(root, "older-decrypted.pdf"), password = "older" }));
-        Equal(false, (await olderAdapters["killerpdf_decrypt"].CallAsync(olderRequest.RootElement, CancellationToken.None)).IsError);
-        var olderArguments = JsonDocument.Parse(File.ReadAllText(argumentsLog)).RootElement.GetProperty("args").EnumerateArray().Select(item => item.GetString()).ToArray();
-        Equal("older", olderArguments[Array.IndexOf(olderArguments, "--password") + 1]);
-    }
-    finally
-    {
-        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_ARGS_LOG", null);
-        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS", null);
-    }
-    Equal(false, (await Pdf("killerpdf_render_pages", new { path = sourceOne, outputFolder = Path.Combine(root, "rendered"), pages = "1", dpi = 150, format = "png", transparent = true })).IsError);
-    Equal(false, (await Pdf("killerpdf_flatten", new { path = sourceOne, output = Path.Combine(root, "flattened.pdf"), dpi = 150 })).IsError);
-    Equal(false, (await Pdf("killerpdf_print", new { path = sourceOne, printer = "Fixture", pages = "1", copies = 1 })).IsError);
-    Equal(false, (await Pdf("killerpdf_ocr", new { path = sourceOne, output = Path.Combine(root, "ocr.pdf"), language = "eng" })).IsError);
-    Equal(false, (await Pdf("killerpdf_resave", new { path = sourceOne, output = Path.Combine(root, "resaved.pdf") })).IsError);
-    Equal(false, (await Pdf("killerpdf_benchmark_render", new { path = sourceOne, outputFolder = Path.Combine(root, "benchmark"), size = 1024, pageLimit = 1 })).IsError);
-    Equal(false, (await Pdf("killerpdf_rotate_pages", new { path = sourceOne, pages = "1", degrees = 90, output = Path.Combine(root, "rotated.pdf") })).IsError);
-    Equal(false, (await Pdf("killerpdf_delete_pages", new { path = sourceOne, pages = "1", output = Path.Combine(root, "deleted.pdf") })).IsError);
-    Equal(false, (await Pdf("killerpdf_move_pages", new { path = sourceOne, pages = "1", position = 1, output = Path.Combine(root, "moved.pdf") })).IsError);
-    Equal(false, (await Pdf("killerpdf_insert_blank_page", new { path = sourceOne, position = 1, width = 612, height = 792, output = Path.Combine(root, "blank.pdf") })).IsError);
-    Equal(false, (await Pdf("killerpdf_duplicate_page", new { path = sourceOne, page = 1, output = Path.Combine(root, "duplicate.pdf") })).IsError);
-    Equal(false, (await Pdf("killerpdf_document_info", new { path = sourceOne })).IsError);
-    Equal(false, (await Pdf("killerpdf_search_text", new { path = sourceOne, query = "fixture" })).IsError);
-    var attachmentFile = Path.Combine(root, "notes.txt");
-    var officeFile = Path.Combine(root, "letter.docx");
-    var dataFile = Path.Combine(root, "records.csv");
-    var formData = Path.Combine(root, "values.fdf");
-    var certificateFile = Path.Combine(root, "signer.pfx");
-    var recipientFile = Path.Combine(root, "recipient.cer");
-    var macroFile = Path.Combine(root, "macro.json");
-    foreach (var fixture in new[] { attachmentFile, officeFile, dataFile, formData, certificateFile, recipientFile, macroFile }) File.WriteAllText(fixture, "fixture");
-    foreach (var template in new[] { "../escaped", "..\\escaped", "C:\\escaped", "sub/name", ".." })
-        Equal(true, (await Pdf("killerpdf_data_merge", new { path = sourceOne, data = dataFile, outputFolder = Path.Combine(root, "unsafe-merge"), name = template })).IsError);
-    string NewPdf(string name) => Path.Combine(root, name + ".pdf");
-    Equal(false, (await Pdf("killerpdf_split", new { path = sourceOne, outputFolder = Path.Combine(root, "split-parts"), parts = 2, nameTemplate = "{name}-{index}" })).IsError);
-    Equal(false, (await Pdf("killerpdf_flatten", new { path = sourceOne, output = NewPdf("scanned-look"), colorMode = "grayscale", compression = "jpeg", jpegQuality = 70, scannedLook = "tilt,grain" })).IsError);
-    Equal(false, (await Pdf("killerpdf_optimize", new { path = sourceOne, output = NewPdf("optimized"), strip = "metadata,comments", imageDpi = 150, jpegQuality = 80 })).IsError);
-    Equal(false, (await Pdf("killerpdf_number_pages", new { path = sourceOne, output = NewPdf("numbered"), template = "Page {page} of {pages}", edge = "footer", align = "center", numberFormat = "decimal", fontSize = 10 })).IsError);
-    Equal(false, (await Pdf("killerpdf_bates", new { inputs = new[] { sourceOne, sourceTwo }, outputFolder = Path.Combine(root, "bates"), start = 1, digits = 6, prefix = "KP" })).IsError);
-    Equal(false, (await Pdf("killerpdf_booklet", new { path = sourceOne, output = NewPdf("booklet"), sheet = "letter", binding = "long", marks = true })).IsError);
-    Equal(false, (await Pdf("killerpdf_nup", new { path = sourceOne, output = NewPdf("nup"), grid = "2x2", margin = 18 })).IsError);
-    Equal(false, (await Pdf("killerpdf_auto_bookmarks", new { path = sourceOne, output = NewPdf("bookmarked"), depth = 2 })).IsError);
-    Equal(false, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-text"), language = "eng" })).IsError);
-    Equal(false, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-review"), reviewFolder = Path.Combine(root, "scan-review"), keepScanned = new[] { "1:2", "3:17" } })).IsError);
-    Equal(true, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-bad-keep"), keepScanned = new[] { "first" } })).IsError);
-    Equal(true, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-bad-review"), reviewFolder = root })).IsError);
-    Equal(false, (await Pdf("killerpdf_reverse_pages", new { path = sourceOne, output = NewPdf("reversed"), pages = "1-2" })).IsError);
-    // Checked text ends where the value ends and takes ASCII digits only.
-    Equal(true, (await Pdf("killerpdf_reverse_pages", new { path = sourceOne, output = NewPdf("reversed-newline"), pages = "1-2\n" })).IsError);
-    Equal(true, (await Pdf("killerpdf_nup", new { path = sourceOne, output = NewPdf("nup-digits"), grid = (char)0x662 + "x2" })).IsError);
-    Equal(false, (await Pdf("killerpdf_fix_orientation", new { path = sourceOne, output = NewPdf("upright") })).IsError);
-    Equal(false, (await Pdf("killerpdf_straighten", new { path = sourceOne, output = NewPdf("level") })).IsError);
-    Equal(false, (await Pdf("killerpdf_divide_spreads", new { path = sourceOne, output = NewPdf("divided"), direction = "vertical", splitAt = 0.5 })).IsError);
-    Equal(false, (await Pdf("killerpdf_rasterize_region", new { path = sourceOne, output = NewPdf("region"), page = 1, box = "72,72,300,300", dpi = 200 })).IsError);
-    foreach (var report in new[] { "killerpdf_print_production", "killerpdf_signatures", "killerpdf_layers", "killerpdf_portfolio", "killerpdf_comments", "killerpdf_navigation_audit", "killerpdf_measurements", "killerpdf_separations", "killerpdf_list_attachments", "killerpdf_recognize_fields" })
-        Equal(true, JsonDocument.Parse((await Pdf(report, new { path = sourceOne })).Text).RootElement.GetProperty("valid").GetBoolean());
-    Equal(false, (await Pdf("killerpdf_compare_structure", new { path = sourceOne, changed = sourceTwo })).IsError);
-    Equal(false, (await Pdf("killerpdf_render_separations", new { path = sourceOne, outputFolder = Path.Combine(root, "plates"), pages = "1", dpi = 72 })).IsError);
-    Equal(false, (await Pdf("killerpdf_extract_attachments", new { path = sourceOne, outputFolder = Path.Combine(root, "attachments") })).IsError);
-    Equal(false, (await Pdf("killerpdf_add_form_fields", new { path = sourceOne, output = NewPdf("fields") })).IsError);
-    Equal(false, (await Pdf("killerpdf_set_layer", new { path = sourceOne, output = NewPdf("layer"), layer = "Notes", name = "Review", visible = false, locked = true })).IsError);
-    Equal(false, (await Pdf("killerpdf_portfolio_view", new { path = sourceOne, output = NewPdf("portfolio"), view = "tile" })).IsError);
-    Equal(false, (await Pdf("killerpdf_add_attachment", new { path = sourceOne, output = NewPdf("attached"), files = new[] { attachmentFile }, relationship = "supplement" })).IsError);
-    Equal(false, (await Pdf("killerpdf_edit_attachment", new { path = sourceOne, output = NewPdf("edited-attachment"), name = "notes.txt", mime = "text/plain" })).IsError);
-    // Word characters in checked text are ASCII, and a space of any kind ends an address.
-    Equal(true, (await Pdf("killerpdf_edit_attachment", new { path = sourceOne, output = NewPdf("edited-attachment-dotted"), name = "notes.txt", mime = "text/c" + (char)0x130 })).IsError);
-    Equal(true, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed-space"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, timestampServer = "https://a" + (char)0xA0 + "b" })).IsError);
-    Equal(true, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed-bom"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, timestampServer = "https://a" + (char)0xFEFF + "b" })).IsError);
-    Equal(false, (await Pdf("killerpdf_repair_links", new { path = sourceOne, output = NewPdf("links"), @unsafe = true })).IsError);
-    Equal(false, (await Pdf("killerpdf_table_of_contents", new { path = sourceOne, output = NewPdf("contents"), title = "Contents", depth = 2 })).IsError);
-    Equal(false, (await Pdf("killerpdf_page_labels", new { path = sourceOne, output = NewPdf("labels"), ranges = "1:lower-roman,3:decimal" })).IsError);
-    Equal(false, (await Pdf("killerpdf_initial_view", new { path = sourceOne, output = NewPdf("view"), page = 1, zoom = "fit-width", layout = "single", panel = "outlines", hideToolbar = true })).IsError);
-    Equal(false, (await Pdf("killerpdf_redact", new { path = sourceOne, output = NewPdf("redacted"), terms = new[] { "Jane Doe", "555-0100" }, find = new[] { "email", "phone" }, rasterize = true })).IsError);
-    Equal(false, (await Pdf("killerpdf_protect", new { path = sourceOne, output = NewPdf("protected"), userPassword = "open", ownerPassword = "owner", allow = new[] { "print" } })).IsError);
-    Equal(false, (await Pdf("killerpdf_export", new { path = sourceOne, output = Path.Combine(root, "export.docx"), pages = "1" })).IsError);
-    Equal(false, (await Pdf("killerpdf_convert_office", new { path = officeFile, output = NewPdf("converted") })).IsError);
-    Equal(false, (await Pdf("killerpdf_data_merge", new { path = sourceOne, data = dataFile, outputFolder = Path.Combine(root, "merge"), flatten = true })).IsError);
-    Equal(false, (await Pdf("killerpdf_replace_text", new { path = sourceOne, output = NewPdf("replaced"), find = "fixture", replace = "sample", wholeWord = true })).IsError);
-    Equal(false, (await Pdf("killerpdf_export_form_data", new { path = sourceOne, output = Path.Combine(root, "values.xfdf") })).IsError);
-    Equal(false, (await Pdf("killerpdf_import_form_data", new { path = sourceOne, data = formData, output = NewPdf("filled") })).IsError);
-    Equal(false, (await Pdf("killerpdf_xfa_to_acroform", new { path = sourceOne, output = NewPdf("acroform") })).IsError);
-    Equal(false, (await Pdf("killerpdf_flatten_forms", new { path = sourceOne, output = NewPdf("flat-forms") })).IsError);
-    Equal(false, (await Pdf("killerpdf_run_macro", new { path = sourceOne, output = NewPdf("macro"), macro = "starter:privacy", terms = new[] { "secret" } })).IsError);
-    Equal(false, (await Pdf("killerpdf_run_macro", new { path = sourceOne, output = NewPdf("macro-file"), macroFile })).IsError);
-    Equal(false, (await Pdf("killerpdf_list_macros", new { })).IsError);
-    Equal(false, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, appearancePage = 1, appearanceCorner = "bottom-right" })).IsError);
-    Equal(false, (await Pdf("killerpdf_scan", new { output = NewPdf("scanned"), showSettings = false })).IsError);
-    Equal(false, (await Pdf("killerpdf_list_scanners", new { })).IsError);
-    var pictureOne = Path.Combine(root, "picture-one.png");
-    var pictureTwo = Path.Combine(root, "picture-two.jpg");
-    File.WriteAllText(pictureOne, "fixture");
-    File.WriteAllText(pictureTwo, "fixture");
-    Equal(false, (await Pdf("killerpdf_images_to_pdf", new { images = new[] { pictureOne, pictureTwo }, output = NewPdf("pictures") })).IsError);
-    Equal(true, (await Pdf("killerpdf_images_to_pdf", new { images = new[] { sourceOne }, output = NewPdf("not-pictures") })).IsError);
-    Equal(true, (await Pdf("killerpdf_export", new { path = sourceOne, output = NewPdf("export-as-pdf") })).IsError);
-    Equal(true, (await Pdf("killerpdf_redact", new { path = sourceOne, output = NewPdf("bad-redact"), find = new[] { "passport" } })).IsError);
-    Equal(true, (await Pdf("killerpdf_bates", new { inputs = new[] { Path.Combine(root, "missing.pdf") }, outputFolder = Path.Combine(root, "bad-bates") })).IsError);
-    Equal(true, (await Pdf("killerpdf_compare_structure", new { path = sourceOne, changed = Path.Combine(root, "missing.pdf") })).IsError);
-    Equal(true, (await Pdf("killerpdf_replace_text", new { path = sourceOne, output = NewPdf("bad-replace"), find = "--flatten", replace = "x" })).IsError);
-    Equal(true, (await Pdf("killerpdf_protect", new { path = sourceOne, output = NewPdf("bad-protect"), recipients = new[] { recipientFile + ",x.cer" } })).IsError);
-    Equal(true, (await Pdf("killerpdf_divide_spreads", new { path = sourceOne, output = NewPdf("bad-divide"), splitAt = 0.95 })).IsError);
-    Equal(true, (await Pdf("killerpdf_convert_office", new { path = sourceOne, output = NewPdf("bad-convert") })).IsError);
-    Equal(true, (await Pdf("killerpdf_extract_pages", new { path = sourceOne, pages = "bad", output = Path.Combine(root, "bad.pdf") })).IsError);
-    Equal(true, (await Pdf("killerpdf_extract_pages", new { path = sourceOne, pages = "1\n", output = Path.Combine(root, "bad.pdf") })).IsError);
-    Equal(true, (await Pdf("killerpdf_merge", new { inputs = new[] { sourceOne, sourceTwo }, output = Path.Combine(root, "merged.pdf") })).IsError);
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", null);
-    Console.WriteLine("PASS native KillerPDF adapters");
-
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", "1");
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", "1");
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", "1");
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", "1");
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
-    var integrationAdapters = IntegrationAdapter.Create(Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath);
-    Equal(12, integrationAdapters.Count);
-    var integrationByName = integrationAdapters.ToDictionary(item => item.Tool.Name);
-    async Task<AppCallResult> Integration(string name, object arguments)
-    {
-        using var document = JsonDocument.Parse(JsonSerializer.Serialize(arguments));
-        return await integrationByName[name].CallAsync(document.RootElement, CancellationToken.None);
-    }
-    Equal(false, (await Integration("killerscan_save_report_note", new { limit = 5 })).IsError);
-    Equal(false, (await Integration("killendar_save_agenda_note", new { date = "2026-09-28", days = 7, limit = 5 })).IsError);
-    Equal(false, (await Integration("killershell_save_directory_note", new { path = root, limit = 5 })).IsError);
-    Equal(false, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = 150 })).IsError);
-    // Arguments of the wrong kind get the tool's own message instead of an internal error.
-    Equal(true, (await Integration("killernotes_export_pdf", new { id = "1", output = Path.Combine(root, "typed.pdf") })).IsError);
-    Equal(true, (await Integration("killernotes_export_notes_pdf", new { ids = new object[] { "1" }, output = Path.Combine(root, "typed-notes.pdf") })).IsError);
-    Equal(true, (await Integration("killerscan_save_report_note", new { limit = "5" })).IsError);
-    Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = "150" })).IsError);
-    Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1;2" })).IsError);
-    // Page lists are ASCII digits only, with nothing after the last range.
-    Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1-2\n" })).IsError);
-    Equal(true, (await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = ((char)0x661).ToString() })).IsError);
-    // Hardened HTML holds no base or meta tag but its own, however the content nests, splits or
-    // encodes them. A browser starts such a tag only at a literal less-than sign and tag name.
-    var tricks = "<me<meta http-equiv=refresh content=\"0; url=file://evil/share\">ta http-equiv=\"refresh\" content=\"0; url=file://evil/nested\">"
-        + "<<meta x>meta http-equiv=refresh content=\"0; url=file://evil/joined\">"
-        + "<meta http-equiv=\"&#x72;efresh\" content=\"0; url=file://evil/encoded\">"
-        + "<meta content=\"a>b\" http-equiv=refresh>"
-        + "<svg><style><meta http-equiv=refresh content=\"0; url=file://evil/svg\"></style></svg>"
-        + "<BASE\thref=file://evil/><base/href=file://evil/><p>kept</p>";
-    var hardened = IntegrationAdapter.Harden(tricks);
-    Equal(2, System.Text.RegularExpressions.Regex.Matches(hardened, @"<(?:meta|base)(?:[\t\n\f\r />]|\z)", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Count);
-    Equal(true, hardened.Contains("<p>kept</p>", StringComparison.Ordinal));
-    // Disabled tags leave no visible markup in the page, so a report's own head stays out of its PDF.
-    Equal(false, IntegrationAdapter.Harden("<!doctype html><html><head><meta charset=\"utf-8\"><title>Report</title></head><body><p>x</p></body></html>").Contains("&lt;", StringComparison.Ordinal));
-
-    // A call cancelled while its input is written still stops the app it started.
-    if (OperatingSystem.IsWindows())
-    {
-        var pidFile = Path.Combine(root, "cancelled-input.pid");
-        using var cancelled = new CancellationTokenSource();
-        cancelled.Cancel();
-        var stopped = false;
-        try { await ProcessRunner.RunAsync("powershell.exe", ["-NoProfile", "-Command", $"$PID | Set-Content -LiteralPath '{pidFile}'; Start-Sleep -Seconds 60"], TimeSpan.FromSeconds(60), 4096, cancelled.Token, "secret"); }
-        catch (OperationCanceledException) { stopped = true; }
-        Equal(true, stopped);
-        await Task.Delay(5000);
-        if (File.Exists(pidFile))
-        {
-            var leftover = int.Parse(File.ReadAllText(pidFile).Trim(), System.Globalization.CultureInfo.InvariantCulture);
-            try
-            {
-                using var survivor = System.Diagnostics.Process.GetProcessById(leftover);
-                survivor.Kill(true);
-                throw new InvalidOperationException("A call cancelled while writing its input left its app running.");
-            }
-            catch (ArgumentException) { }
-        }
-        Console.WriteLine("PASS cancelled input stops the app");
-
-        // A host that ends stops only the app processes started to end with it, such as asking an app for
-        // its commands. A KillerBench repair running in the background keeps running, and work of that
-        // kind that starts after the host began stopping is stopped too.
-        string Sleeper(string pidPath) => $"$PID | Set-Content -LiteralPath '{pidPath}'; Start-Sleep -Seconds 30";
-        var keptPid = Path.Combine(root, "kept.pid");
-        var endedPid = Path.Combine(root, "ended.pid");
-        var kept = ProcessRunner.RunAsync("powershell.exe", ["-NoProfile", "-Command", Sleeper(keptPid)], TimeSpan.FromSeconds(60), 4096);
-        var ended = AppProcesses.StopWithHost(() => ProcessRunner.RunAsync("powershell.exe", ["-NoProfile", "-Command", Sleeper(endedPid)], TimeSpan.FromSeconds(60), 4096));
-        for (var wait = 0; wait < 60 && !(File.Exists(keptPid) && File.Exists(endedPid)); wait++) await Task.Delay(250);
-        Equal(true, File.Exists(keptPid) && File.Exists(endedPid));
-        AppProcesses.StopAll();
-        Equal(true, await Task.WhenAny(ended, Task.Delay(10000)) == ended);
-        await Task.Delay(1000);
-        Equal(false, kept.IsCompleted);
-        using (var keptProcess = System.Diagnostics.Process.GetProcessById(int.Parse(File.ReadAllText(keptPid).Trim(), System.Globalization.CultureInfo.InvariantCulture))) keptProcess.Kill(true);
-        await kept;
-        var late = AppProcesses.StopWithHost(async () => { try { return (await ProcessRunner.RunAsync("powershell.exe", ["-NoProfile", "-Command", "Start-Sleep -Seconds 30"], TimeSpan.FromSeconds(60), 4096)).ExitCode; } catch (InvalidOperationException) { return -1; } });
-        Equal(true, await Task.WhenAny(late, Task.Delay(10000)) == late);
-        Console.WriteLine("PASS a closing host stops only its own app processes");
-    }
-    // When a later page cannot be saved, the result still names the notes already created.
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_IMPORT_FAIL", "page-2");
-    var partialPages = await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1-2" });
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_IMPORT_FAIL", null);
-    Equal(true, partialPages.IsError);
-    Equal(true, partialPages.Text.Contains("\"created\"", StringComparison.Ordinal) && partialPages.Text.Contains("43", StringComparison.Ordinal));
-    Equal(42, JsonDocument.Parse((await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = "1", title = "Fixture text" })).Text).RootElement.GetProperty("id").GetInt32());
-    Equal(true, (await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = "first" })).IsError);
-    Equal(42, JsonDocument.Parse((await Integration("killerpdf_save_report_as_note", new { path = sourceOne, report = "signatures" })).Text).RootElement.GetProperty("id").GetInt32());
-    Equal(true, (await Integration("killerpdf_save_report_as_note", new { path = sourceOne, report = "everything" })).IsError);
-    Equal(true, (await Integration("killernotes_export_notes_pdf", new { ids = Array.Empty<int>(), output = Path.Combine(root, "notes.pdf") })).IsError);
-    Equal(true, (await Integration("killer_create_pdf", new { content = "report", output = "relative.pdf" })).IsError);
-
-    // A note or report turned into a PDF must not make Edge contact anything: not a server named by
-    // address, not a page a refresh or base element points at, not a frame.
-    var edgeInstalled = new[] { Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.ProgramFiles }
-        .Any(folder => File.Exists(Path.Combine(Environment.GetFolderPath(folder), "Microsoft", "Edge", "Application", "msedge.exe")));
-    if (OperatingSystem.IsWindows() && edgeInstalled)
-    {
-        var trap = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        trap.Start();
-        var trapPort = ((System.Net.IPEndPoint)trap.LocalEndpoint).Port;
-        var contacts = 0;
-        var trapLoop = Task.Run(async () =>
-        {
-            while (true)
-            {
-                try { using var trapClient = await trap.AcceptTcpClientAsync(); Interlocked.Increment(ref contacts); }
-                catch (Exception trapError) when (trapError is ObjectDisposedException or System.Net.Sockets.SocketException) { return; }
-            }
-        });
-        var trapUrl = $"http://127.0.0.1:{trapPort}";
-        var hostile = $"<!doctype html><html><head><base href=\"{trapUrl}/base/\"><META HTTP-EQUIV=\"Refresh\" CONTENT=\"0; url={trapUrl}/refresh\"></head>"
-            + $"<body><h1>Fixture note</h1><img src=\"{trapUrl}/image.png\"><img src=\"relative.png\"><iframe src=\"{trapUrl}/frame\"></iframe>"
-            + $"<link rel=\"stylesheet\" href=\"{trapUrl}/style.css\"><script>new Image().src='{trapUrl}/script'</script></body></html>";
-        var hostileNote = Path.Combine(root, "hostile-note.html");
-        File.WriteAllText(hostileNote, hostile);
-        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_HTML", hostileNote);
-        var notePdf = Path.Combine(root, "hostile-note.pdf");
-        var noteResult = await Integration("killernotes_export_pdf", new { id = 1, output = notePdf });
-        var reportPdf = Path.Combine(root, "hostile-report.pdf");
-        var reportResult = await Integration("killer_create_pdf", new { content = hostile, output = reportPdf });
-        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_HTML", null);
-        await Task.Delay(1000);
-        trap.Stop();
-        await trapLoop;
-        if (contacts != 0) throw new InvalidOperationException($"Rendering a PDF contacted a server {contacts} time(s).");
-        if (noteResult.IsError || !File.Exists(notePdf)) throw new InvalidOperationException("The note PDF was not created: " + noteResult.Text);
-        if (reportResult.IsError || !File.Exists(reportPdf)) throw new InvalidOperationException("The report PDF was not created: " + reportResult.Text);
-        Console.WriteLine("PASS PDF rendering stays offline");
-    }
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", null);
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", null);
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", null);
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", null);
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", null);
-    Console.WriteLine("PASS cross-app integration adapters");
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", "1");
     var stateDir = Path.Combine(root, "state");
@@ -970,6 +546,288 @@ try
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", null);
     Console.WriteLine("PASS native KillerBench adapters and repair guardrails");
 
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", "1");
+    var notesAdapters = await KillerNotesAdapter.CreateAsync(Environment.ProcessPath);
+    var adapter = notesAdapters.FirstOrDefault(item => item.Tool.Name == "killernotes_search");
+    if (adapter is null)
+    {
+        throw new InvalidOperationException("The KillerNotes fixture adapter was not discovered.");
+    }
+    Equal("killernotes_search", adapter.Tool.Name);
+    Equal(16, notesAdapters.Count);
+    using var valid = JsonDocument.Parse("{\"query\":\"subnet\",\"limit\":1}");
+    var result = await adapter.CallAsync(valid.RootElement, CancellationToken.None);
+    Equal(false, result.IsError);
+    Equal("Subnet plans", JsonDocument.Parse(result.Text).RootElement[0].GetProperty("title").GetString());
+    using var invalid = JsonDocument.Parse("{\"query\":\"\"}");
+    Equal(true, (await adapter.CallAsync(invalid.RootElement, CancellationToken.None)).IsError);
+    using var longNote = JsonDocument.Parse(JsonSerializer.Serialize(new { title = "Long", content = new string('x', 40000) }));
+    var longCreated = await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(longNote.RootElement, CancellationToken.None);
+    Equal(false, longCreated.IsError);
+    Equal(40000, JsonDocument.Parse(longCreated.Text).RootElement.GetProperty("characters").GetInt32());
+    using var quotedNote = JsonDocument.Parse(JsonSerializer.Serialize(new { title = "Quoted", content = new string('"', 20000) }));
+    var quotedCreated = await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(quotedNote.RootElement, CancellationToken.None);
+    Equal(false, quotedCreated.IsError);
+    Equal(20000, JsonDocument.Parse(quotedCreated.Text).RootElement.GetProperty("characters").GetInt32());
+    using var flagTitle = JsonDocument.Parse(JsonSerializer.Serialize(new { title = "--content", content = new string('x', 40000) }));
+    var flagTitleCreated = await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(flagTitle.RootElement, CancellationToken.None);
+    Equal(false, flagTitleCreated.IsError);
+    Equal(40000, JsonDocument.Parse(flagTitleCreated.Text).RootElement.GetProperty("characters").GetInt32());
+    var noteTemp = Path.Combine(root, "cancelled-note-temp");
+    Directory.CreateDirectory(noteTemp);
+    var previousTemp = Environment.GetEnvironmentVariable("TEMP");
+    var previousTmp = Environment.GetEnvironmentVariable("TMP");
+    try
+    {
+        Environment.SetEnvironmentVariable("TEMP", noteTemp);
+        Environment.SetEnvironmentVariable("TMP", noteTemp);
+        Equal(Path.GetFullPath(noteTemp), Path.TrimEndingDirectorySeparator(Path.GetTempPath()));
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        try { await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(longNote.RootElement, cancelled.Token); }
+        catch (OperationCanceledException) { }
+        Equal(0, Directory.GetFileSystemEntries(noteTemp).Length);
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("TEMP", previousTemp);
+        Environment.SetEnvironmentVariable("TMP", previousTmp);
+    }
+    using var textId = JsonDocument.Parse("{\"id\":\"5\"}");
+    Equal(true, (await notesAdapters.First(item => item.Tool.Name == "killernotes_get").CallAsync(textId.RootElement, CancellationToken.None)).IsError);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", null);
+    Console.WriteLine("PASS native KillerNotes adapter");
+    if (args.Contains("--notes-only", StringComparer.Ordinal)) return;
+
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
+    var pdfAdapters = await KillerPdfAdapter.CreateAsync(Environment.ProcessPath);
+    Equal(70, pdfAdapters.Count);
+    var pdfByName = pdfAdapters.ToDictionary(item => item.Tool.Name);
+    var sourceOne = Path.Combine(root, "source-one.pdf");
+    var sourceTwo = Path.Combine(root, "source-two.pdf");
+    File.WriteAllText(sourceOne, "fixture one");
+    File.WriteAllText(sourceTwo, "fixture two");
+    async Task<AppCallResult> Pdf(string name, object arguments)
+    {
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(arguments));
+        return await pdfByName[name].CallAsync(document.RootElement, CancellationToken.None);
+    }
+    Equal(false, (await Pdf("killerpdf_preflight", new { path = sourceOne, profile = "print" })).IsError);
+    foreach (var template in new[] { "../escaped", "..\\escaped", "C:\\escaped", "sub/name", ".." })
+        Equal(true, (await Pdf("killerpdf_split", new { path = sourceOne, outputFolder = Path.Combine(root, "unsafe-split"), nameTemplate = template })).IsError);
+    Equal(false, (await Pdf("killerpdf_accessibility", new { path = sourceOne })).IsError);
+    var verified = await Pdf("killerpdf_verify_install", new { });
+    Equal(false, verified.IsError);
+    Equal(true, JsonDocument.Parse(verified.Text).RootElement.GetProperty("passed").GetBoolean());
+    Equal(true, (await Pdf("killerpdf_verify_install", new { path = sourceOne })).IsError);
+    Equal(false, (await Pdf("killerpdf_merge", new { inputs = new[] { sourceOne, sourceTwo }, output = Path.Combine(root, "merged.pdf") })).IsError);
+    Equal(false, (await Pdf("killerpdf_extract_pages", new { path = sourceOne, pages = "1", output = Path.Combine(root, "extract.pdf") })).IsError);
+    Equal(false, (await Pdf("killerpdf_split", new { path = sourceOne, outputFolder = Path.Combine(root, "split") })).IsError);
+    Equal(false, (await Pdf("killerpdf_decrypt", new { path = sourceOne, output = Path.Combine(root, "decrypted.pdf"), password = "secret" })).IsError);
+    // A KillerPDF that accepts passwords on standard input gets them there, never on its command line,
+    // where other programs and process logs can read them. Text that happens to read like a password
+    // option stays an ordinary value, and a KillerPDF without the option still gets passwords as before.
+    var argumentsLog = Path.Combine(root, "pdf-arguments.json");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_ARGS_LOG", argumentsLog);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS", "1");
+    try
+    {
+        var secretAdapters = (await KillerPdfAdapter.CreateAsync(Environment.ProcessPath)).ToDictionary(item => item.Tool.Name);
+        async Task<JsonElement> Logged(string tool, object arguments)
+        {
+            using var request = JsonDocument.Parse(JsonSerializer.Serialize(arguments));
+            Equal(false, (await secretAdapters[tool].CallAsync(request.RootElement, CancellationToken.None)).IsError);
+            return JsonDocument.Parse(File.ReadAllText(argumentsLog)).RootElement.Clone();
+        }
+        var decrypted = await Logged("killerpdf_decrypt", new { path = sourceOne, output = Path.Combine(root, "stdin-decrypted.pdf"), password = "s3cret é" });
+        var decryptArguments = decrypted.GetProperty("args").EnumerateArray().Select(item => item.GetString()).ToArray();
+        Equal(false, decryptArguments.Contains("s3cret é") || decryptArguments.Contains("--password"));
+        Equal(true, decryptArguments.Contains("--secrets-stdin"));
+        Equal("s3cret é", JsonDocument.Parse(decrypted.GetProperty("input").GetString()!).RootElement.GetProperty("password").GetString());
+        var protectedCopy = await Logged("killerpdf_protect", new { path = sourceOne, output = Path.Combine(root, "stdin-protected.pdf"), userPassword = "open", ownerPassword = "owner" });
+        var protectSecrets = JsonDocument.Parse(protectedCopy.GetProperty("input").GetString()!).RootElement;
+        Equal("open", protectSecrets.GetProperty("user-password").GetString());
+        Equal("owner", protectSecrets.GetProperty("owner-password").GetString());
+        Equal(false, protectedCopy.GetProperty("args").EnumerateArray().Any(item => item.GetString() is "open" or "owner"));
+        var redacted = await Logged("killerpdf_redact", new { path = sourceOne, output = Path.Combine(root, "stdin-redacted.pdf"), text = "--password" });
+        var redactArguments = redacted.GetProperty("args").EnumerateArray().Select(item => item.GetString()).ToArray();
+        Equal("--password", redactArguments[Array.IndexOf(redactArguments, "--text") + 1]);
+        Equal(false, redactArguments.Contains("--secrets-stdin"));
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS", null);
+        var olderAdapters = (await KillerPdfAdapter.CreateAsync(Environment.ProcessPath)).ToDictionary(item => item.Tool.Name);
+        using var olderRequest = JsonDocument.Parse(JsonSerializer.Serialize(new { path = sourceOne, output = Path.Combine(root, "older-decrypted.pdf"), password = "older" }));
+        Equal(false, (await olderAdapters["killerpdf_decrypt"].CallAsync(olderRequest.RootElement, CancellationToken.None)).IsError);
+        var olderArguments = JsonDocument.Parse(File.ReadAllText(argumentsLog)).RootElement.GetProperty("args").EnumerateArray().Select(item => item.GetString()).ToArray();
+        Equal("older", olderArguments[Array.IndexOf(olderArguments, "--password") + 1]);
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_ARGS_LOG", null);
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS", null);
+    }
+    Equal(false, (await Pdf("killerpdf_render_pages", new { path = sourceOne, outputFolder = Path.Combine(root, "rendered"), pages = "1", dpi = 150, format = "png", transparent = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_flatten", new { path = sourceOne, output = Path.Combine(root, "flattened.pdf"), dpi = 150 })).IsError);
+    Equal(false, (await Pdf("killerpdf_print", new { path = sourceOne, printer = "Fixture", pages = "1", copies = 1 })).IsError);
+    Equal(false, (await Pdf("killerpdf_ocr", new { path = sourceOne, output = Path.Combine(root, "ocr.pdf"), language = "eng" })).IsError);
+    Equal(false, (await Pdf("killerpdf_resave", new { path = sourceOne, output = Path.Combine(root, "resaved.pdf") })).IsError);
+    Equal(false, (await Pdf("killerpdf_benchmark_render", new { path = sourceOne, outputFolder = Path.Combine(root, "benchmark"), size = 1024, pageLimit = 1 })).IsError);
+    Equal(false, (await Pdf("killerpdf_rotate_pages", new { path = sourceOne, pages = "1", degrees = 90, output = Path.Combine(root, "rotated.pdf") })).IsError);
+    Equal(false, (await Pdf("killerpdf_delete_pages", new { path = sourceOne, pages = "1", output = Path.Combine(root, "deleted.pdf") })).IsError);
+    Equal(false, (await Pdf("killerpdf_move_pages", new { path = sourceOne, pages = "1", position = 1, output = Path.Combine(root, "moved.pdf") })).IsError);
+    Equal(false, (await Pdf("killerpdf_insert_blank_page", new { path = sourceOne, position = 1, width = 612, height = 792, output = Path.Combine(root, "blank.pdf") })).IsError);
+    Equal(false, (await Pdf("killerpdf_duplicate_page", new { path = sourceOne, page = 1, output = Path.Combine(root, "duplicate.pdf") })).IsError);
+    Equal(false, (await Pdf("killerpdf_document_info", new { path = sourceOne })).IsError);
+    Equal(false, (await Pdf("killerpdf_search_text", new { path = sourceOne, query = "fixture" })).IsError);
+    var attachmentFile = Path.Combine(root, "notes.txt");
+    var officeFile = Path.Combine(root, "letter.docx");
+    var dataFile = Path.Combine(root, "records.csv");
+    var formData = Path.Combine(root, "values.fdf");
+    var certificateFile = Path.Combine(root, "signer.pfx");
+    var recipientFile = Path.Combine(root, "recipient.cer");
+    var macroFile = Path.Combine(root, "macro.json");
+    foreach (var fixture in new[] { attachmentFile, officeFile, dataFile, formData, certificateFile, recipientFile, macroFile }) File.WriteAllText(fixture, "fixture");
+    foreach (var template in new[] { "../escaped", "..\\escaped", "C:\\escaped", "sub/name", ".." })
+        Equal(true, (await Pdf("killerpdf_data_merge", new { path = sourceOne, data = dataFile, outputFolder = Path.Combine(root, "unsafe-merge"), name = template })).IsError);
+    string NewPdf(string name) => Path.Combine(root, name + ".pdf");
+    Equal(false, (await Pdf("killerpdf_split", new { path = sourceOne, outputFolder = Path.Combine(root, "split-parts"), parts = 2, nameTemplate = "{name}-{index}" })).IsError);
+    Equal(false, (await Pdf("killerpdf_flatten", new { path = sourceOne, output = NewPdf("scanned-look"), colorMode = "grayscale", compression = "jpeg", jpegQuality = 70, scannedLook = "tilt,grain" })).IsError);
+    Equal(false, (await Pdf("killerpdf_optimize", new { path = sourceOne, output = NewPdf("optimized"), strip = "metadata,comments", imageDpi = 150, jpegQuality = 80 })).IsError);
+    Equal(false, (await Pdf("killerpdf_number_pages", new { path = sourceOne, output = NewPdf("numbered"), template = "Page {page} of {pages}", edge = "footer", align = "center", numberFormat = "decimal", fontSize = 10 })).IsError);
+    Equal(false, (await Pdf("killerpdf_bates", new { inputs = new[] { sourceOne, sourceTwo }, outputFolder = Path.Combine(root, "bates"), start = 1, digits = 6, prefix = "KP" })).IsError);
+    Equal(false, (await Pdf("killerpdf_booklet", new { path = sourceOne, output = NewPdf("booklet"), sheet = "letter", binding = "long", marks = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_nup", new { path = sourceOne, output = NewPdf("nup"), grid = "2x2", margin = 18 })).IsError);
+    Equal(false, (await Pdf("killerpdf_auto_bookmarks", new { path = sourceOne, output = NewPdf("bookmarked"), depth = 2 })).IsError);
+    Equal(false, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-text"), language = "eng" })).IsError);
+    Equal(false, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-review"), reviewFolder = Path.Combine(root, "scan-review"), keepScanned = new[] { "1:2", "3:17" } })).IsError);
+    Equal(true, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-bad-keep"), keepScanned = new[] { "first" } })).IsError);
+    Equal(true, (await Pdf("killerpdf_scan_to_text", new { path = sourceOne, output = NewPdf("scan-bad-review"), reviewFolder = root })).IsError);
+    Equal(false, (await Pdf("killerpdf_reverse_pages", new { path = sourceOne, output = NewPdf("reversed"), pages = "1-2" })).IsError);
+    // Checked text ends where the value ends and takes ASCII digits only.
+    Equal(true, (await Pdf("killerpdf_reverse_pages", new { path = sourceOne, output = NewPdf("reversed-newline"), pages = "1-2\n" })).IsError);
+    Equal(true, (await Pdf("killerpdf_nup", new { path = sourceOne, output = NewPdf("nup-digits"), grid = (char)0x662 + "x2" })).IsError);
+    Equal(false, (await Pdf("killerpdf_fix_orientation", new { path = sourceOne, output = NewPdf("upright") })).IsError);
+    Equal(false, (await Pdf("killerpdf_straighten", new { path = sourceOne, output = NewPdf("level") })).IsError);
+    Equal(false, (await Pdf("killerpdf_divide_spreads", new { path = sourceOne, output = NewPdf("divided"), direction = "vertical", splitAt = 0.5 })).IsError);
+    Equal(false, (await Pdf("killerpdf_rasterize_region", new { path = sourceOne, output = NewPdf("region"), page = 1, box = "72,72,300,300", dpi = 200 })).IsError);
+    foreach (var report in new[] { "killerpdf_print_production", "killerpdf_signatures", "killerpdf_layers", "killerpdf_portfolio", "killerpdf_comments", "killerpdf_navigation_audit", "killerpdf_measurements", "killerpdf_separations", "killerpdf_list_attachments", "killerpdf_recognize_fields" })
+        Equal(true, JsonDocument.Parse((await Pdf(report, new { path = sourceOne })).Text).RootElement.GetProperty("valid").GetBoolean());
+    Equal(false, (await Pdf("killerpdf_compare_structure", new { path = sourceOne, changed = sourceTwo })).IsError);
+    Equal(false, (await Pdf("killerpdf_render_separations", new { path = sourceOne, outputFolder = Path.Combine(root, "plates"), pages = "1", dpi = 72 })).IsError);
+    Equal(false, (await Pdf("killerpdf_extract_attachments", new { path = sourceOne, outputFolder = Path.Combine(root, "attachments") })).IsError);
+    Equal(false, (await Pdf("killerpdf_add_form_fields", new { path = sourceOne, output = NewPdf("fields") })).IsError);
+    Equal(false, (await Pdf("killerpdf_set_layer", new { path = sourceOne, output = NewPdf("layer"), layer = "Notes", name = "Review", visible = false, locked = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_portfolio_view", new { path = sourceOne, output = NewPdf("portfolio"), view = "tile" })).IsError);
+    Equal(false, (await Pdf("killerpdf_add_attachment", new { path = sourceOne, output = NewPdf("attached"), files = new[] { attachmentFile }, relationship = "supplement" })).IsError);
+    Equal(false, (await Pdf("killerpdf_edit_attachment", new { path = sourceOne, output = NewPdf("edited-attachment"), name = "notes.txt", mime = "text/plain" })).IsError);
+    // Word characters in checked text are ASCII, and a space of any kind ends an address.
+    Equal(true, (await Pdf("killerpdf_edit_attachment", new { path = sourceOne, output = NewPdf("edited-attachment-dotted"), name = "notes.txt", mime = "text/c" + (char)0x130 })).IsError);
+    Equal(true, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed-space"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, timestampServer = "https://a" + (char)0xA0 + "b" })).IsError);
+    Equal(true, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed-bom"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, timestampServer = "https://a" + (char)0xFEFF + "b" })).IsError);
+    Equal(false, (await Pdf("killerpdf_repair_links", new { path = sourceOne, output = NewPdf("links"), @unsafe = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_table_of_contents", new { path = sourceOne, output = NewPdf("contents"), title = "Contents", depth = 2 })).IsError);
+    Equal(false, (await Pdf("killerpdf_page_labels", new { path = sourceOne, output = NewPdf("labels"), ranges = "1:lower-roman,3:decimal" })).IsError);
+    Equal(false, (await Pdf("killerpdf_initial_view", new { path = sourceOne, output = NewPdf("view"), page = 1, zoom = "fit-width", layout = "single", panel = "outlines", hideToolbar = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_redact", new { path = sourceOne, output = NewPdf("redacted"), terms = new[] { "Jane Doe", "555-0100" }, find = new[] { "email", "phone" }, rasterize = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_protect", new { path = sourceOne, output = NewPdf("protected"), userPassword = "open", ownerPassword = "owner", allow = new[] { "print" } })).IsError);
+    Equal(false, (await Pdf("killerpdf_export", new { path = sourceOne, output = Path.Combine(root, "export.docx"), pages = "1" })).IsError);
+    Equal(false, (await Pdf("killerpdf_convert_office", new { path = officeFile, output = NewPdf("converted") })).IsError);
+    Equal(false, (await Pdf("killerpdf_data_merge", new { path = sourceOne, data = dataFile, outputFolder = Path.Combine(root, "merge"), flatten = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_replace_text", new { path = sourceOne, output = NewPdf("replaced"), find = "fixture", replace = "sample", wholeWord = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_export_form_data", new { path = sourceOne, output = Path.Combine(root, "values.xfdf") })).IsError);
+    Equal(false, (await Pdf("killerpdf_import_form_data", new { path = sourceOne, data = formData, output = NewPdf("filled") })).IsError);
+    Equal(false, (await Pdf("killerpdf_xfa_to_acroform", new { path = sourceOne, output = NewPdf("acroform") })).IsError);
+    Equal(false, (await Pdf("killerpdf_flatten_forms", new { path = sourceOne, output = NewPdf("flat-forms") })).IsError);
+    Equal(false, (await Pdf("killerpdf_run_macro", new { path = sourceOne, output = NewPdf("macro"), macro = "starter:privacy", terms = new[] { "secret" } })).IsError);
+    Equal(false, (await Pdf("killerpdf_run_macro", new { path = sourceOne, output = NewPdf("macro-file"), macroFile })).IsError);
+    Equal(false, (await Pdf("killerpdf_list_macros", new { })).IsError);
+    Equal(false, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, appearancePage = 1, appearanceCorner = "bottom-right" })).IsError);
+    Equal(false, (await Pdf("killerpdf_scan", new { output = NewPdf("scanned"), showSettings = false })).IsError);
+    Equal(false, (await Pdf("killerpdf_list_scanners", new { })).IsError);
+    var pictureOne = Path.Combine(root, "picture-one.png");
+    var pictureTwo = Path.Combine(root, "picture-two.jpg");
+    File.WriteAllText(pictureOne, "fixture");
+    File.WriteAllText(pictureTwo, "fixture");
+    Equal(false, (await Pdf("killerpdf_images_to_pdf", new { images = new[] { pictureOne, pictureTwo }, output = NewPdf("pictures") })).IsError);
+    Equal(true, (await Pdf("killerpdf_images_to_pdf", new { images = new[] { sourceOne }, output = NewPdf("not-pictures") })).IsError);
+    Equal(true, (await Pdf("killerpdf_export", new { path = sourceOne, output = NewPdf("export-as-pdf") })).IsError);
+    Equal(true, (await Pdf("killerpdf_redact", new { path = sourceOne, output = NewPdf("bad-redact"), find = new[] { "passport" } })).IsError);
+    Equal(true, (await Pdf("killerpdf_bates", new { inputs = new[] { Path.Combine(root, "missing.pdf") }, outputFolder = Path.Combine(root, "bad-bates") })).IsError);
+    Equal(true, (await Pdf("killerpdf_compare_structure", new { path = sourceOne, changed = Path.Combine(root, "missing.pdf") })).IsError);
+    Equal(true, (await Pdf("killerpdf_replace_text", new { path = sourceOne, output = NewPdf("bad-replace"), find = "--flatten", replace = "x" })).IsError);
+    Equal(true, (await Pdf("killerpdf_protect", new { path = sourceOne, output = NewPdf("bad-protect"), recipients = new[] { recipientFile + ",x.cer" } })).IsError);
+    Equal(true, (await Pdf("killerpdf_divide_spreads", new { path = sourceOne, output = NewPdf("bad-divide"), splitAt = 0.95 })).IsError);
+    Equal(true, (await Pdf("killerpdf_convert_office", new { path = sourceOne, output = NewPdf("bad-convert") })).IsError);
+    Equal(true, (await Pdf("killerpdf_extract_pages", new { path = sourceOne, pages = "bad", output = Path.Combine(root, "bad.pdf") })).IsError);
+    Equal(true, (await Pdf("killerpdf_extract_pages", new { path = sourceOne, pages = "1\n", output = Path.Combine(root, "bad.pdf") })).IsError);
+    Equal(true, (await Pdf("killerpdf_merge", new { inputs = new[] { sourceOne, sourceTwo }, output = Path.Combine(root, "merged.pdf") })).IsError);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", null);
+    Console.WriteLine("PASS native KillerPDF adapters");
+
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", "1");
+    var scanAdapters = await KillerScanAdapter.CreateAsync(Environment.ProcessPath);
+    Equal(9, scanAdapters.Count);
+    var scanByName = scanAdapters.ToDictionary(item => item.Tool.Name);
+    using var empty = JsonDocument.Parse("{}");
+    var networkResult = await scanByName["killerscan_local_network"].CallAsync(empty.RootElement, CancellationToken.None);
+    Equal("192.0.2.10", JsonDocument.Parse(networkResult.Text).RootElement.GetProperty("localIp").GetString());
+    var scanResult = await scanByName["killerscan_scan_network"].CallAsync(empty.RootElement, CancellationToken.None);
+    Equal(2, JsonDocument.Parse(scanResult.Text).RootElement.GetArrayLength());
+    using var probe = JsonDocument.Parse("{\"target\":\"192.0.2.20\"}");
+    Equal(false, (await scanByName["killerscan_probe_host"].CallAsync(probe.RootElement, CancellationToken.None)).IsError);
+    using var vendor = JsonDocument.Parse("{\"mac\":\"00:00:0C:00:00:00\"}");
+    Equal("Cisco Systems", JsonDocument.Parse((await scanByName["killerscan_mac_vendor"].CallAsync(vendor.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("vendor").GetString());
+    using var target = JsonDocument.Parse("{\"target\":\"example.com\"}");
+    Equal(false, (await scanByName["killerscan_ping"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
+    Equal(false, (await scanByName["killerscan_trace_route"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
+    Equal(false, (await scanByName["killerscan_diagnose_host"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
+    using var targets = JsonDocument.Parse("{\"targets\":[\"192.0.2.20\"]}");
+    Equal(false, (await scanByName["killerscan_watch_hosts"].CallAsync(targets.RootElement, CancellationToken.None)).IsError);
+    Equal(false, (await scanByName["killerscan_speed_test"].CallAsync(empty.RootElement, CancellationToken.None)).IsError);
+    using var badTarget = JsonDocument.Parse("{\"target\":\"example.com\"}");
+    Equal(true, (await scanByName["killerscan_probe_host"].CallAsync(badTarget.RootElement, CancellationToken.None)).IsError);
+    // A MAC address has a fixed shape, and a vendor lookup that fails is an error even if it printed something.
+    foreach (var mac in new[] { "00:00:0C:00:00:00 /speedtest", "0x0000.0C00.0000", "00:00:0C:00:00:00:00", "zz00:0C:00:00:00:00", "00:00:0C:00:00:00\n" })
+    {
+        using var badMac = JsonDocument.Parse(JsonSerializer.Serialize(new { mac }));
+        Equal(true, (await scanByName["killerscan_mac_vendor"].CallAsync(badMac.RootElement, CancellationToken.None)).IsError);
+    }
+    foreach (var mac in new[] { "00-00-0C-00-00-00", "00000C000000", "0000.0C00.0000" })
+    {
+        using var goodMac = JsonDocument.Parse(JsonSerializer.Serialize(new { mac }));
+        Equal(false, (await scanByName["killerscan_mac_vendor"].CallAsync(goodMac.RootElement, CancellationToken.None)).IsError);
+    }
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_EXIT", "4");
+    Equal(true, (await scanByName["killerscan_mac_vendor"].CallAsync(vendor.RootElement, CancellationToken.None)).IsError);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_EXIT", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", null);
+    Console.WriteLine("PASS native KillerScan adapters");
+
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", "1");
+    var shellAdapters = await KillerShellAdapter.CreateAsync(Environment.ProcessPath);
+    Equal(10, shellAdapters.Count);
+    var shellByName = shellAdapters.ToDictionary(item => item.Tool.Name);
+    using var search = JsonDocument.Parse(JsonSerializer.Serialize(new { root, name = "*.txt", limit = 2 }));
+    var searchResult = await shellByName["killershell_search_files"].CallAsync(search.RootElement, CancellationToken.None);
+    Equal(false, searchResult.IsError);
+    Equal("notes.txt", Path.GetFileName(JsonDocument.Parse(searchResult.Text).RootElement.GetProperty("results")[0].GetProperty("path").GetString()));
+    using var missingSearch = JsonDocument.Parse(JsonSerializer.Serialize(new { root }));
+    Equal(true, (await shellByName["killershell_search_files"].CallAsync(missingSearch.RootElement, CancellationToken.None)).IsError);
+    using var shellPath = JsonDocument.Parse(JsonSerializer.Serialize(new { path = root }));
+    Equal("notes.txt", JsonDocument.Parse((await shellByName["killershell_list_directory"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("entries")[0].GetProperty("name").GetString());
+    Equal(false, JsonDocument.Parse((await shellByName["killershell_file_info"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("isDirectory").GetBoolean());
+    Equal("fixture text", JsonDocument.Parse((await shellByName["killershell_read_text_file"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("text").GetString());
+    using var emptyShell = JsonDocument.Parse("{}");
+    Equal("fixture", JsonDocument.Parse((await shellByName["killershell_list_processes"].CallAsync(emptyShell.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("processes")[0].GetProperty("name").GetString());
+    Equal("Fixture", JsonDocument.Parse((await shellByName["killershell_list_services"].CallAsync(emptyShell.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("services")[0].GetProperty("name").GetString());
+    using var eventArgs = JsonDocument.Parse("{\"log\":\"System\",\"limit\":1}");
+    Equal(1000, JsonDocument.Parse((await shellByName["killershell_read_event_log"].CallAsync(eventArgs.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("events")[0].GetProperty("id").GetInt32());
+    using var registryArgs = JsonDocument.Parse("{\"path\":\"HKEY_CURRENT_USER\\\\Software\",\"limit\":1}");
+    Equal("Fixture", JsonDocument.Parse((await shellByName["killershell_read_registry_key"].CallAsync(registryArgs.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("values")[0].GetProperty("name").GetString());
+    Equal("C:\\", JsonDocument.Parse((await shellByName["killershell_list_drives"].CallAsync(emptyShell.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("drives")[0].GetProperty("name").GetString());
+    Equal(64, JsonDocument.Parse((await shellByName["killershell_hash_file"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("hash").GetString()!.Length);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", null);
+    Console.WriteLine("PASS native KillerShell adapter");
+
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT", "1");
     var shotAdapters = await KillerShotAdapter.CreateAsync(Environment.ProcessPath);
     Equal(10, shotAdapters.Count);
@@ -1020,6 +878,149 @@ try
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT", null);
     Console.WriteLine("PASS native KillerShot adapters");
     await KillerShotReviewChecks.RunAsync(Environment.ProcessPath!, root);
+
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", "1");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", "1");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", "1");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", "1");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
+    var integrationAdapters = IntegrationAdapter.Create(Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath, Environment.ProcessPath);
+    Equal(12, integrationAdapters.Count);
+    var integrationByName = integrationAdapters.ToDictionary(item => item.Tool.Name);
+    async Task<AppCallResult> Integration(string name, object arguments)
+    {
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(arguments));
+        return await integrationByName[name].CallAsync(document.RootElement, CancellationToken.None);
+    }
+    Equal(false, (await Integration("killerscan_save_report_note", new { limit = 5 })).IsError);
+    Equal(false, (await Integration("killendar_save_agenda_note", new { date = "2026-09-28", days = 7, limit = 5 })).IsError);
+    Equal(false, (await Integration("killershell_save_directory_note", new { path = root, limit = 5 })).IsError);
+    Equal(false, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = 150 })).IsError);
+    // Arguments of the wrong kind get the tool's own message instead of an internal error.
+    Equal(true, (await Integration("killernotes_export_pdf", new { id = "1", output = Path.Combine(root, "typed.pdf") })).IsError);
+    Equal(true, (await Integration("killernotes_export_notes_pdf", new { ids = new object[] { "1" }, output = Path.Combine(root, "typed-notes.pdf") })).IsError);
+    Equal(true, (await Integration("killerscan_save_report_note", new { limit = "5" })).IsError);
+    Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = "150" })).IsError);
+    Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1;2" })).IsError);
+    // Page lists are ASCII digits only, with nothing after the last range.
+    Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1-2\n" })).IsError);
+    Equal(true, (await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = ((char)0x661).ToString() })).IsError);
+    // Hardened HTML holds no base or meta tag but its own, however the content nests, splits or
+    // encodes them. A browser starts such a tag only at a literal less-than sign and tag name.
+    var tricks = "<me<meta http-equiv=refresh content=\"0; url=file://evil/share\">ta http-equiv=\"refresh\" content=\"0; url=file://evil/nested\">"
+        + "<<meta x>meta http-equiv=refresh content=\"0; url=file://evil/joined\">"
+        + "<meta http-equiv=\"&#x72;efresh\" content=\"0; url=file://evil/encoded\">"
+        + "<meta content=\"a>b\" http-equiv=refresh>"
+        + "<svg><style><meta http-equiv=refresh content=\"0; url=file://evil/svg\"></style></svg>"
+        + "<BASE\thref=file://evil/><base/href=file://evil/><p>kept</p>";
+    var hardened = IntegrationAdapter.Harden(tricks);
+    Equal(2, System.Text.RegularExpressions.Regex.Matches(hardened, @"<(?:meta|base)(?:[\t\n\f\r />]|\z)", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Count);
+    Equal(true, hardened.Contains("<p>kept</p>", StringComparison.Ordinal));
+    // Disabled tags leave no visible markup in the page, so a report's own head stays out of its PDF.
+    Equal(false, IntegrationAdapter.Harden("<!doctype html><html><head><meta charset=\"utf-8\"><title>Report</title></head><body><p>x</p></body></html>").Contains("&lt;", StringComparison.Ordinal));
+
+    // A call cancelled while its input is written still stops the app it started.
+    if (OperatingSystem.IsWindows())
+    {
+        var pidFile = Path.Combine(root, "cancelled-input.pid");
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        var stopped = false;
+        try { await ProcessRunner.RunAsync("powershell.exe", ["-NoProfile", "-Command", $"$PID | Set-Content -LiteralPath '{pidFile}'; Start-Sleep -Seconds 60"], TimeSpan.FromSeconds(60), 4096, cancelled.Token, "secret"); }
+        catch (OperationCanceledException) { stopped = true; }
+        Equal(true, stopped);
+        await Task.Delay(5000);
+        if (File.Exists(pidFile))
+        {
+            var leftover = int.Parse(File.ReadAllText(pidFile).Trim(), System.Globalization.CultureInfo.InvariantCulture);
+            try
+            {
+                using var survivor = System.Diagnostics.Process.GetProcessById(leftover);
+                survivor.Kill(true);
+                throw new InvalidOperationException("A call cancelled while writing its input left its app running.");
+            }
+            catch (ArgumentException) { }
+        }
+        Console.WriteLine("PASS cancelled input stops the app");
+
+        // A host that ends stops only the app processes started to end with it, such as asking an app for
+        // its commands. A KillerBench repair running in the background keeps running, and work of that
+        // kind that starts after the host began stopping is stopped too.
+        string Sleeper(string pidPath) => $"$PID | Set-Content -LiteralPath '{pidPath}'; Start-Sleep -Seconds 30";
+        var keptPid = Path.Combine(root, "kept.pid");
+        var endedPid = Path.Combine(root, "ended.pid");
+        var kept = ProcessRunner.RunAsync("powershell.exe", ["-NoProfile", "-Command", Sleeper(keptPid)], TimeSpan.FromSeconds(60), 4096);
+        var ended = AppProcesses.StopWithHost(() => ProcessRunner.RunAsync("powershell.exe", ["-NoProfile", "-Command", Sleeper(endedPid)], TimeSpan.FromSeconds(60), 4096));
+        for (var wait = 0; wait < 60 && !(File.Exists(keptPid) && File.Exists(endedPid)); wait++) await Task.Delay(250);
+        Equal(true, File.Exists(keptPid) && File.Exists(endedPid));
+        AppProcesses.StopAll();
+        Equal(true, await Task.WhenAny(ended, Task.Delay(10000)) == ended);
+        await Task.Delay(1000);
+        Equal(false, kept.IsCompleted);
+        using (var keptProcess = System.Diagnostics.Process.GetProcessById(int.Parse(File.ReadAllText(keptPid).Trim(), System.Globalization.CultureInfo.InvariantCulture))) keptProcess.Kill(true);
+        await kept;
+        var late = AppProcesses.StopWithHost(async () => { try { return (await ProcessRunner.RunAsync("powershell.exe", ["-NoProfile", "-Command", "Start-Sleep -Seconds 30"], TimeSpan.FromSeconds(60), 4096)).ExitCode; } catch (InvalidOperationException) { return -1; } });
+        Equal(true, await Task.WhenAny(late, Task.Delay(10000)) == late);
+        Console.WriteLine("PASS a closing host stops only its own app processes");
+    }
+    // When a later page cannot be saved, the result still names the notes already created.
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_IMPORT_FAIL", "page-2");
+    var partialPages = await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1-2" });
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_IMPORT_FAIL", null);
+    Equal(true, partialPages.IsError);
+    Equal(true, partialPages.Text.Contains("\"created\"", StringComparison.Ordinal) && partialPages.Text.Contains("43", StringComparison.Ordinal));
+    Equal(42, JsonDocument.Parse((await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = "1", title = "Fixture text" })).Text).RootElement.GetProperty("id").GetInt32());
+    Equal(true, (await Integration("killerpdf_save_text_as_note", new { path = sourceOne, pages = "first" })).IsError);
+    Equal(42, JsonDocument.Parse((await Integration("killerpdf_save_report_as_note", new { path = sourceOne, report = "signatures" })).Text).RootElement.GetProperty("id").GetInt32());
+    Equal(true, (await Integration("killerpdf_save_report_as_note", new { path = sourceOne, report = "everything" })).IsError);
+    Equal(true, (await Integration("killernotes_export_notes_pdf", new { ids = Array.Empty<int>(), output = Path.Combine(root, "notes.pdf") })).IsError);
+    Equal(true, (await Integration("killer_create_pdf", new { content = "report", output = "relative.pdf" })).IsError);
+
+    // A note or report turned into a PDF must not make Edge contact anything: not a server named by
+    // address, not a page a refresh or base element points at, not a frame.
+    var edgeInstalled = new[] { Environment.SpecialFolder.ProgramFilesX86, Environment.SpecialFolder.ProgramFiles }
+        .Any(folder => File.Exists(Path.Combine(Environment.GetFolderPath(folder), "Microsoft", "Edge", "Application", "msedge.exe")));
+    if (OperatingSystem.IsWindows() && edgeInstalled)
+    {
+        var trap = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        trap.Start();
+        var trapPort = ((System.Net.IPEndPoint)trap.LocalEndpoint).Port;
+        var contacts = 0;
+        var trapLoop = Task.Run(async () =>
+        {
+            while (true)
+            {
+                try { using var trapClient = await trap.AcceptTcpClientAsync(); Interlocked.Increment(ref contacts); }
+                catch (Exception trapError) when (trapError is ObjectDisposedException or System.Net.Sockets.SocketException) { return; }
+            }
+        });
+        var trapUrl = $"http://127.0.0.1:{trapPort}";
+        var hostile = $"<!doctype html><html><head><base href=\"{trapUrl}/base/\"><META HTTP-EQUIV=\"Refresh\" CONTENT=\"0; url={trapUrl}/refresh\"></head>"
+            + $"<body><h1>Fixture note</h1><img src=\"{trapUrl}/image.png\"><img src=\"relative.png\"><iframe src=\"{trapUrl}/frame\"></iframe>"
+            + $"<link rel=\"stylesheet\" href=\"{trapUrl}/style.css\"><script>new Image().src='{trapUrl}/script'</script></body></html>";
+        var hostileNote = Path.Combine(root, "hostile-note.html");
+        File.WriteAllText(hostileNote, hostile);
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_HTML", hostileNote);
+        var notePdf = Path.Combine(root, "hostile-note.pdf");
+        var noteResult = await Integration("killernotes_export_pdf", new { id = 1, output = notePdf });
+        var reportPdf = Path.Combine(root, "hostile-report.pdf");
+        var reportResult = await Integration("killer_create_pdf", new { content = hostile, output = reportPdf });
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_HTML", null);
+        await Task.Delay(1000);
+        trap.Stop();
+        await trapLoop;
+        if (contacts != 0) throw new InvalidOperationException($"Rendering a PDF contacted a server {contacts} time(s).");
+        if (noteResult.IsError || !File.Exists(notePdf)) throw new InvalidOperationException("The note PDF was not created: " + noteResult.Text);
+        if (reportResult.IsError || !File.Exists(reportPdf)) throw new InvalidOperationException("The report PDF was not created: " + reportResult.Text);
+        Console.WriteLine("PASS PDF rendering stays offline");
+    }
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", null);
+    Console.WriteLine("PASS cross-app integration adapters");
+
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
     try { await PdfReviewChecks.RunAsync(Environment.ProcessPath!, root); }
     finally { Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", null); }
