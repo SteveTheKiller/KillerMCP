@@ -16,10 +16,19 @@ if ($LASTEXITCODE -ne 0) {
     git.exe -C $Repository tag -d $Tag | Out-Null
     throw "Could not push tag $Tag. The local tag was removed."
 }
+# A gh that is missing or throws counts as a failed release, so the tag is removed in that case too.
+$failed = $false
 Push-Location -LiteralPath $Repository
-try { gh release create $Tag @Assets --title "KillerMCP $Tag" --notes-file $NotesFile --verify-tag }
+try {
+    gh release create $Tag @Assets --title "KillerMCP $Tag" --notes-file $NotesFile --verify-tag
+    $failed = $LASTEXITCODE -ne 0
+}
+catch {
+    Write-Host "GitHub CLI failed: $($_.Exception.Message)"
+    $failed = $true
+}
 finally { Pop-Location }
-if ($LASTEXITCODE -ne 0) {
+if ($failed) {
     git.exe -C $Repository push origin ":refs/tags/$Tag"
     $remoteRemoved = $LASTEXITCODE -eq 0
     git.exe -C $Repository tag -d $Tag | Out-Null

@@ -125,5 +125,19 @@ finally {
     Remove-Item -Path Function:\gh -ErrorAction SilentlyContinue
 }
 Write-Output 'PASS: a failed GitHub release removes the tag it pushed.'
+
+# A gh that cannot run at all removes the tag too.
+try {
+    function global:gh { throw 'fixture: gh could not start' }
+    $published = $null
+    try { & (Join-Path $PSScriptRoot 'Publish-Release.ps1') -Repository $matched -Tag 'v0.6.0' -Assets @($notes) -NotesFile $notes } catch { $published = $_.Exception.Message }
+    if (-not $published -or $published -notlike '*removed from origin*') { throw "A GitHub CLI that could not run did not report its tag cleanup: $published`nFixture retained at $scratch" }
+    if (& git.exe -C $remote tag --list 'v0.6.0') { throw "A GitHub CLI that could not run left its tag on origin.`nFixture retained at $scratch" }
+    if (& git.exe -C $matched tag --list 'v0.6.0') { throw "A GitHub CLI that could not run left its local tag.`nFixture retained at $scratch" }
+}
+finally {
+    Remove-Item -Path Function:\gh -ErrorAction SilentlyContinue
+}
+Write-Output 'PASS: a GitHub CLI that cannot run removes the tag it pushed.'
 # A failure keeps the fixture for inspection; a pass removes it.
 Remove-Item -LiteralPath $scratch -Recurse -Force
