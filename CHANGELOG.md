@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
+- Updates install only when they are signed by the KillerMCP publisher, with every certificate in the chain checked for revocation. A file trusted by Windows but signed by someone else is refused, and an update whose check cannot finish waits for the next one.
 - Setup registers agent clients all or nothing. A conflict in one client changes none, and a failure partway puts back the clients already changed. Uninstall removes KillerMCP from every client it can and lists the ones it could not change instead of stopping.
 - Client settings that are empty or have trailing commas are read normally. A settings file with comments, such as Gemini CLI's, is left untouched and setup shows the exact entry to add.
 - PDFs made from notes, reports and agent content render fully offline. A note with a refresh, base, frame, script or remote image can no longer redirect the page, reach a server or file share, or stop the PDF from being created.

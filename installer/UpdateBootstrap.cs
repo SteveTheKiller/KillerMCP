@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Web.Script.Serialization;
 
@@ -110,10 +109,10 @@ namespace KillerMCP.Setup
             if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The release checksum does not match.");
             string path = Path.Combine(Path.GetTempPath(), "KillerMCP-Setup-" + version + "-" + Guid.NewGuid().ToString("N") + ".exe");
             File.WriteAllBytes(path, installer);
-            if (!HasTrustedSignature(path))
+            if (!KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(path))
             {
                 File.Delete(path);
-                throw new InvalidDataException("The update does not have a trusted signature.");
+                throw new InvalidDataException("The update is not signed by the KillerMCP publisher, or its signature could not be checked.");
             }
             return path;
         }
@@ -126,66 +125,5 @@ namespace KillerMCP.Setup
             return client;
         }
 
-        internal static bool HasTrustedSignature(string path)
-        {
-            var file = new WinTrustFileInfo(path);
-            IntPtr filePointer = Marshal.AllocHGlobal(Marshal.SizeOf<WinTrustFileInfo>());
-            IntPtr dataPointer = IntPtr.Zero;
-            IntPtr actionPointer = IntPtr.Zero;
-            try
-            {
-                Marshal.StructureToPtr(file, filePointer, false);
-                dataPointer = Marshal.AllocHGlobal(Marshal.SizeOf<WinTrustData>());
-                Marshal.StructureToPtr(new WinTrustData(filePointer), dataPointer, false);
-                actionPointer = Marshal.AllocHGlobal(Marshal.SizeOf<Guid>());
-                Marshal.StructureToPtr(new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE"), actionPointer, false);
-                return WinVerifyTrust(IntPtr.Zero, actionPointer, dataPointer) == 0;
-            }
-            finally
-            {
-                if (actionPointer != IntPtr.Zero) Marshal.FreeHGlobal(actionPointer);
-                if (dataPointer != IntPtr.Zero) Marshal.FreeHGlobal(dataPointer);
-                Marshal.DestroyStructure<WinTrustFileInfo>(filePointer);
-                Marshal.FreeHGlobal(filePointer);
-            }
-        }
-
-        [DllImport("wintrust.dll", ExactSpelling = true)]
-        private static extern int WinVerifyTrust(IntPtr hwnd, IntPtr actionId, IntPtr trustData);
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        private struct WinTrustFileInfo
-        {
-            public uint Size;
-            [MarshalAs(UnmanagedType.LPWStr)] public string Path;
-            public IntPtr Handle;
-            public IntPtr Subject;
-            public WinTrustFileInfo(string path) { Size = (uint)Marshal.SizeOf<WinTrustFileInfo>(); Path = path; Handle = IntPtr.Zero; Subject = IntPtr.Zero; }
-        }
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        private struct WinTrustData
-        {
-            public uint Size;
-            public IntPtr PolicyCallbackData;
-            public IntPtr SipClientData;
-            public uint UiChoice;
-            public uint RevocationChecks;
-            public uint UnionChoice;
-            public IntPtr FileInfo;
-            public uint StateAction;
-            public IntPtr StateData;
-            public IntPtr UrlReference;
-            public uint ProviderFlags;
-            public uint UiContext;
-            public WinTrustData(IntPtr file)
-            {
-                Size = (uint)Marshal.SizeOf<WinTrustData>();
-                PolicyCallbackData = IntPtr.Zero; SipClientData = IntPtr.Zero;
-                UiChoice = 2; RevocationChecks = 0; UnionChoice = 1; FileInfo = file;
-                StateAction = 0; StateData = IntPtr.Zero; UrlReference = IntPtr.Zero;
-                ProviderFlags = 0x00000010; UiContext = 0;
-            }
-        }
     }
 }

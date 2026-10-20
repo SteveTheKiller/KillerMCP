@@ -180,6 +180,26 @@ try
     Equal(1, ClientConfiguration.RemoveAll(executable, environment).Count(message => message.StartsWith("Warning: Gemini CLI", StringComparison.Ordinal)));
     Equal(true, File.ReadAllText(ConfigPath("GEMINI")).Contains("// keep this note", StringComparison.Ordinal));
     Console.WriteLine("PASS native KillerMCP client registration");
+
+    // Setup and the update window install an update only when it is signed by the KillerMCP publisher.
+    // Another publisher's trusted signature is not enough.
+    if (OperatingSystem.IsWindows())
+    {
+        var otherPublisher = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe");
+        if (File.Exists(otherPublisher))
+        {
+            var otherSigner = KillerMCP.Signing.ReleaseSignature.SignedBy(otherPublisher);
+            Equal(true, otherSigner is not null && otherSigner != KillerMCP.Signing.ReleaseSignature.Publisher);
+            Equal(false, KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(otherPublisher));
+        }
+        var unsigned = Path.Combine(root, "unsigned-setup.exe");
+        File.WriteAllText(unsigned, "not signed");
+        Equal<string?>(null, KillerMCP.Signing.ReleaseSignature.SignedBy(unsigned));
+        Equal(false, KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(unsigned));
+        var released = Environment.GetEnvironmentVariable("KILLERMCP_SIGNED_SETUP");
+        if (!string.IsNullOrWhiteSpace(released)) Equal(true, KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(released));
+        Console.WriteLine("PASS update publisher check");
+    }
 }
 finally
 {

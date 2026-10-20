@@ -421,13 +421,7 @@ namespace KillerMCP.Setup
                 && IsTrustedSetup(setup);
         }
 
-        private static bool IsTrustedSetup(string setup)
-        {
-            if (!UpdateBootstrap.HasTrustedSignature(setup)) return false;
-            using (var certificate = new X509Certificate2(X509Certificate.CreateFromSignedFile(setup)))
-                return string.Equals(certificate.GetNameInfo(X509NameType.SimpleName, false),
-                    "Open Source Developer Stephen Riley", StringComparison.Ordinal);
-        }
+        private static bool IsTrustedSetup(string setup) => KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(setup);
 
         private static void RemoveInstalledApp(string destination)
         {

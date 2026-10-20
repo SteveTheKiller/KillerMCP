@@ -4,5 +4,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/KillerMCP.Clients/KillerMCP.Clients.csproj" />
+    <Compile Include="../../installer/ReleaseSignature.cs" Link="ReleaseSignature.cs" />
   </ItemGroup>
 </Project>
