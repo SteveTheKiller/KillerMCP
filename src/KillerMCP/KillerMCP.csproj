@@ -3,7 +3,7 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>KillerMCP</AssemblyName>
     <RootNamespace>KillerMCP</RootNamespace>
-    <Version>0.7.1</Version>
+    <Version>0.7.2</Version>
     <ReleaseDate>2026-10-20</ReleaseDate>
     <ApplicationIcon>..\..\assets\KillerMCP.ico</ApplicationIcon>
   </PropertyGroup>

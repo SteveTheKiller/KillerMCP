@@ -497,7 +497,7 @@ static class ToolRegistry
     private static object Tool(string name, string description, object properties, string[] required) =>
         new { name, description, inputSchema = new { type = "object", properties, required, additionalProperties = false }, annotations = ToolSafety.For(name) };
     private static object LookupTool(string name, string description) =>
-        Tool(name, description, new { query = StringSchema(), limit = new { type = "integer", minimum = 1, maximum = 20, @default = 10 }, locale = EnumSchema("en", "bn", "cs", "de", "es", "fr", "hu", "it", "ja", "kk", "no", "pl", "pt", "ru", "tr", "uk", "vi", "zh", "zh-TW") }, ["query"]);
+        Tool(name, description, new { query = StringSchema(), limit = new { type = "integer", minimum = 1, maximum = 20, @default = 10 }, locale = EnumSchema("en", "bn", "cs", "de", "es", "fr", "hu", "it", "ja", "kk", "no", "pl", "pt", "ru", "tr", "uk", "vi", "zh", "zh-TW", "sl") }, ["query"]);
     private static object StringSchema() => new { type = "string", maxLength = 4096 };
     private static object StructuredTextSchema() => new { type = "string", minLength = 1, maxLength = 4096 };
     private static object BooleanSchema(bool defaultValue) => new { type = "boolean", @default = defaultValue };
