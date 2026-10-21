@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
-const releaseVersion = (await readFile(new URL('../src/KillerMCP/KillerMCP.csproj', import.meta.url), 'utf8')).match(/<Version>(\d+\.\d+\.\d+)<\/Version>/)[1];
+const releaseVersion = (await readFile(new URL('../KillerMCP.csproj', import.meta.url), 'utf8')).match(/<Version>(\d+\.\d+\.\d+)<\/Version>/)[1];
 const directory = process.argv[2];
 if (!directory || !isAbsolute(directory)) throw new Error('Pass an absolute native package directory');
 const executable = join(directory, process.platform === 'win32' ? 'KillerMCP.exe' : 'KillerMCP');

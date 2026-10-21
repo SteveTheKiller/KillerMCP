@@ -3,7 +3,7 @@ param([string]$Installer = '', [string]$PreviousSignedSetup = '', [string]$Previ
 $ErrorActionPreference = 'Stop'
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) { throw 'The KillerMCP Windows installer test requires Windows.' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-[xml]$hostProject = Get-Content -LiteralPath (Join-Path $root 'src\KillerMCP\KillerMCP.csproj') -Raw
+[xml]$hostProject = Get-Content -LiteralPath (Join-Path $root 'KillerMCP.csproj') -Raw
 $releaseVersion = [string]$hostProject.Project.PropertyGroup.Version
 $utf8NoBom = New-Object Text.UTF8Encoding($false)
 

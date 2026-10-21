@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using KillerMCP.Clients;
+using KillerMCP.Configuration;
 
 var fakeCodexState = Environment.GetEnvironmentVariable("KILLERMCP_FAKE_CODEX_STATE");
 if (!string.IsNullOrWhiteSpace(fakeCodexState))

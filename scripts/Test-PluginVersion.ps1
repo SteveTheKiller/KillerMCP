@@ -3,7 +3,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-[xml]$project = Get-Content -LiteralPath (Join-Path $Root 'src\KillerMCP\KillerMCP.csproj') -Raw
+[xml]$project = Get-Content -LiteralPath (Join-Path $Root 'KillerMCP.csproj') -Raw
 $appVersion = [string]$project.Project.PropertyGroup.Version
 if ($appVersion -notmatch '^\d+\.\d+\.\d+$') {
     throw 'KillerMCP.csproj must contain an x.y.z version.'
@@ -19,8 +19,8 @@ if ([string]$plugin.author.name -cne 'Steve the Killer') {
 # so every shipped project has to carry the same release number.
 $projects = @{
     'installer\KillerMCP.Setup.csproj' = @{ Version = $appVersion; AssemblyVersion = "$appVersion.0"; FileVersion = "$appVersion.0" }
-    'src\KillerMCP.Configure\KillerMCP.Configure.csproj' = @{ Version = $appVersion }
-    'src\KillerMCP.Notify\KillerMCP.Notify.csproj' = @{ Version = $appVersion }
+    'Configuration\KillerMCP.Configure.csproj' = @{ Version = $appVersion }
+    'Shell\KillerMCP.Notify.csproj' = @{ Version = $appVersion }
 }
 foreach ($entry in $projects.GetEnumerator()) {
     [xml]$other = Get-Content -LiteralPath (Join-Path $Root $entry.Key) -Raw

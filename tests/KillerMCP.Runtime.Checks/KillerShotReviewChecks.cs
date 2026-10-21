@@ -1,4 +1,4 @@
-using KillerMCP.Runtime;
+using KillerMCP;
 using System.Text.Json;
 
 public static class KillerShotReviewChecks

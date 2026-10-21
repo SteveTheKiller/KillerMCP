@@ -15,14 +15,14 @@ if (Test-Path -LiteralPath $staging) {
 }
 New-Item -ItemType Directory -Path $staging -Force | Out-Null
 
-dotnet publish (Join-Path $root 'src\KillerMCP\KillerMCP.csproj') -c Release -r $RuntimeIdentifier --self-contained false `
+dotnet publish (Join-Path $root 'KillerMCP.csproj') -c Release -r $RuntimeIdentifier --self-contained false `
     -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o $staging
 if ($LASTEXITCODE -ne 0) { throw 'Native KillerMCP publish failed.' }
-dotnet publish (Join-Path $root 'src\KillerMCP.Configure\KillerMCP.Configure.csproj') -c Release -r $RuntimeIdentifier --self-contained false `
+dotnet publish (Join-Path $root 'Configuration\KillerMCP.Configure.csproj') -c Release -r $RuntimeIdentifier --self-contained false `
     -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o $staging
 if ($LASTEXITCODE -ne 0) { throw 'Native KillerMCP configurator publish failed.' }
 if ($RuntimeIdentifier.StartsWith('win-', [StringComparison]::Ordinal)) {
-    dotnet publish (Join-Path $root 'src\KillerMCP.Notify\KillerMCP.Notify.csproj') -c Release -r $RuntimeIdentifier --self-contained false `
+    dotnet publish (Join-Path $root 'Shell\KillerMCP.Notify.csproj') -c Release -r $RuntimeIdentifier --self-contained false `
         -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o $staging
     if ($LASTEXITCODE -ne 0) { throw 'KillerMCP update notifier publish failed.' }
 }

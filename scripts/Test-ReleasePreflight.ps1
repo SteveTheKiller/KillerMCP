@@ -34,7 +34,7 @@ Git $seed @('init', '--initial-branch=main', '--quiet')
 Git $seed @('config', 'user.name', $authorName)
 Git $seed @('config', 'user.email', $authorEmail)
 Copy-Item -LiteralPath (Join-Path $repository 'release.ps1') -Destination (Join-Path $seed 'release.ps1')
-FixtureFile (Join-Path $seed 'src\KillerMCP\KillerMCP.csproj') '<Project><PropertyGroup><Version>0.6.0</Version><ReleaseDate>2026-10-20</ReleaseDate></PropertyGroup></Project>'
+FixtureFile (Join-Path $seed 'KillerMCP.csproj') '<Project><PropertyGroup><Version>0.6.0</Version><ReleaseDate>2026-10-20</ReleaseDate></PropertyGroup></Project>'
 FixtureFile (Join-Path $seed 'scripts\Test-PluginVersion.ps1') "Write-Output 'Fixture plugin check'"
 FixtureFile (Join-Path $seed 'CHANGELOG.md') '## [0.6.0] - 2026-10-20'
 # Store submission is deferred; even an unavailable Store must not block the build.

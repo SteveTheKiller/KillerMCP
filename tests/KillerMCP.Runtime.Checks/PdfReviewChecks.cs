@@ -1,5 +1,5 @@
 using System.Text.Json;
-using KillerMCP.Runtime;
+using KillerMCP;
 
 internal static class PdfReviewChecks
 {

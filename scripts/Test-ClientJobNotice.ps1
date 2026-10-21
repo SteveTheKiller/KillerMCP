@@ -5,7 +5,7 @@ param([string]$HostPath = '')
 $ErrorActionPreference = 'Stop'
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) { throw 'The client job notice test requires Windows.' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$mcpHost = if ($HostPath) { [IO.Path]::GetFullPath($HostPath) } else { Join-Path $root 'src\KillerMCP\bin\Release\net10.0\KillerMCP.exe' }
+$mcpHost = if ($HostPath) { [IO.Path]::GetFullPath($HostPath) } else { Join-Path $root 'bin\Release\net10.0\KillerMCP.exe' }
 if (-not (Test-Path -LiteralPath $mcpHost -PathType Leaf)) { throw "The KillerMCP host is missing at $mcpHost. Build the solution first." }
 . (Join-Path $PSScriptRoot 'ClientJob.ps1')
 

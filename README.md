@@ -58,6 +58,20 @@ git clone --recurse-submodules https://github.com/SteveTheKiller/KillerMCP.git
 cd KillerMCP
 ```
 
+Open `KillerMCP.slnx` at the repository root. The main app project, `KillerMCP.csproj`, includes the repository's source, assets, scripts, tests and documentation in Solution Explorer.
+
+| Folder | Contents |
+| --- | --- |
+| `Features` | Tools, browser companion, app integrations and cross-app workflows |
+| `Services` | MCP requests, app discovery, processes, logging, safety and updates |
+| `Models` | Tool contracts and request errors |
+| `Configuration` | Client registration and the `KillerMCP.Configure` command-line helper |
+| `Shell` | Windows tray, update window and repair confirmation |
+| `installer` | Windows setup and uninstall |
+| `dependencies/KillerTools` | Pinned source for the shared KillerTools engine |
+
+See [Architecture](docs/ARCHITECTURE.md) for the project and request flow. To add the app to an existing Visual Studio solution, add `KillerMCP.csproj` and `dependencies/KillerTools/src/KillerTools.Engine/KillerTools.Engine.csproj`. Visual Studio needs the referenced engine project loaded for package restore.
+
 Build and test the native host:
 
 ```powershell

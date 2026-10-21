@@ -13,7 +13,7 @@ choco install killermcp
 
 App tools appear only for the Killer apps that are installed. Your organization may block local MCP servers on managed computers.
 
-The plugin version matches the KillerMCP app release version. Native packaging and release checks stop if the plugin version differs from `src/KillerMCP/KillerMCP.csproj` or its public author is not Steve the Killer. The hosted Killer Tools plugin is versioned separately.
+The plugin version matches the KillerMCP app release version. Native packaging and release checks stop if the plugin version differs from `KillerMCP.csproj` or its public author is not Steve the Killer. The hosted Killer Tools plugin is versioned separately.
 
 ## What the plugin runs
 

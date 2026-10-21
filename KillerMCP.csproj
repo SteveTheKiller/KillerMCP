@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>KillerMCP</AssemblyName>
+    <RootNamespace>KillerMCP</RootNamespace>
+    <Version>0.8.0</Version>
+    <ReleaseDate>2026-10-20</ReleaseDate>
+    <ApplicationIcon>assets\KillerMCP.ico</ApplicationIcon>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**\bin\**;**\obj\**;artifacts\**;dist\**;**\node_modules\**;**\.git</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Configuration\**;Shell\**;installer\**;tests\**;dependencies\**" />
+    <!-- Separate programs and the shared engine remain browsable from the root project. -->
+    <None Include="Configuration\**\*.cs;Shell\**\*.cs;installer\**\*.cs;tests\**\*.cs;dependencies\**\*.cs;**\*.resx" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)" />
+    <None Remove="Features\Browser\browser-companion.html" />
+    <EmbeddedResource Include="Features\Browser\browser-companion.html" LogicalName="KillerMCP.browser-companion.html" />
+    <ProjectReference Include="dependencies\KillerTools\src\KillerTools.Engine\KillerTools.Engine.csproj" />
+    <InternalsVisibleTo Include="KillerMCP.Runtime.Checks" />
+  </ItemGroup>
+</Project>
