@@ -17,15 +17,23 @@ internal static class AppCatalog
         // tools/list and tools/call wait for this; the list keeps the same app order as before.
         return Task.Run<IReadOnlyList<AppAdapter>>(async () =>
         {
+            var scanLoad = LoadApp("KillerScan", () => KillerScanAdapter.CreateAsync(killerScanPath));
             var loads = await Task.WhenAll(
                 LoadApp("KillerNotes", () => KillerNotesAdapter.CreateAsync(killerNotesPath)),
                 LoadApp("Killendar", async () => new[] { await KillendarAdapter.CreateAsync(killendarPath), await KillendarAdapter.CreateAppointmentAsync(killendarPath) }.OfType<AppAdapter>().ToList()),
                 LoadApp("KillerShell", () => KillerShellAdapter.CreateAsync(killerShellPath)),
-                LoadApp("KillerScan", () => KillerScanAdapter.CreateAsync(killerScanPath)),
+                scanLoad,
                 LoadApp("KillerPDF", () => KillerPdfAdapter.CreateAsync(killerPdfPath)),
                 LoadApp("KillerBench", () => KillerBenchAdapter.CreateAsync(killerBenchPath, killerNotesPath)),
                 LoadApp("KillerShot", () => KillerShotAdapter.CreateAsync(killerShotPath)),
-                LoadApp("cross-app tools", () => Task.FromResult<IReadOnlyList<AppAdapter>>(IntegrationAdapter.Create(killerNotesPath, killendarPath, killerShellPath, killerScanPath, killerPdfPath)))).ConfigureAwait(false);
+                LoadApp("cross-app tools", async () =>
+                {
+                    // Scan reports need the same KillerScan commands a direct scan uses, so they are offered
+                    // only when KillerScan's scan and network tools were found.
+                    var scanTools = (await scanLoad.ConfigureAwait(false)).Select(adapter => adapter.Tool.Name).ToHashSet(StringComparer.Ordinal);
+                    var scanPath = scanTools.Contains("killerscan_scan_network") && scanTools.Contains("killerscan_local_network") ? killerScanPath : null;
+                    return IntegrationAdapter.Create(killerNotesPath, killendarPath, killerShellPath, scanPath, killerPdfPath);
+                })).ConfigureAwait(false);
             foreach (var list in loads) appAdapters.AddRange(list);
             return appAdapters;
         });

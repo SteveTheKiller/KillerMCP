@@ -478,7 +478,9 @@ assert.equal(JSON.parse(benchRepairs.content[0].text).repairLevel, 'off');
 const network = await request('tools/call', { name: 'killerscan_local_network', arguments: {} });
 assert.equal(JSON.parse(network.content[0].text).localIp, '192.0.2.10');
 const scan = await request('tools/call', { name: 'killerscan_scan_network', arguments: {} });
-assert.equal(JSON.parse(scan.content[0].text)[0].IpAddress, '192.0.2.10');
+const scanned = JSON.parse(scan.content[0].text);
+assert.equal(scanned.target, '192.0.2.0/24');
+assert.equal(scanned.devices[0].IpAddress, '192.0.2.10');
 const preflight = await request('tools/call', { name: 'killerpdf_preflight', arguments: { path: pdfSourceOne, profile: 'print' } });
 assert.equal(JSON.parse(preflight.content[0].text).valid, true);
 // Opening a file on a server sends the user's Windows sign-in to it, so servers outside the local

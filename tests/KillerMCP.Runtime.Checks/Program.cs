@@ -84,12 +84,15 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     var arguments = Environment.GetCommandLineArgs().Skip(1).ToArray();
     if (arguments.SequenceEqual(["/help"]) && Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN") == "1")
     {
-        Console.WriteLine("/network /scan [targets] /probe <IPv4> /vendor <MAC> /ping <target> /trace <target> /diagnose <target> /watch <targets> /speedtest");
+        // KillerScan 1.8.2 and later list commands by name; earlier versions list the slash forms.
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_HELP_STYLE") == "modern")
+            Console.WriteLine("KillerScan command line\n  killerscan scan [targets]        scan one or several CIDRs, hosts, or ranges\n  killerscan uiscan [targets]      open the interface and begin scanning\n  killerscan probe <IPv4>          deep-probe one host, including ports 1-1024\n  killerscan network               show the detected interface, subnet, gateway, and DNS\n  killerscan vendor <MAC>          look up a MAC address in the offline OUI database\n  killerscan ping <target>         send a bounded set of ICMP checks\n  killerscan trace <target>        trace the network path to an IPv4 target\n  killerscan diagnose <target>     check DNS, ping, route, and TCP ports\n  killerscan watch <targets>       sample up to 16 IPv4 targets for availability\n  killerscan speedtest             run the native KillerSpeed test\n  killerscan version               print the version             /help  show this text");
+        else Console.WriteLine("/network /scan [targets] /probe <IPv4> /vendor <MAC> /ping <target> /trace <target> /diagnose <target> /watch <targets> /speedtest");
         return;
     }
     if (arguments.SequenceEqual(["/network"]))
     {
-        Console.WriteLine("INTERFACE  Ethernet\nLOCAL IP  192.0.2.10\nSUBNET  192.0.2.0/24\nGATEWAY  192.0.2.1\nDNS  192.0.2.53");
+        Console.WriteLine($"INTERFACE  Ethernet\nLOCAL IP   192.0.2.10\nSUBNET     {Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_SUBNET") ?? "192.0.2.0/24"}\nGATEWAY    192.0.2.1\nDNS        192.0.2.53");
         return;
     }
     if (arguments.Length >= 2 && arguments[0] == "/vendor")
@@ -100,6 +103,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     }
     if (arguments.Length > 0 && arguments[0] == "/scan")
     {
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG") is { Length: > 0 } scanLog) File.WriteAllText(scanLog, string.Join(" ", arguments));
         Console.Write("[{\"IpAddress\":\"192.0.2.10\",\"Hostname\":\"workstation.example\",\"MacAddress\":\"00:11:22:33:44:55\",\"Vendor\":\"Example Devices\",\"DeviceType\":\"Computer\",\"OpenPortsDisplay\":\"80, 443\"},{\"IpAddress\":\"192.0.2.1\",\"Hostname\":\"gateway.example\",\"MacAddress\":\"00:11:22:33:44:01\",\"Vendor\":\"Example Networks\",\"DeviceType\":\"Router\",\"OpenPortsDisplay\":\"443\"}]");
         return;
     }
@@ -830,8 +834,49 @@ try
     using var empty = JsonDocument.Parse("{}");
     var networkResult = await scanByName["killerscan_local_network"].CallAsync(empty.RootElement, CancellationToken.None);
     Equal("192.0.2.10", JsonDocument.Parse(networkResult.Text).RootElement.GetProperty("localIp").GetString());
+    // An omitted target is the detected local network, held to the same 1,024 addresses as a given one,
+    // and the result names the range that was scanned.
+    var scanLog = Path.Combine(root, "scan-args.txt");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG", scanLog);
     var scanResult = await scanByName["killerscan_scan_network"].CallAsync(empty.RootElement, CancellationToken.None);
-    Equal(2, JsonDocument.Parse(scanResult.Text).RootElement.GetArrayLength());
+    var scanned = JsonDocument.Parse(scanResult.Text).RootElement;
+    Equal(2, scanned.GetProperty("devices").GetArrayLength());
+    Equal("192.0.2.0/24", scanned.GetProperty("target").GetString());
+    // KillerScan skips the network and broadcast addresses below /31, so a /24 probes 254.
+    Equal(254, scanned.GetProperty("addresses").GetInt32());
+    Equal(true, File.ReadAllText(scanLog).StartsWith("/scan 192.0.2.0/24 ", StringComparison.Ordinal));
+    File.Delete(scanLog);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_SUBNET", "10.0.0.0/22");
+    Equal(1022, JsonDocument.Parse((await scanByName["killerscan_scan_network"].CallAsync(empty.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("addresses").GetInt32());
+    File.Delete(scanLog);
+    foreach (var wide in new[] { "10.0.0.0/21", "10.0.0.0/16" })
+    {
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_SUBNET", wide);
+        var refusedScan = await scanByName["killerscan_scan_network"].CallAsync(empty.RootElement, CancellationToken.None);
+        Equal(true, refusedScan.IsError);
+        Equal(true, refusedScan.Text.Contains(wide, StringComparison.Ordinal));
+        Equal(false, File.Exists(scanLog));
+    }
+    using var wideTarget = JsonDocument.Parse("{\"target\":\"10.0.0.0/21\"}");
+    Equal(true, (await scanByName["killerscan_scan_network"].CallAsync(wideTarget.RootElement, CancellationToken.None)).IsError);
+    // Shorthand such as 192.168.1 reads as a different address, so only four dotted numbers are a target.
+    foreach (var shorthand in new[] { "192.168.1/24", "192.168.1", "10/24", "0x0a.0.0.1/24", "192.168.001.0/24", "192.168.1.0/24 " })
+    {
+        using var shorthandTarget = JsonDocument.Parse(JsonSerializer.Serialize(new { target = shorthand }));
+        Equal(true, (await scanByName["killerscan_scan_network"].CallAsync(shorthandTarget.RootElement, CancellationToken.None)).IsError);
+    }
+    using var pointToPoint = JsonDocument.Parse("{\"target\":\"192.0.2.4/31\"}");
+    Equal(2, JsonDocument.Parse((await scanByName["killerscan_scan_network"].CallAsync(pointToPoint.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("addresses").GetInt32());
+    using var givenTarget = JsonDocument.Parse("{\"target\":\"198.51.100.7\"}");
+    var given = JsonDocument.Parse((await scanByName["killerscan_scan_network"].CallAsync(givenTarget.RootElement, CancellationToken.None)).Text).RootElement;
+    Equal("198.51.100.7", given.GetProperty("target").GetString());
+    Equal(1, given.GetProperty("addresses").GetInt32());
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_SUBNET", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG", null);
+    // KillerScan's current help lists commands by name, and every tool is still found.
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_HELP_STYLE", "modern");
+    Equal(9, (await KillerScanAdapter.CreateAsync(Environment.ProcessPath)).Count);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_HELP_STYLE", null);
     using var probe = JsonDocument.Parse("{\"target\":\"192.0.2.20\"}");
     Equal(false, (await scanByName["killerscan_probe_host"].CallAsync(probe.RootElement, CancellationToken.None)).IsError);
     using var vendor = JsonDocument.Parse("{\"mac\":\"00:00:0C:00:00:00\"}");
@@ -952,7 +997,22 @@ try
         using var document = JsonDocument.Parse(JsonSerializer.Serialize(arguments));
         return await integrationByName[name].CallAsync(document.RootElement, CancellationToken.None);
     }
+    // Scan reports follow the same scope rule as a direct scan, given a target or not.
+    var reportScanLog = Path.Combine(root, "report-scan-args.txt");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG", reportScanLog);
     Equal(false, (await Integration("killerscan_save_report_note", new { limit = 5 })).IsError);
+    Equal(true, File.ReadAllText(reportScanLog).StartsWith("/scan 192.0.2.0/24 ", StringComparison.Ordinal));
+    Equal(false, (await Integration("killerscan_save_report_note", new { target = "192.0.2.0/24", limit = 5 })).IsError);
+    Equal(true, File.ReadAllText(reportScanLog).StartsWith("/scan 192.0.2.0/24 ", StringComparison.Ordinal));
+    File.Delete(reportScanLog);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_SUBNET", "10.0.0.0/16");
+    Equal(true, (await Integration("killerscan_save_report_note", new { limit = 5 })).IsError);
+    Equal(true, (await Integration("killerscan_export_report_pdf", new { output = Path.Combine(root, "wide-scan.pdf") })).IsError);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_SUBNET", null);
+    Equal(true, (await Integration("killerscan_save_report_note", new { target = "192.168.1/24" })).IsError);
+    Equal(false, File.Exists(reportScanLog));
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_SUBNET", null);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG", null);
     Equal(false, (await Integration("killendar_save_agenda_note", new { date = "2026-09-28", days = 7, limit = 5 })).IsError);
     Equal(false, (await Integration("killershell_save_directory_note", new { path = root, limit = 5 })).IsError);
     Equal(false, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = 150 })).IsError);

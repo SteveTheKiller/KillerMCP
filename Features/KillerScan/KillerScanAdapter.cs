@@ -14,15 +14,17 @@ public static partial class KillerScanAdapter
         var help = await Run(path!, ["/help"], 8, 65536, cancellationToken).ConfigureAwait(false);
         if (help.ExitCode != 0) return [];
         var adapters = new List<AppAdapter>();
-        Add(help, "/network", adapters, Tool("killerscan_local_network", "Use KillerScan to identify the active local IPv4 network, interface, gateway, and DNS server without scanning hosts.", EmptySchema()), (input, token) => Network(path!, input, token));
-        Add(help, "/scan [targets]", adapters, Tool("killerscan_scan_network", "Scan the active local IPv4 network, an IPv4 host, or a CIDR with KillerScan and return discovered devices as JSON. Omit target for requests such as \"killerscan my network\". Runs quick discovery by default; set full for fingerprinting and port checks. Scanning sends network probes.", ScanSchema()), (input, token) => Scan(path!, input, token));
-        Add(help, "/probe <IPv4>", adapters, Tool("killerscan_probe_host", "Deep probe one IPv4 host with KillerScan, including ports 1 through 1024, and return its device details as JSON. Probing sends network traffic to the selected host.", ProbeSchema()), (input, token) => Probe(path!, input, token));
-        Add(help, "/vendor <MAC>", adapters, Tool("killerscan_mac_vendor", "Look up the manufacturer of a MAC address in KillerScan's bundled offline OUI database.", VendorSchema()), (input, token) => Vendor(path!, input, token));
-        Add(help, "/ping <target>", adapters, Tool("killerscan_ping", "Send a bounded set of ICMP checks to one IPv4 address or hostname with KillerScan and return latency and packet loss as JSON.", TargetIntegerSchema("count", 1, 20, 4)), (input, token) => Ping(path!, input, token));
-        Add(help, "/trace <target>", adapters, Tool("killerscan_trace_route", "Trace the network path to one IPv4 address or hostname with KillerScan and return up to 64 hops as JSON.", TargetIntegerSchema("maxHops", 1, 64, 30)), (input, token) => Trace(path!, input, token));
-        Add(help, "/diagnose <target>", adapters, Tool("killerscan_diagnose_host", "Check DNS, ping, route selection, and selected TCP ports for one IPv4 address or hostname with KillerScan.", DiagnoseSchema()), (input, token) => Diagnose(path!, input, token));
-        Add(help, "/watch <targets>", adapters, Tool("killerscan_watch_hosts", "Sample availability and latency for 1 to 16 IPv4 addresses with KillerScan. Sends repeated ICMP checks for the requested bounded interval.", WatchSchema()), (input, token) => Watch(path!, input, token));
-        Add(help, "/speedtest", adapters, Tool("killerscan_speed_test", "Run KillerScan's native KillerSpeed test. This contacts speed.killerscan.net and can transfer up to 6 GiB of generated test data plus network overhead.", EmptySchema()), (input, token) => JsonCommand(path!, input, [], ["/speedtest", "/json"], 120, _ => null, token));
+        // KillerScan 1.8.2 and later list commands by name in their help and still accept the slash forms
+        // this adapter sends; earlier versions list the slash forms.
+        Add(help, ["/network", "killerscan network "], adapters, Tool("killerscan_local_network", "Use KillerScan to identify the active local IPv4 network, interface, gateway, and DNS server without scanning hosts.", EmptySchema()), (input, token) => Network(path!, input, token));
+        Add(help, ["/scan [targets]", "killerscan scan [targets]"], adapters, Tool("killerscan_scan_network", "Scan the active local IPv4 network, an IPv4 host, or a CIDR of at most 1,024 addresses with KillerScan and return the scanned range, its address count and the discovered devices as JSON. Omit target for requests such as \"killerscan my network\"; a local network larger than 1,024 addresses needs a target inside it. Runs quick discovery by default; set full for fingerprinting and port checks. Scanning sends network probes.", ScanSchema()), (input, token) => Scan(path!, input, token));
+        Add(help, ["/probe <IPv4>", "killerscan probe <IPv4>"], adapters, Tool("killerscan_probe_host", "Deep probe one IPv4 host with KillerScan, including ports 1 through 1024, and return its device details as JSON. Probing sends network traffic to the selected host.", ProbeSchema()), (input, token) => Probe(path!, input, token));
+        Add(help, ["/vendor <MAC>", "killerscan vendor <MAC>"], adapters, Tool("killerscan_mac_vendor", "Look up the manufacturer of a MAC address in KillerScan's bundled offline OUI database.", VendorSchema()), (input, token) => Vendor(path!, input, token));
+        Add(help, ["/ping <target>", "killerscan ping <target>"], adapters, Tool("killerscan_ping", "Send a bounded set of ICMP checks to one IPv4 address or hostname with KillerScan and return latency and packet loss as JSON.", TargetIntegerSchema("count", 1, 20, 4)), (input, token) => Ping(path!, input, token));
+        Add(help, ["/trace <target>", "killerscan trace <target>"], adapters, Tool("killerscan_trace_route", "Trace the network path to one IPv4 address or hostname with KillerScan and return up to 64 hops as JSON.", TargetIntegerSchema("maxHops", 1, 64, 30)), (input, token) => Trace(path!, input, token));
+        Add(help, ["/diagnose <target>", "killerscan diagnose <target>"], adapters, Tool("killerscan_diagnose_host", "Check DNS, ping, route selection, and selected TCP ports for one IPv4 address or hostname with KillerScan.", DiagnoseSchema()), (input, token) => Diagnose(path!, input, token));
+        Add(help, ["/watch <targets>", "killerscan watch <targets>"], adapters, Tool("killerscan_watch_hosts", "Sample availability and latency for 1 to 16 IPv4 addresses with KillerScan. Sends repeated ICMP checks for the requested bounded interval.", WatchSchema()), (input, token) => Watch(path!, input, token));
+        Add(help, ["/speedtest", "killerscan speedtest "], adapters, Tool("killerscan_speed_test", "Run KillerScan's native KillerSpeed test. This contacts speed.killerscan.net and can transfer up to 6 GiB of generated test data plus network overhead.", EmptySchema()), (input, token) => JsonCommand(path!, input, [], ["/speedtest", "/json"], 120, _ => null, token));
         return adapters;
     }
 
@@ -41,21 +43,69 @@ public static partial class KillerScanAdapter
         return result.Count == labels.Count ? Ok(result.ToJsonString()) : Error("KillerScan returned an incomplete network response");
     }
 
-    private static Task<AppCallResult> Scan(string path, JsonElement input, CancellationToken token)
+    private static async Task<AppCallResult> Scan(string path, JsonElement input, CancellationToken token)
     {
-        if (!ObjectWith(input, "target", "full", "limit")) return Task.FromResult(Error("Expected scan arguments"));
+        if (!ObjectWith(input, "target", "full", "limit")) return Error("Expected scan arguments");
         string? target = null;
         if (input.TryGetProperty("target", out var targetValue))
         {
-            if (targetValue.ValueKind != JsonValueKind.String || !ValidScanTarget(targetValue.GetString()!, out target)) return Task.FromResult(Error("Target must be an IPv4 host or CIDR with at most 1024 addresses"));
+            if (targetValue.ValueKind != JsonValueKind.String) return Error("Target must be an IPv4 host or CIDR with at most 1024 addresses");
+            target = targetValue.GetString();
         }
-        if (!OptionalBoolean(input, "full", out var full)) return Task.FromResult(Error("Full must be true or false"));
-        if (!OptionalInteger(input, "limit", 1, 100, 100, out var limit)) return Task.FromResult(Error("Limit must be between 1 and 100"));
-        var args = new List<string> { "/scan" };
-        if (target is not null) args.Add(target);
-        args.AddRange(["/json", "/timeout", "60", "/limit", limit.ToString()]);
+        if (!OptionalBoolean(input, "full", out var full)) return Error("Full must be true or false");
+        if (!OptionalInteger(input, "limit", 1, 100, 100, out var limit)) return Error("Limit must be between 1 and 100");
+        var (scope, problem) = await ResolveScopeAsync(path, target, token).ConfigureAwait(false);
+        if (scope is null) return Error(problem!);
+        var devices = await JsonArray(path, ScanArguments(scope, full, limit), 70, 100, "scan", token).ConfigureAwait(false);
+        if (devices.IsError) return devices;
+        return Ok(new JsonObject { ["target"] = scope.Target, ["addresses"] = scope.Addresses, ["devices"] = JsonNode.Parse(devices.Text) }.ToJsonString());
+    }
+
+    /// <summary>The range a scan will cover and how many addresses that is.</summary>
+    public sealed record ScanScope(string Target, long Addresses);
+
+    /// <summary>KillerMCP never asks KillerScan to probe more addresses than this in one scan.</summary>
+    public const long MaximumScanAddresses = 1024;
+
+    /// <summary>
+    /// Settles what a scan covers before anything is probed. A given target is an IPv4 host or CIDR. With no
+    /// target, KillerScan reports the active local network, and that range is passed on explicitly so KillerScan
+    /// never picks a larger one itself. Either way a range above <see cref="MaximumScanAddresses"/> is refused.
+    /// Direct scans and scan reports both use this.
+    /// </summary>
+    public static async Task<(ScanScope? Scope, string? Error)> ResolveScopeAsync(string path, string? target, CancellationToken token)
+    {
+        if (target is not null) return Scope(target, out var given) ? (given, null) : (null, "Target must be an IPv4 host or CIDR written as four dotted numbers, such as 192.168.1.0/24, covering at most 1024 addresses");
+        var response = await Run(path, ["/network"], 15, 8192, token).ConfigureAwait(false);
+        var subnet = response.ExitCode != 0 ? null : response.StandardOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => NetworkLine().Match(line)).Where(match => match.Success && match.Groups[1].Value == "SUBNET").Select(match => match.Groups[2].Value.Trim()).FirstOrDefault();
+        if (subnet is null) return (null, "KillerScan did not report an active local network. Give a target to scan.");
+        if (!Scope(subnet, out var local))
+            return (null, $"The local network {subnet} is larger than the 1,024 addresses KillerMCP scans at once. Give a target inside it, such as one /24.");
+        return (local, null);
+    }
+
+    public static List<string> ScanArguments(ScanScope scope, bool full, int limit)
+    {
+        var args = new List<string> { "/scan", scope.Target, "/json", "/timeout", "60", "/limit", limit.ToString() };
         if (!full) args.Add("/quick");
-        return JsonArray(path, args, 70, 100, "scan", token);
+        return args;
+    }
+
+    private static bool Scope(string value, out ScanScope? scope)
+    {
+        scope = null;
+        var parts = value.Split('/');
+        if (value.Length > 43 || parts.Length > 2 || !IsIpv4(parts[0])) return false;
+        if (parts.Length == 1) { scope = new ScanScope(parts[0], 1); return true; }
+        if (!int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var prefix) || prefix > 32) return false;
+        // KillerScan probes every address of a /31 or /32 but skips the network and broadcast addresses of anything larger.
+        var addresses = prefix >= 31 ? 1L << (32 - prefix) : (1L << (32 - prefix)) - 2;
+        if (addresses > MaximumScanAddresses) return false;
+        var bytes = IPAddress.Parse(parts[0]).GetAddressBytes();
+        var number = (uint)(bytes[0] << 24 | bytes[1] << 16 | bytes[2] << 8 | bytes[3]) & (prefix == 0 ? 0u : uint.MaxValue << (32 - prefix));
+        scope = new ScanScope($"{number >> 24}.{(number >> 16) & 255}.{(number >> 8) & 255}.{number & 255}/{prefix}", addresses);
+        return true;
     }
 
     private static Task<AppCallResult> Probe(string path, JsonElement input, CancellationToken token)
@@ -141,7 +191,7 @@ public static partial class KillerScanAdapter
     }
 
     private static Task<ProcessResult> Run(string path, IEnumerable<string> args, int seconds, int maximum, CancellationToken token) => ProcessRunner.RunAsync(path, args, TimeSpan.FromSeconds(seconds), maximum, token);
-    private static void Add(ProcessResult help, string marker, List<AppAdapter> adapters, RuntimeTool tool, Func<JsonElement, CancellationToken, Task<AppCallResult>> call) { if (help.StandardOutput.Contains(marker, StringComparison.Ordinal)) adapters.Add(new AppAdapter(tool, call)); }
+    private static void Add(ProcessResult help, string[] markers, List<AppAdapter> adapters, RuntimeTool tool, Func<JsonElement, CancellationToken, Task<AppCallResult>> call) { if (markers.Any(marker => help.StandardOutput.Contains(marker, StringComparison.Ordinal))) adapters.Add(new AppAdapter(tool, call)); }
     private static RuntimeTool Tool(string name, string description, JsonObject schema) => new(name, description, schema);
     private static bool ObjectWith(JsonElement input, params string[] allowed) => input.ValueKind == JsonValueKind.Object && input.EnumerateObject().All(property => allowed.Contains(property.Name, StringComparer.Ordinal));
     private static bool RequiredString(JsonElement input, string name, out string? value) { value = null; return input.TryGetProperty(name, out var element) && element.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(value = element.GetString()); }
@@ -149,9 +199,10 @@ public static partial class KillerScanAdapter
     private static bool OptionalInteger(JsonElement input, string name, int min, int max, int defaultValue, out int value) { value = defaultValue; return !input.TryGetProperty(name, out var element) || (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out value) && value >= min && value <= max); }
     [System.Text.RegularExpressions.GeneratedRegex(@"^(?:[0-9A-Fa-f]{2}([:-]?)(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}|[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4})\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
     private static partial System.Text.RegularExpressions.Regex MacAddress();
-    private static bool IsIpv4(string value) => IPAddress.TryParse(value, out var address) && address.AddressFamily == AddressFamily.InterNetwork;
+    // Four dotted decimal numbers only. IPAddress.TryParse also reads shorthand such as 192.168.1 as 192.168.0.1,
+    // which would quietly target an address nobody typed; KillerScan refuses it for the same reason.
+    private static bool IsIpv4(string value) => DottedQuad().IsMatch(value) && IPAddress.TryParse(value, out var address) && address.AddressFamily == AddressFamily.InterNetwork;
     private static bool ValidTarget(string value) => value.Length is > 0 and <= 253 && (IsIpv4(value) || Hostname().IsMatch(value));
-    private static bool ValidScanTarget(string value, out string? target) { target = value; var parts = value.Split('/'); return value.Length <= 43 && parts.Length <= 2 && IsIpv4(parts[0]) && (parts.Length == 1 || int.TryParse(parts[1], out var prefix) && prefix is >= 22 and <= 32); }
     private static bool IsFile(string? path) { try { return !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path) && File.Exists(path); } catch { return false; } }
     private static AppCallResult Ok(string text) => new(text);
     private static AppCallResult Error(string text) => new(text, true);
@@ -168,5 +219,6 @@ public static partial class KillerScanAdapter
     private static JsonObject Integer(int min, int max, int? defaultValue = null) { var value = new JsonObject { ["type"] = "integer", ["minimum"] = min, ["maximum"] = max }; if (defaultValue.HasValue) value["default"] = defaultValue.Value; return value; }
 
     [GeneratedRegex("^(INTERFACE|LOCAL IP|SUBNET|GATEWAY|DNS)\\s{2,}(.+)$", RegexOptions.CultureInvariant)] private static partial Regex NetworkLine();
+    [GeneratedRegex("^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?:\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}\\z", RegexOptions.CultureInvariant)] private static partial Regex DottedQuad();
     [GeneratedRegex("^(?=.{1,253}\\z)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\z", RegexOptions.CultureInvariant)] private static partial Regex Hostname();
 }

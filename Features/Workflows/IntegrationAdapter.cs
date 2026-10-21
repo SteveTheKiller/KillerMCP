@@ -60,9 +60,9 @@ public static partial class IntegrationAdapter
         if (!ScanInput(input, true, out var target, out var full, out var limit, out var output, out _)) return Error("Provide valid scan options and a new absolute PDF output path");
         var json = await Scan(scan, target, full, limit, token).ConfigureAwait(false);
         if (json.Error is not null) return json.Error;
-        var rendered = await RenderPdf(ScanReport(json.Root, target), output!, token).ConfigureAwait(false);
+        var rendered = await RenderPdf(ScanReport(json.Root, json.Target), output!, token).ConfigureAwait(false);
         if (rendered.IsError) return rendered;
-        return Ok(JsonSerializer.Serialize(new { output, target = ScanScope(target), devices = Rows(json.Root).Length }));
+        return Ok(JsonSerializer.Serialize(new { output, target = json.Target, devices = Rows(json.Root).Length }));
     }
 
     private static async Task<AppCallResult> ScanNote(string scan, string notes, JsonElement input, CancellationToken token)
@@ -70,7 +70,7 @@ public static partial class IntegrationAdapter
         if (!ScanInput(input, false, out var target, out var full, out var limit, out _, out var group)) return Error("Provide valid scan options");
         var json = await Scan(scan, target, full, limit, token).ConfigureAwait(false);
         if (json.Error is not null) return json.Error;
-        return await CreateNote(notes, "KillerScan network report", MarkdownScanReport(json.Root, target), group, token).ConfigureAwait(false);
+        return await CreateNote(notes, "KillerScan network report", MarkdownScanReport(json.Root, json.Target), group, token).ConfigureAwait(false);
     }
 
     private static async Task<AppCallResult> AgendaPdf(string calendar, JsonElement input, CancellationToken token)
@@ -237,13 +237,13 @@ public static partial class IntegrationAdapter
         finally { Delete(temp); }
     }
 
-    private static async Task<(JsonElement Root, AppCallResult? Error)> Scan(string path, string? target, bool full, int limit, CancellationToken token)
+    // A report scans exactly what a direct scan would: the same scope rule, settled before any probe.
+    private static async Task<(JsonElement Root, AppCallResult? Error, string Target)> Scan(string path, string? target, bool full, int limit, CancellationToken token)
     {
-        var args = new List<string> { "/scan" };
-        if (!string.IsNullOrWhiteSpace(target)) args.Add(target!);
-        args.AddRange(["/json", "/timeout", "60", "/limit", limit.ToString()]);
-        if (!full) args.Add("/quick");
-        return await JsonCommand(path, args, "KillerScan", 90, token).ConfigureAwait(false);
+        var (scope, problem) = await KillerScanAdapter.ResolveScopeAsync(path, string.IsNullOrWhiteSpace(target) ? null : target, token).ConfigureAwait(false);
+        if (scope is null) return (default, Error(problem!), string.Empty);
+        var (root, error) = await JsonCommand(path, KillerScanAdapter.ScanArguments(scope, full, limit), "KillerScan", 90, token).ConfigureAwait(false);
+        return (root, error, scope.Target);
     }
 
     private static Task<(JsonElement Root, AppCallResult? Error)> Agenda(string path, string date, int days, int limit, CancellationToken token) => JsonCommand(path, ["agenda", date, days.ToString(), "--limit", limit.ToString()], "Killendar", 30, token);
