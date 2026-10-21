@@ -237,7 +237,7 @@ public static partial class KillerBenchAdapter
                 {
                     ["action"] = definition.Name,
                     ["title"] = definition.Title,
-                    ["tier"] = definition.Tier is null ? "depends on the selected recipes" : TierName(definition.Tier.Value),
+                    ["tier"] = TierName(definition.Tier),
                     ["effects"] = definition.Effects,
                     ["options"] = new JsonArray(definition.Options.Select(option => (JsonNode)JsonValue.Create(option)!).ToArray()),
                     ["recoverable"] = KillerBenchRepairs.CanRecover(definition.Name),
@@ -252,14 +252,6 @@ public static partial class KillerBenchAdapter
                 ["actions"] = catalog,
                 ["neverThroughMcp"] = new JsonArray(KillerBenchRepairs.NeverThroughMcp.Select(item => (JsonNode)JsonValue.Create(item)!).ToArray()),
             };
-            var recipes = await Recipes(token).ConfigureAwait(false);
-            if (recipes is { ValueKind: JsonValueKind.Array } list)
-            {
-                result["recipes"] = new JsonArray(list.EnumerateArray()
-                    .Where(recipe => recipe.TryGetProperty("canAutoExecute", out var auto) && auto.ValueKind == JsonValueKind.True)
-                    .Select(recipe => (JsonNode)new JsonObject { ["id"] = recipe.GetProperty("id").GetString(), ["title"] = recipe.TryGetProperty("title", out var title) ? title.GetString() : null })
-                    .ToArray());
-            }
             return Ok(result.ToJsonString());
         }
 
@@ -503,7 +495,7 @@ public static partial class KillerBenchAdapter
             using var empty = JsonDocument.Parse("{}");
             var options = input.TryGetProperty("options", out var value) ? value : empty.RootElement;
             if (options.ValueKind != JsonValueKind.Object) return (null, "options must be an object");
-            return await definition.Build(options, Recipes, token).ConfigureAwait(false);
+            return await definition.Build(options, token).ConfigureAwait(false);
         }
 
         private string? Permission(KillerBenchRepairPlan plan, KillerBenchRepairLevel level)
@@ -573,12 +565,6 @@ public static partial class KillerBenchAdapter
             // Finished jobs and unused previews are also kept to a fixed number, oldest dropped first.
             foreach (var item in jobs.Where(item => item.Value.Work.IsCompleted).OrderByDescending(item => item.Value.Started).Skip(RetainedJobs).ToArray()) jobs.TryRemove(item.Key, out _);
             foreach (var item in tickets.OrderByDescending(item => item.Value.Issued).Skip(RetainedTickets).ToArray()) tickets.TryRemove(item.Key, out _);
-        }
-
-        private async Task<JsonElement?> Recipes(CancellationToken token)
-        {
-            var result = await Run(["recipes"], 60, token).ConfigureAwait(false);
-            return result["data"] is JsonArray array ? JsonDocument.Parse(array.ToJsonString()).RootElement.Clone() : null;
         }
 
         private async Task<JsonObject> Run(IReadOnlyList<string> args, int seconds, CancellationToken token) => Parse(await Direct(args, seconds, token).ConfigureAwait(false));

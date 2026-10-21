@@ -28,10 +28,10 @@ public sealed record KillerBenchRepairPlan(
 internal sealed record RepairDefinition(
     string Name,
     string Title,
-    KillerBenchTier? Tier,
+    KillerBenchTier Tier,
     string Effects,
     string[] Options,
-    Func<JsonElement, Func<CancellationToken, Task<JsonElement?>>, CancellationToken, Task<(KillerBenchRepairPlan? Plan, string? Error)>> Build);
+    Func<JsonElement, CancellationToken, Task<(KillerBenchRepairPlan? Plan, string? Error)>> Build);
 
 /// <summary>
 /// The only KillerBench changes an MCP client can request. Anything not listed here, including BitLocker,
@@ -110,18 +110,6 @@ internal static partial class KillerBenchRepairs
         "computer rename",
     ];
 
-    private static readonly string[] AutoTierAContracts =
-    [
-        "ExactServiceState", "DeliveryOptimizationState", "DhcpAdapterState", "DnsLookupState",
-        "PausedQueueState", "PrinterOfflineState", "TimeSynchronizationState", "DefenderSignatureFreshness",
-    ];
-
-    private static readonly string[] AutoTierBContracts =
-    [
-        "ServicingHealth", "ComponentCleanupRecommendation", "WmiRepositoryConsistency",
-        "WindowsRecoveryEnvironmentState", "PrintSpoolDirectoryState",
-    ];
-
     private static readonly Dictionary<string, string> CleanupTargets = new(StringComparer.Ordinal)
     {
         ["user_temp"] = "--user-temp",
@@ -182,9 +170,6 @@ internal static partial class KillerBenchRepairs
                 if (!Journal(input, "journal", out var journal)) return Fail("journal must be an existing verified journal under %LOCALAPPDATA%\\KillerBench");
                 return (["privacy-setting-undo", key!, journal!], ["privacy-setting-recover", key!], key!, null);
             }),
-        new("recipe_repair", "Run selected KillerBench repair recipes", null,
-            "Runs a full diagnosis limited to the selected recipes, then repairs only what fresh evidence proves. Service recipes are safe tier; servicing, WMI, recovery environment, component cleanup and spool directory recipes are the disruptive tier.",
-            ["recipes"], RecipePlan),
         Simple("system_image_repair", "Repair Windows with DISM or SFC", KillerBenchTier.B,
             "DISM can replace component-store content and download repair files from configured sources. SFC replaces damaged protected files. Both can take a long time, and a restart may be needed.",
             ["tool"], input => Optional(input, "tool") is "dism" or "sfc" ? (["repair", Optional(input, "tool")!], null, Optional(input, "tool")!.ToUpperInvariant(), 10800) : Fail("tool must be dism or sfc")),
@@ -267,12 +252,12 @@ internal static partial class KillerBenchRepairs
 
     public static RepairDefinition? Find(string? name) => Catalog.FirstOrDefault(definition => string.Equals(definition.Name, name, StringComparison.Ordinal));
 
-    public static bool CanRecover(string name) => name is not ("printer_repair" or "recipe_repair" or "system_image_repair" or "time_configure" or "cleanup");
+    public static bool CanRecover(string name) => name is not ("printer_repair" or "system_image_repair" or "time_configure" or "cleanup");
 
-    public static IEnumerable<string> RecoverCapable() => Catalog.Where(definition => definition.Name is not ("printer_repair" or "recipe_repair" or "system_image_repair" or "time_configure" or "cleanup")).Select(definition => definition.Name);
+    public static IEnumerable<string> RecoverCapable() => Catalog.Where(definition => CanRecover(definition.Name)).Select(definition => definition.Name);
 
     private static RepairDefinition Simple(string name, string title, KillerBenchTier tier, string effects, string[] options, Func<JsonElement, (string[]? Preview, string[]? Recover, string? Target, int? Seconds)> build) =>
-        new(name, title, tier, effects, options, (input, _, _) =>
+        new(name, title, tier, effects, options, (input, _) =>
         {
             if (!Allowed(input, options)) return Task.FromResult<(KillerBenchRepairPlan?, string?)>((null, "Unknown option. Allowed options: " + (options.Length == 0 ? "none" : string.Join(", ", options))));
             var (preview, recover, target, seconds) = build(input);
@@ -282,51 +267,9 @@ internal static partial class KillerBenchRepairs
 
     private static (string[]? Preview, string[]? Recover, string? Target, int? Seconds) Fail(string message) => (null, null, message, null);
 
-    private static async Task<(KillerBenchRepairPlan? Plan, string? Error)> RecipePlan(JsonElement input, Func<CancellationToken, Task<JsonElement?>> recipes, CancellationToken token)
-    {
-        if (!Allowed(input, "recipes") || !input.TryGetProperty("recipes", out var requested) || requested.ValueKind != JsonValueKind.Array || requested.GetArrayLength() is < 1 or > 8)
-        {
-            return (null, "recipes must list 1 to 8 recipe IDs from killerbench_repair_actions");
-        }
-        var ids = new List<string>();
-        foreach (var item in requested.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.String || !RecipeId().IsMatch(item.GetString()!)) return (null, "Recipe IDs look like windows.print-spooler");
-            if (!ids.Contains(item.GetString()!)) ids.Add(item.GetString()!);
-        }
-        var catalog = await recipes(token).ConfigureAwait(false);
-        if (catalog is not { ValueKind: JsonValueKind.Array } list) return (null, "KillerBench did not return its recipe catalog");
-        var byId = list.EnumerateArray().Where(recipe => recipe.TryGetProperty("id", out _)).ToDictionary(recipe => recipe.GetProperty("id").GetString()!, StringComparer.Ordinal);
-        var tier = KillerBenchTier.A;
-        var titles = new List<string>();
-        var effects = new List<string>();
-        var pending = new Queue<string>(ids);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        while (pending.TryDequeue(out var id))
-        {
-            if (!seen.Add(id)) continue;
-            if (!byId.TryGetValue(id, out var recipe)) return (null, "Unknown recipe: " + id);
-            var contract = Text(recipe, "recoveryContract");
-            if (!Bool(recipe, "canAutoExecute") || Bool(recipe, "requiresExplicitOptions") || Bool(recipe, "diagnosticOnly")) return (null, $"{id} needs its own dedicated action and cannot run as a recipe repair");
-            if (AutoTierBContracts.Contains(contract)) tier = KillerBenchTier.B;
-            else if (!AutoTierAContracts.Contains(contract)) return (null, $"{id} is not available through KillerMCP");
-            if (ids.Contains(id)) titles.Add(Text(recipe, "title") ?? id);
-            if (Text(recipe, "effects") is { Length: > 0 } effect) effects.Add(effect);
-            if (recipe.TryGetProperty("dependencies", out var dependencies) && dependencies.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var dependency in dependencies.EnumerateArray().Where(value => value.ValueKind == JsonValueKind.String)) pending.Enqueue(dependency.GetString()!);
-            }
-        }
-        var joined = string.Join(",", ids);
-        return (new KillerBenchRepairPlan("recipe_repair", "Run selected KillerBench repair recipes", tier, string.Join(" ", effects.Distinct()), string.Join(", ", titles),
-            ["full-scan", "--recipes", joined, "--json"], ["full-scan", "--recipes", joined, "--auto-repair", "--json"], null, 3900, 14400), null);
-    }
-
     internal static bool Allowed(JsonElement input, params string[] names) => input.ValueKind == JsonValueKind.Object && input.EnumerateObject().All(property => names.Contains(property.Name, StringComparer.Ordinal));
     internal static string? Optional(JsonElement input, string name) => input.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
     private static bool Flag(JsonElement input, string name) => input.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
-    private static string? Text(JsonElement element, string name) => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-    private static bool Bool(JsonElement element, string name) => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
 
     internal static bool Integer(JsonElement input, string name, int minimum, int maximum, out int value, int? fallback = null)
     {
@@ -435,7 +378,6 @@ internal static partial class KillerBenchRepairs
     [GeneratedRegex("^[a-z0-9][a-z0-9-]{0,63}\\z", RegexOptions.CultureInvariant)] private static partial Regex PrivacyKey();
     [GeneratedRegex("^[A-Za-z]:?\\z", RegexOptions.CultureInvariant)] private static partial Regex DriveLetter();
     [GeneratedRegex("^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}:[0-9]{1,6}\\z", RegexOptions.CultureInvariant)] private static partial Regex UpdateIdentity();
-    [GeneratedRegex("^[a-z0-9]+(?:[.-][a-z0-9]+){1,8}\\z", RegexOptions.CultureInvariant)] private static partial Regex RecipeId();
     [GeneratedRegex("^[A-Za-z0-9 ._,()'+-]+\\z", RegexOptions.CultureInvariant)] private static partial Regex PlainText();
     [GeneratedRegex("^[A-Za-z]:\\\\[A-Za-z0-9 ._()'+\\\\-]+\\z", RegexOptions.CultureInvariant)] private static partial Regex PlainPath();
 }

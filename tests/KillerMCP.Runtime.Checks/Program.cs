@@ -464,9 +464,11 @@ try
     await Bench("killerbench_repair_execute", new { token = expiring.GetProperty("token").GetString() }, true);
 
     Equal(false, Finished(await Bench("killerbench_repair_preview", new { action = "system_image_repair", options = new { tool = "dism" } })).GetProperty("canExecute").GetBoolean());
-    Equal("safe", Finished(await Bench("killerbench_repair_preview", new { action = "recipe_repair", options = new { recipes = new[] { "printing.spooler" } } })).GetProperty("tier").GetString());
-    Equal("disruptive", Finished(await Bench("killerbench_repair_preview", new { action = "recipe_repair", options = new { recipes = new[] { "windows.component-store" } } })).GetProperty("tier").GetString());
-    await Bench("killerbench_repair_preview", new { action = "recipe_repair", options = new { recipes = new[] { "unknown.recipe" } } }, true);
+    // KillerBench refuses full-scan --auto-repair by design, so recipe repairs are not offered at all.
+    await Bench("killerbench_repair_preview", new { action = "recipe_repair", options = new { recipes = new[] { "printing.spooler" } } }, true);
+    var listedRepairs = await Bench("killerbench_repair_actions", new { });
+    Equal(false, listedRepairs.GetProperty("actions").EnumerateArray().Any(item => item.GetProperty("action").GetString() == "recipe_repair"));
+    Equal(false, listedRepairs.TryGetProperty("recipes", out _));
 
     KillerBenchSettings.WriteLevel(KillerBenchRepairLevel.All);
     var dism = Finished(await Bench("killerbench_repair_preview", new { action = "system_image_repair", options = new { tool = "dism" } }));
@@ -583,6 +585,11 @@ try
     Equal(false, (await FreshBench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } })).GetProperty("canExecute").GetBoolean());
     Equal(true, KillerBenchSettings.ReadLock() is not null);
     File.Delete(KillerBenchSettings.LockPath);
+    // A folder in the lock file's place also locks repairs, and the reason names it, because the KillerBench
+    // About window only clears a lock file.
+    Directory.CreateDirectory(KillerBenchSettings.LockPath);
+    Equal(true, KillerBenchSettings.ReadLock()!.Reason.Contains(KillerBenchSettings.LockPath, StringComparison.Ordinal));
+    Directory.Delete(KillerBenchSettings.LockPath);
 
     // Turning repairs off while the desktop approval is open stops the repair, even when it is then approved.
     approve = true;

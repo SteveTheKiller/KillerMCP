@@ -122,13 +122,20 @@ public static class KillerBenchSettings
     {
         try
         {
-            if (!File.Exists(LockPath) && !Directory.Exists(LockPath)) return null;
+            // File.Exists answers false when it cannot look, so the lock is probed directly and only a lock that
+            // is certainly absent counts as none.
+            if ((File.GetAttributes(LockPath) & FileAttributes.Directory) != 0)
+                return new RepairLock("unknown", $"a folder is where the repair lock file belongs. Delete the folder {LockPath} to clear it", DateTimeOffset.UtcNow, null, "An earlier repair");
             var file = new FileInfo(LockPath);
-            if (file.Exists && file.Length <= FileLimit
+            if (file.Length <= FileLimit
                 && JsonSerializer.Deserialize<RepairLock>(File.ReadAllText(LockPath)) is { Action.Length: > 0, Reason.Length: > 0 } repairLock)
                 return repairLock;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
         {
         }
         return new RepairLock("unknown", "the repair lock file could not be read", DateTimeOffset.UtcNow, null, "An earlier repair");

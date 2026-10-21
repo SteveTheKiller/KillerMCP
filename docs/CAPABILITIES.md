@@ -253,9 +253,11 @@ Repairs are off by default. The user turns them on in the KillerMCP section of t
 - **Allow KillerMCP to run safe repairs** allows the safe repairs below.
 - **Also allow disruptive repairs** adds the disruptive repairs, and each one still needs approval on the desktop. It is available only when safe repairs are allowed.
 
-Safe repairs renew missing or expired DHCP leases, flush the DNS cache for one failing hostname, resume paused printer queues and clear offline mode, cancel one stuck print job, repair a missing default printer, create a System Restore point, change or undo one privacy setting for the current account, and run service, Delivery Optimization, DHCP, DNS, print queue, Windows Time and Defender signature recipes.
+Safe repairs renew missing or expired DHCP leases, flush the DNS cache for one failing hostname, clear offline mode on printer queues, cancel one stuck print job, repair a missing default printer, create a System Restore point, and change or undo one privacy setting for the current account.
 
-Disruptive repairs run DISM or SFC, install selected Windows updates, reset the Windows Update data store, optimize one volume, rebuild the Windows Search index, turn on firewall profiles, run a Defender scan, retry one background transfer, change the Windows Time source, permanently remove selected temporary files and caches, and run servicing, component cleanup, WMI, recovery environment and print spool directory recipes.
+Disruptive repairs run DISM or SFC, install selected Windows updates, reset the Windows Update data store, optimize one volume, rebuild the Windows Search index, turn on firewall profiles, run a Defender scan, retry one background transfer, change the Windows Time source, and permanently remove selected temporary files and caches.
+
+KillerMCP does not run KillerBench's repair recipes.
 
 Every repair follows the same steps:
 
