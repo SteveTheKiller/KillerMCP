@@ -8,6 +8,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
+- A KillerBench repair is reported as completed only when its full result shows KillerBench verified the change. An empty, malformed, cut-off or failed result is uncertain and locks further repairs, a lock file that cannot be read keeps repairs locked, and turning repairs off while a desktop approval is open stops the repair.
+- The printer repair describes what it does: it clears offline mode on the listed queues.
 - Every tool call is checked against the tool's published inputs before anything runs. Unknown, missing, mistyped, too long and out of range values are refused, and arguments that are not an object are rejected.
 - A bcrypt compare is refused when the hash asks for a cost above 14, the most hashing allows, instead of running for seconds or longer.
 - KillerMCP refuses a message larger than 16 MiB without reading it whole, runs at most 32 tool calls at once, and returns an error instead of a result too large to send.

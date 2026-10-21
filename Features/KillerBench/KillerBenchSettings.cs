@@ -116,16 +116,22 @@ public static class KillerBenchSettings
         File.Move(temporary, SettingsPath, true);
     }
 
+    /// <summary>The lock, or null only when there is no lock file. A lock file that exists but cannot be
+    /// read or understood still locks repairs.</summary>
     public static RepairLock? ReadLock()
     {
         try
         {
-            return JsonSerializer.Deserialize<RepairLock>(File.ReadAllText(LockPath));
+            if (!File.Exists(LockPath) && !Directory.Exists(LockPath)) return null;
+            var file = new FileInfo(LockPath);
+            if (file.Exists && file.Length <= FileLimit
+                && JsonSerializer.Deserialize<RepairLock>(File.ReadAllText(LockPath)) is { Action.Length: > 0, Reason.Length: > 0 } repairLock)
+                return repairLock;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
-            return null;
         }
+        return new RepairLock("unknown", "the repair lock file could not be read", DateTimeOffset.UtcNow, null, "An earlier repair");
     }
 
     public static void WriteLock(RepairLock repairLock)

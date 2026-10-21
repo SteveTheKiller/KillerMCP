@@ -37,7 +37,15 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH") == "1")
             Environment.ExitCode = exit;
             return;
         }
-        Console.Write(JsonSerializer.Serialize(new { outcome = execute ? "Completed" : "Preview", args = bench }));
+        // Results that exit 0 but do not prove the change, as a broken or newer KillerBench could write them.
+        if (execute && Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH_RESULT") is { Length: > 0 } unproven)
+        {
+            Console.Write(unproven switch { "empty" => "", "malformed" => "{\"outcome\":", "failed" => "{\"outcome\":\"Failed\"}", _ => "{\"outcome\":\"Verified\"}" });
+            return;
+        }
+        // DISM and SFC repairs report in text; the others report a Verified outcome once KillerBench has checked the change.
+        if (execute && bench[0] == "repair") { Console.Write("Verification reported no corruption in the checked scope; not an overall health verdict\nJournal: C:\\fixture"); return; }
+        Console.Write(JsonSerializer.Serialize(new { outcome = execute ? "Verified" : "Preview", args = bench }));
         return;
     }
     if (bench.SequenceEqual(["dns-cache-recover"])) { Console.Write(JsonSerializer.Serialize(new { outcome = "Recovered" })); return; }
@@ -356,12 +364,13 @@ try
     var confirmations = new List<KillerBenchConfirmation>();
     var approve = false;
     var cancelConfirm = false;
+    Action? whileConfirming = null;
     var elevated = new List<string>();
     var benchOptions = new KillerBenchOptions
     {
         Now = () => clock,
         Wait = TimeSpan.FromSeconds(20),
-        Confirm = (request, _) => { if (cancelConfirm) throw new OperationCanceledException(); confirmations.Add(request); return Task.FromResult(approve); },
+        Confirm = (request, _) => { if (cancelConfirm) throw new OperationCanceledException(); confirmations.Add(request); whileConfirming?.Invoke(); return Task.FromResult(approve); },
         RunElevated = async (exe, args, timeout, token) =>
         {
             elevated.Add(string.Join(" ", args));
@@ -371,7 +380,7 @@ try
             var stdout = await process.StandardOutput.ReadToEndAsync(token);
             var stderr = await process.StandardError.ReadToEndAsync(token);
             await process.WaitForExitAsync(token);
-            return new KillerBenchRun(process.ExitCode, stdout, stderr, false);
+            return new KillerBenchRun(process.ExitCode, stdout, stderr, Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH_RESULT") == "truncated");
         },
     };
     var benchAdapters = await KillerBenchAdapter.CreateAsync(Environment.ProcessPath, Environment.ProcessPath, benchOptions);
@@ -511,16 +520,59 @@ try
     Equal(deniedBefore + 1, File.ReadAllLines(KillerBenchSettings.AuditPath).Count(line => line.Contains("\"denied\"")));
     cancelConfirm = false;
 
-    // A repair lock that cannot be saved still blocks repairs in this host, and the result says so.
-    Directory.CreateDirectory(KillerBenchSettings.LockPath);
+    // A repair lock that cannot be saved still blocks repairs in this host, and the result says so. The folder
+    // that stops the lock being written appears while the repair runs, because one already there locks repairs.
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_EXIT", "3");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW_REPAIR", "1");
     var unsaved = Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } }));
-    var unsavedRun = Finished(await Bench("killerbench_repair_execute", new { token = unsaved.GetProperty("token").GetString() }));
+    var unsavedCall = Bench("killerbench_repair_execute", new { token = unsaved.GetProperty("token").GetString() });
+    await Task.Delay(1000);
+    Directory.CreateDirectory(KillerBenchSettings.LockPath);
+    var unsavedRun = Finished(await unsavedCall);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW_REPAIR", null);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_EXIT", null);
     Equal("Uncertain", unsavedRun.GetProperty("outcome").GetString());
     Equal(true, unsavedRun.GetProperty("detail").GetString()!.Contains("could not be saved", StringComparison.Ordinal));
     Equal(false, Finished(await Bench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } })).GetProperty("canExecute").GetBoolean());
     Directory.Delete(KillerBenchSettings.LockPath);
+
+    // Exit code 0 alone is not proof. An empty, malformed, cut-off or failed result is uncertain and locks repairs.
+    var benchRepairs = (await KillerBenchAdapter.CreateAsync(Environment.ProcessPath, Environment.ProcessPath, benchOptions)).ToDictionary(item => item.Tool.Name);
+    async Task<JsonElement> FreshBench(string name, object arguments)
+    {
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(arguments));
+        var response = await benchRepairs[name].CallAsync(document.RootElement, CancellationToken.None);
+        Equal(false, response.IsError);
+        return JsonDocument.Parse(response.Text).RootElement.GetProperty("result").Clone();
+    }
+    foreach (var unproven in new[] { "empty", "malformed", "truncated", "failed" })
+    {
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_RESULT", unproven);
+        var unprovenPreview = await FreshBench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } });
+        var unprovenRun = await FreshBench("killerbench_repair_execute", new { token = unprovenPreview.GetProperty("token").GetString() });
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_RESULT", null);
+        Equal("Uncertain:" + unproven, unprovenRun.GetProperty("outcome").GetString() + ":" + unproven);
+        Equal(true, KillerBenchSettings.ReadLock() is not null);
+        Equal(false, (await FreshBench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } })).GetProperty("canExecute").GetBoolean());
+        Equal(true, KillerBenchSettings.ClearLock());
+    }
+
+    // A lock file that exists but cannot be read still blocks repairs.
+    File.WriteAllText(KillerBenchSettings.LockPath, "not a lock");
+    Equal(false, (await FreshBench("killerbench_repair_preview", new { action = "dns_cache_flush", options = new { host = "missing.example" } })).GetProperty("canExecute").GetBoolean());
+    Equal(true, KillerBenchSettings.ReadLock() is not null);
+    File.Delete(KillerBenchSettings.LockPath);
+
+    // Turning repairs off while the desktop approval is open stops the repair, even when it is then approved.
+    approve = true;
+    var revokedBefore = elevated.Count;
+    var revoked = await FreshBench("killerbench_repair_preview", new { action = "system_image_repair", options = new { tool = "dism" } });
+    whileConfirming = () => KillerBenchSettings.WriteLevel(KillerBenchRepairLevel.Off);
+    Equal("NotApproved", (await FreshBench("killerbench_repair_execute", new { token = revoked.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
+    whileConfirming = null;
+    Equal(revokedBefore, elevated.Count);
+    KillerBenchSettings.WriteLevel(KillerBenchRepairLevel.All);
+    approve = false;
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW", "1");
     var slowAdapters = (await KillerBenchAdapter.CreateAsync(Environment.ProcessPath, Environment.ProcessPath, new KillerBenchOptions { Wait = TimeSpan.FromMilliseconds(100) })).ToDictionary(item => item.Tool.Name);

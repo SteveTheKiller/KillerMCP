@@ -393,6 +393,20 @@ public static partial class KillerBenchAdapter
                 }
             }
 
+            // The approval can wait minutes, so the setting, its approval and the lock are read again right
+            // before the repair starts. Turning repairs off meanwhile stops it.
+            var (levelNow, hashNow) = KillerBenchSettings.ReadSettings();
+            var problemNow = hashNow is null || !string.Equals(hashNow, settingsHash, StringComparison.Ordinal)
+                ? "The KillerBench repair setting changed while this repair waited, so nothing changed. Preview it again."
+                : Permission(plan, levelNow);
+            if (problemNow is not null)
+            {
+                Audit(plan, "denied", null);
+                result["outcome"] = "NotApproved";
+                result["detail"] = problemNow;
+                return result;
+            }
+
             job.Status = "running";
             // Once a repair starts it runs to its own time limit. Cancelling the request that started it,
             // for example because the agent client closed, would stop it partway and leave the PC in an
@@ -422,10 +436,17 @@ public static partial class KillerBenchAdapter
             var parsed = Parse(run);
             result["result"] = parsed;
             var outcome = OutcomeOf(parsed["data"]);
-            if (run.ExitCode == 0)
+            // Exit code 0 is not proof on its own: the whole result must be there and say the change was verified.
+            if (run.ExitCode == 0 && KillerBenchRepairs.Verified(plan.Action, run))
             {
                 Audit(plan, "completed", 0);
                 result["outcome"] = "Completed";
+            }
+            else if (run.ExitCode == 0)
+            {
+                var saved = Lock(plan, "KillerBench exited with code 0 without a complete, verified result", 0);
+                result["outcome"] = "Uncertain";
+                result["detail"] = "KillerBench did not report a verified result. Repairs are locked until the user checks this PC with killerbench_repair_recover and clears the lock in the KillerMCP section of the KillerBench About window." + UnsavedNote(saved);
             }
             else if (run.ExitCode == 2 || (run.ExitCode == 3 && outcome is "Blocked" or "NotEligible" or "Preview"))
             {

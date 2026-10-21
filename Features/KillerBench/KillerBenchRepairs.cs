@@ -40,6 +40,65 @@ internal sealed record RepairDefinition(
 /// </summary>
 internal static partial class KillerBenchRepairs
 {
+    /// <summary>
+    /// True only when a repair's complete output says KillerBench verified the change, in the form that
+    /// repair's command reports it. KillerBench exits 0 for some results that are not verified, such as a
+    /// Defender scan that only started or a background transfer whose retry was only requested.
+    /// </summary>
+    public static bool Verified(string action, KillerBenchRun run)
+    {
+        if (run.Truncated) return false;
+        if (action == "system_image_repair")
+            return run.Output.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n')
+                .Any(line => line.StartsWith("Verification reported no corruption", StringComparison.Ordinal));
+        if (LastJsonObject(run.Output) is not { } data) return false;
+        return action switch
+        {
+            "dns_cache_flush" or "print_job_cancel" or "default_printer" or "restore_point" or "privacy_setting" or "privacy_undo"
+                or "update_store_reset" or "volume_optimize" or "search_index_rebuild" or "firewall_enable" or "defender_scan"
+                => StringProperty(data, "outcome") == "Verified",
+            "bits_retry" => data.TryGetProperty("result", out var inner) && inner.ValueKind == JsonValueKind.Object && StringProperty(inner, "outcome") == "TransferReported",
+            "dhcp_renew" or "printer_repair" => StringProperty(data, "status")?.StartsWith("Verification reported", StringComparison.Ordinal) == true,
+            "update_install" => StringProperty(data, "status") == "Completed",
+            "time_configure" => StringProperty(data, "status") == "Verified",
+            "cleanup" => StringProperty(data, "status") == "Finished",
+            _ => false,
+        };
+    }
+
+    private static string? StringProperty(JsonElement value, string name) =>
+        value.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String ? property.GetString() : null;
+
+    // The result is the last JSON document KillerBench writes. Some commands write a preview and an
+    // eligibility document first.
+    private static JsonElement? LastJsonObject(string output)
+    {
+        var text = output.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var offset = 0;
+        var start = -1;
+        foreach (var line in text.Split('\n'))
+        {
+            if (line.StartsWith('{') || line.StartsWith('[')) { start = offset; break; }
+            offset += line.Length + 1;
+        }
+        if (start < 0) return null;
+        try
+        {
+            var reader = new Utf8JsonReader(System.Text.Encoding.UTF8.GetBytes(text[start..]), new JsonReaderOptions { AllowMultipleValues = true });
+            JsonElement? last = null;
+            while (reader.Read())
+            {
+                using var document = JsonDocument.ParseValue(ref reader);
+                last = document.RootElement.Clone();
+            }
+            return last is { ValueKind: JsonValueKind.Object } value ? value : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     public static readonly string[] NeverThroughMcp =
     [
         "BitLocker encryption, decryption, protectors and recovery backup",
@@ -88,8 +147,8 @@ internal static partial class KillerBenchRepairs
         Simple("dns_cache_flush", "Flush one hostname from the DNS cache", KillerBenchTier.A,
             "Flushes the local DNS cache only when a lookup for this exact hostname failed with HostNotFound or NoData, then verifies the hostname again.",
             ["host"], input => Host(input, "host", out var host) ? (["dns-cache", host!], ["dns-cache-recover"], host!, null) : Fail("host must be one hostname")),
-        Simple("printer_repair", "Resume paused queues and clear offline mode", KillerBenchTier.A,
-            "Can start the enabled Print Spooler, resume an exact paused queue that has waiting jobs, and clear offline mode. Clearing offline mode can release waiting jobs.",
+        Simple("printer_repair", "Clear offline mode on printer queues", KillerBenchTier.A,
+            "Clears offline mode on the listed local queues, then checks they no longer use it. Clearing offline mode can release waiting jobs. Physical printing is not tested.",
             ["queues"], input => Queues(input, out var queues) ? (["printer-repair", .. queues.SelectMany(queue => new[] { "--queue", queue })], null, string.Join(", ", queues), null) : Fail("queues must list 1 to 8 local printer queue names")),
         Simple("print_job_cancel", "Cancel one stuck print job", KillerBenchTier.A,
             "Cancels only the selected job when Windows reports it as Error or Blocked.",
