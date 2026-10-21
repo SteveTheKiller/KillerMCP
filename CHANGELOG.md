@@ -16,6 +16,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - KillerPDF 1.8 is no longer offered the split rules and flatten color options it does not support.
 - A scan with no target is held to the same 1,024 addresses as one with a target. KillerMCP checks the detected local network first and refuses a larger one instead of letting KillerScan scan all of it, and network scans, scan notes and scan PDFs report the range they covered.
 - KillerScan tools are found again with KillerScan 1.8.4 and later, and scan reports are offered only when KillerScan's scan tools are.
+- Setup refuses an installation manifest that names a file outside the KillerMCP folder, through a parent path, drive, stream or link, before it reads or deletes anything.
 - The printer repair describes what it does: it clears offline mode on the listed queues.
 - Every tool call is checked against the tool's published inputs before anything runs. Unknown, missing, mistyped, too long and out of range values are refused, and arguments that are not an object are rejected.
 - A bcrypt compare is refused when the hash asks for a cost above 14, the most hashing allows, instead of running for seconds or longer.

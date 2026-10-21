@@ -339,6 +339,29 @@ try
     Equal(false, runs.IsCurrent(replacedRun));
     Equal(false, runs.End(replacedRun));
     Console.WriteLine("PASS update download ownership");
+
+    // Setup reads, hashes and deletes only files inside the installation folder, whatever the manifest lists.
+    var installed = Path.Combine(root, "installed");
+    Directory.CreateDirectory(Path.Combine(installed, "sub"));
+    Equal(Path.Combine(installed, "KillerMCP.exe"), KillerMCP.Setup.ManifestPaths.Resolve(installed, "KillerMCP.exe"));
+    Equal(Path.Combine(installed, "sub", "a.dll"), KillerMCP.Setup.ManifestPaths.Resolve(installed, "sub/a.dll"));
+    foreach (var unsafeName in new[] { "", "../outside.exe", "sub/../../outside.exe", "/rooted.exe", "C:/Windows/notepad.exe", "C:relative.exe", "sub\\a.dll", "a.exe:stream", "manifest.json", "sub//a.dll", "./a.exe", "sub/." })
+        Equal<string?>(null, KillerMCP.Setup.ManifestPaths.Resolve(installed, unsafeName));
+    if (OperatingSystem.IsWindows())
+    {
+        var elsewhere = Path.Combine(root, "elsewhere");
+        Directory.CreateDirectory(elsewhere);
+        try
+        {
+            Directory.CreateSymbolicLink(Path.Combine(installed, "linked"), elsewhere);
+            Equal<string?>(null, KillerMCP.Setup.ManifestPaths.Resolve(installed, "linked/a.dll"));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Console.WriteLine("SKIP manifest link check: this account cannot create symbolic links.");
+        }
+    }
+    Console.WriteLine("PASS installation manifest containment");
 }
 finally
 {

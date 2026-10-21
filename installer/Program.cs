@@ -330,11 +330,14 @@ namespace KillerMCP.Setup
             bool native = files.ContainsKey("KillerMCP.exe") && files.ContainsKey("KillerMCP.Configure.exe");
             bool legacy = files.ContainsKey("node.exe") && files.ContainsKey("killermcp.mjs") && files.ContainsKey("killertools.mjs");
             if (!native && !(allowLegacy && legacy)) throw new InvalidDataException("The package does not contain a supported KillerMCP runtime.");
+            // A listed name that would reach outside the folder is refused before any file is read or deleted.
+            foreach (string name in files.Keys)
+                if (ManifestPaths.Resolve(destination, name) == null) throw new InvalidDataException("The installation manifest lists a file outside the KillerMCP folder: " + name);
             string[] actual = Directory.GetFiles(destination, "*", SearchOption.AllDirectories).Select(path => path.Substring(destination.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/')).Where(name => name != "manifest.json").ToArray();
             if (actual.Any(name => !files.ContainsKey(name))) throw new InvalidOperationException("The installation folder contains files outside the KillerMCP manifest.");
             foreach (KeyValuePair<string, ManifestFile> item in files)
             {
-                string path = Path.Combine(destination, item.Key.Replace('/', Path.DirectorySeparatorChar));
+                string path = ManifestPaths.Resolve(destination, item.Key)!;
                 if (allowMissing && !File.Exists(path)) continue;
                 if (!File.Exists(path) || new FileInfo(path).Length != item.Value.bytes || !Sha256(path).Equals(item.Value.sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Package verification failed for " + item.Key);
             }
@@ -359,7 +362,7 @@ namespace KillerMCP.Setup
         {
             foreach (string name in manifest.files!.Keys)
             {
-                string path = Path.Combine(folder, name.Replace('/', Path.DirectorySeparatorChar));
+                string path = ManifestPaths.Resolve(folder, name) ?? throw new InvalidDataException("The installation manifest lists a file outside the KillerMCP folder: " + name);
                 if (File.Exists(path)) File.Delete(path);
             }
             File.Delete(Path.Combine(folder, "manifest.json"));
