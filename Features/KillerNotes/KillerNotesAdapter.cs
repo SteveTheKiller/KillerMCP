@@ -13,6 +13,7 @@ public static class KillerNotesAdapter
         var help = await Run(path!, ["--help"], cancellationToken).ConfigureAwait(false);
         if (help.ExitCode != 0 || !help.StandardOutput.Contains("create --title", StringComparison.Ordinal)) return [];
         // KillerNotes that reads long text from a file takes a whole note; older ones take what fits on a command line.
+        NotesContent.Remember(path!, help.StandardOutput);
         bool longNotes = NotesContent.AcceptsFile(help.StandardOutput);
         int contentLimit = longNotes ? NotesContent.NoteLimit : NotesContent.CommandLineLimit;
         string limitText = longNotes ? "500,000" : "30,000";

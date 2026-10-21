@@ -119,6 +119,13 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     }
     if (arguments.SequenceEqual(["--help"]))
     {
+        // Fails the first help request only, as an app that is starting or briefly busy can.
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_HELP_FAIL_ONCE") is { Length: > 0 } helpMarker && !File.Exists(helpMarker))
+        {
+            File.WriteAllText(helpMarker, "failed once");
+            Environment.ExitCode = 1;
+            return;
+        }
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_HELP_STYLE") == "modern")
         {
             Console.WriteLine("KillerPDF command line usage\nExisting --command forms stay compatible.\n  killerpdf merge <out.pdf> <in1> <in2>\n  killerpdf optimize <in.pdf> <out.pdf>\n  killerpdf split <in.pdf> <outDir>\n  killerpdf export <in.pdf> <out.docx|.md>\n  killerpdf signatures <in.pdf> [--json]\n  killerpdf preflight <in.pdf> [--json]\n  killerpdf verify | /verify");
@@ -241,6 +248,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     }
     if (arguments.Length >= 5 && arguments[0] == "create" && arguments[1] == "--title")
     {
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES_ARGS_LOG") is { Length: > 0 } notesLog) File.WriteAllText(notesLog, string.Join("\n", arguments));
         var fileIndex = Array.IndexOf(arguments, "--content-file");
         if (fileIndex >= 0 && (fileIndex + 1 >= arguments.Length || !File.Exists(arguments[fileIndex + 1]))) { Environment.ExitCode = 1; return; }
         Console.Write(JsonSerializer.Serialize(new { id = 42, title = arguments[2], characters = fileIndex >= 0 ? File.ReadAllText(arguments[fileIndex + 1]).Length : arguments[4].Length }));
@@ -634,6 +642,36 @@ try
     Equal("Subnet plans", JsonDocument.Parse(result.Text).RootElement[0].GetProperty("title").GetString());
     using var invalid = JsonDocument.Parse("{\"query\":\"\"}");
     Equal(true, (await adapter.CallAsync(invalid.RootElement, CancellationToken.None)).IsError);
+    // Note text goes to KillerNotes in a file, never on its command line, when KillerNotes accepts one.
+    var notesLog = Path.Combine(root, "notes-args.txt");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_ARGS_LOG", notesLog);
+    using var shortNote = JsonDocument.Parse(JsonSerializer.Serialize(new { title = "Short", content = "short-note-sentinel" }));
+    var shortCreated = await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(shortNote.RootElement, CancellationToken.None);
+    Equal(false, shortCreated.IsError);
+    Equal(19, JsonDocument.Parse(shortCreated.Text).RootElement.GetProperty("characters").GetInt32());
+    Equal(false, File.ReadAllText(notesLog).Contains("short-note-sentinel", StringComparison.Ordinal));
+    Equal(true, File.ReadAllText(notesLog).Contains("--content-file", StringComparison.Ordinal));
+    // A help request that fails once is asked again next time, so later notes still go in a file.
+    // Another spelling of the same path starts with nothing remembered.
+    var notesAgain = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, ".", Path.GetFileName(Environment.ProcessPath)!);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", "1");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_HELP_FAIL_ONCE", Path.Combine(root, "help-failed-once.txt"));
+    try
+    {
+        var benchNotes = (await KillerBenchAdapter.CreateAsync(Environment.ProcessPath, notesAgain, new KillerBenchOptions { Wait = TimeSpan.FromSeconds(20) })).ToDictionary(item => item.Tool.Name);
+        using var benchScan = JsonDocument.Parse("{\"scopes\":[\"PrintingReadiness\"]}");
+        var benchJob = JsonDocument.Parse((await benchNotes["killerbench_scan"].CallAsync(benchScan.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("jobId").GetString();
+        using var saveRequest = JsonDocument.Parse(JsonSerializer.Serialize(new { jobId = benchJob, title = "Bench" }));
+        Equal(false, (await benchNotes["killerbench_save_scan_note"].CallAsync(saveRequest.RootElement, CancellationToken.None)).IsError);
+        Equal(false, (await benchNotes["killerbench_save_scan_note"].CallAsync(saveRequest.RootElement, CancellationToken.None)).IsError);
+        Equal(true, File.ReadAllText(notesLog).Contains("--content-file", StringComparison.Ordinal));
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_HELP_FAIL_ONCE", null);
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", null);
+    }
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES_ARGS_LOG", null);
     using var longNote = JsonDocument.Parse(JsonSerializer.Serialize(new { title = "Long", content = new string('x', 40000) }));
     var longCreated = await notesAdapters.First(item => item.Tool.Name == "killernotes_create").CallAsync(longNote.RootElement, CancellationToken.None);
     Equal(false, longCreated.IsError);
