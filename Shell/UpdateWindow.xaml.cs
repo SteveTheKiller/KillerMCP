@@ -14,7 +14,6 @@ public partial class UpdateWindow : Window
 {
     private string _installedVersion = "0.0.0";
     private string? _latestVersion;
-    private string _installerUrl = string.Empty;
     private string _releaseUrl = string.Empty;
     private string _behavior = "check";
     private bool _updated;
@@ -22,7 +21,7 @@ public partial class UpdateWindow : Window
     private readonly UpdateRuns _runs = new();
     // Set when the automatic download failed: the button then opens the release page, as its label says.
     private bool _openReleaseOnClick;
-    private string? _downloadedInstaller;
+    private UpdateInstaller.VerifiedInstaller? _downloadedInstaller;
     private string _statusPath = string.Empty;
     private bool _exiting;
 
@@ -75,7 +74,8 @@ public partial class UpdateWindow : Window
     {
         _installedVersion = Value(args, "--installed") ?? InstalledVersion();
         _latestVersion = Value(args, "--latest") ?? Value(args, "--version");
-        _installerUrl = Value(args, "--installer") ?? "https://github.com/SteveTheKiller/KillerMCP/releases/latest/download/KillerMCP-Setup.exe";
+        // --installer names the latest release's installer for older notifiers. The window downloads the
+        // installer of the exact version it offers instead, so it is no longer read.
         _releaseUrl = Value(args, "--release") ?? "https://github.com/SteveTheKiller/KillerMCP/releases/latest";
         _behavior = Value(args, "--behavior") ?? "check";
         _updated = Has(args, "--updated");
@@ -130,12 +130,16 @@ public partial class UpdateWindow : Window
         UpdateStateChanged?.Invoke();
         try
         {
-            string installer = await UpdateInstaller.DownloadAndVerifyAsync(version, _installerUrl);
+            var installer = await UpdateInstaller.DownloadAndVerifyAsync(version);
             if (!_runs.IsCurrent(run)) return;
             _downloadedInstaller = installer;
             if (_behavior == "install")
             {
-                Process.Start(new ProcessStartInfo(_downloadedInstaller, "/silent /notify") { UseShellExecute = true });
+                if (!UpdateInstaller.TryStart(_downloadedInstaller, version, "/silent /notify"))
+                {
+                    _downloadedInstaller = null;
+                    throw new InvalidDataException("The downloaded update changed after it was verified.");
+                }
                 Exit();
                 return;
             }
@@ -179,13 +183,19 @@ public partial class UpdateWindow : Window
             if (_downloadedInstaller is null)
             {
                 SetStatus("Downloading and verifying the signed update...");
-                string installer = await UpdateInstaller.DownloadAndVerifyAsync(_latestVersion, _installerUrl);
+                var installer = await UpdateInstaller.DownloadAndVerifyAsync(_latestVersion);
                 // A newer notification arrived during the download; the window now offers that one.
                 if (!_runs.IsCurrent(run)) return;
                 _downloadedInstaller = installer;
             }
+            // The download may have waited in the temporary folder since it was checked, so it is checked again
+            // through the same open file that starts.
             SetStatus("Starting the verified upgrade...");
-            Process.Start(new ProcessStartInfo(_downloadedInstaller, "/silent /notify") { UseShellExecute = true });
+            if (!UpdateInstaller.TryStart(_downloadedInstaller, _latestVersion, "/silent /notify"))
+            {
+                _downloadedInstaller = null;
+                throw new InvalidDataException("The downloaded update changed after it was verified.");
+            }
             Exit();
         }
         catch (Exception exception)

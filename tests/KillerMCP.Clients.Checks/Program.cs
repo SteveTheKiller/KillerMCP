@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json.Nodes;
 using KillerMCP.Configuration;
 
@@ -362,6 +363,49 @@ try
         }
     }
     Console.WriteLine("PASS installation manifest containment");
+
+    // The installer and its checksum come from the same versioned release, and a download has a size limit.
+    Equal("https://github.com/SteveTheKiller/KillerMCP/releases/download/v1.2.3/KillerMCP-Setup.exe", KillerMCP.Notify.UpdateInstaller.ReleaseFile("1.2.3", "KillerMCP-Setup.exe"));
+    foreach (var badVersion in new[] { "latest", "1.2", "1.2.3/../../x", "1.2.3?x", " 1.2.3" })
+        Caught<InvalidDataException>(() => KillerMCP.Notify.UpdateInstaller.ReleaseFile(badVersion, "KillerMCP-Setup.exe"));
+    using (var small = new MemoryStream(new byte[100]))
+        Equal(100, (await KillerMCP.Notify.UpdateInstaller.ReadLimitedAsync(small, 100)).Length);
+    using (var large = new MemoryStream(new byte[101]))
+        Equal(true, await Rejects(() => KillerMCP.Notify.UpdateInstaller.ReadLimitedAsync(large, 100)));
+    // A download whose body stops arriving ends at the time limit instead of hanging the update window.
+    using (var stalledLimit = new CancellationTokenSource(TimeSpan.FromMilliseconds(300)))
+    using (var stalled = new StalledStream())
+    {
+        var stalledAt = DateTime.UtcNow;
+        Equal(true, await Cancelled(() => KillerMCP.Notify.UpdateInstaller.ReadLimitedAsync(stalled, 100, stalledLimit.Token)));
+        Equal(true, DateTime.UtcNow - stalledAt < TimeSpan.FromSeconds(10));
+    }
+    // The hash is checked through the same open file that is then started, and that file cannot be replaced meanwhile.
+    var downloaded = Path.Combine(root, "downloaded-setup.exe");
+    File.WriteAllBytes(downloaded, [1, 2, 3]);
+    var downloadedHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(new byte[] { 1, 2, 3 }));
+    using (var held = KillerMCP.Notify.UpdateInstaller.Hold(downloaded))
+    {
+        Equal(true, KillerMCP.Notify.UpdateInstaller.HashMatches(held, downloadedHash));
+        Equal(true, Caught<IOException>(() => File.WriteAllBytes(downloaded, [1, 2, 4])) is not null);
+        Equal(true, Caught<IOException>(() => File.Delete(downloaded)) is not null);
+    }
+    File.WriteAllBytes(downloaded, [1, 2, 4]);
+    using (var changed = KillerMCP.Notify.UpdateInstaller.Hold(downloaded))
+        Equal(false, KillerMCP.Notify.UpdateInstaller.HashMatches(changed, downloadedHash));
+    // A held program still starts, and a file that is not this release's signed setup is never started.
+    var heldProgram = Path.Combine(root, "held-whoami.exe");
+    File.Copy(Path.Combine(Environment.SystemDirectory, "whoami.exe"), heldProgram);
+    using (var heldExe = KillerMCP.Notify.UpdateInstaller.Hold(heldProgram))
+    using (var started = Process.Start(new ProcessStartInfo(heldProgram) { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true })!)
+    {
+        started.WaitForExit(10000);
+        Equal(0, started.ExitCode);
+    }
+    var heldHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(heldProgram)));
+    Equal(false, KillerMCP.Notify.UpdateInstaller.IsRelease(heldProgram, "0.8.0"));
+    Equal(false, KillerMCP.Notify.UpdateInstaller.TryStart(new KillerMCP.Notify.UpdateInstaller.VerifiedInstaller(heldProgram, heldHash), "0.8.0", "/silent"));
+    Console.WriteLine("PASS update download pinning");
 }
 finally
 {
@@ -371,6 +415,18 @@ finally
 return 0;
 
 static JsonObject Read(string path) => JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+
+static async Task<bool> Rejects(Func<Task> action)
+{
+    try { await action(); return false; }
+    catch (InvalidDataException) { return true; }
+}
+
+static async Task<bool> Cancelled(Func<Task> action)
+{
+    try { await action(); return false; }
+    catch (OperationCanceledException) { return true; }
+}
 
 static void Equal<T>(T expected, T actual)
 {
@@ -406,4 +462,24 @@ static void Throws<T>(Action action) where T : Exception
     }
 
     throw new InvalidOperationException($"Expected {typeof(T).Name}.");
+}
+
+// Stands in for a download whose body stops arriving: every read waits until it is cancelled.
+sealed class StalledStream : Stream
+{
+    public override bool CanRead => true;
+    public override bool CanSeek => false;
+    public override bool CanWrite => false;
+    public override long Length => throw new NotSupportedException();
+    public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+    public override void Flush() { }
+    public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        await Task.Delay(Timeout.Infinite, cancellationToken);
+        return 0;
+    }
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 }

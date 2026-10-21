@@ -78,10 +78,16 @@ namespace KillerMCP.Setup
                     return 0;
                 }
                 if (behavior == "check" && !SetupDialog.ConfirmUpdate(latestText!)) return 0;
-                string installer = DownloadAndVerify(latestText!);
+                string installer = DownloadAndVerify(latestText!, out string verifiedHash);
                 if (behavior == "download" && !SetupDialog.ConfirmUpdate(latestText!)) return 0;
+                // The confirmation can wait, so the download is checked again right before it starts, through a
+                // handle that keeps anyone from changing or replacing it until it has started.
                 int parent = Process.GetCurrentProcess().Id;
-                Process.Start(new ProcessStartInfo(installer, "/silent /notify /wait-for " + parent) { UseShellExecute = true });
+                using (var held = new FileStream(installer, FileMode.Open, FileAccess.Read, FileShare.Read))
+                {
+                    if (!StillVerified(held, installer, verifiedHash, latestText!)) throw new InvalidDataException("The downloaded update changed after it was verified.");
+                    Process.Start(new ProcessStartInfo(installer, "/silent /notify /wait-for " + parent) { UseShellExecute = true });
+                }
                 return 0;
             }
             catch (Exception exception)
@@ -91,13 +97,36 @@ namespace KillerMCP.Setup
             }
         }
 
-        private static string DownloadAndVerify(string version)
+        // The hash comes from the held handle, and the file must be KillerMCP setup for exactly this version, so an
+        // older signed setup put in its place cannot start a downgrade.
+        private static bool StillVerified(FileStream held, string path, string sha256, string version)
+        {
+            try
+            {
+                string actual;
+                using (var sha = SHA256.Create()) actual = BitConverter.ToString(sha.ComputeHash(held)).Replace("-", "");
+                FileVersionInfo information = FileVersionInfo.GetVersionInfo(path);
+                return actual.Equals(sha256, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(information.ProductName, "KillerMCP-Setup", StringComparison.Ordinal)
+                    && Version.TryParse(information.FileVersion, out Version? actualVersion) && Version.TryParse(version, out Version? expected)
+                    && actualVersion.Major == expected.Major && actualVersion.Minor == expected.Minor && actualVersion.Build == expected.Build
+                    && KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(path);
+            }
+            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        private static string DownloadAndVerify(string version, out string verifiedHash)
         {
             string baseUrl = ReleaseBase + "v" + version + "/";
             byte[] installer;
             string sums;
             using (var client = Client(TimeSpan.FromMinutes(3)))
             {
+                // The installer is far smaller than this; a larger download is refused instead of filling memory.
+                client.MaxResponseContentBufferSize = 512L * 1024 * 1024;
                 installer = client.GetByteArrayAsync(baseUrl + "KillerMCP-Setup.exe").GetAwaiter().GetResult();
                 sums = client.GetStringAsync(baseUrl + "SHA256SUMS.txt").GetAwaiter().GetResult();
             }
@@ -114,6 +143,7 @@ namespace KillerMCP.Setup
                 File.Delete(path);
                 throw new InvalidDataException("The update is not signed by the KillerMCP publisher, or its signature could not be checked.");
             }
+            verifiedHash = actual;
             return path;
         }
 
