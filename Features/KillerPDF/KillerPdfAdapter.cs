@@ -7,6 +7,7 @@ namespace KillerMCP;
 public static partial class KillerPdfAdapter
 {
     private const long MaxPdfBytes = 64L * 1024 * 1024;
+    private const int MessageLimit = 65536;
 
     // Passwords on a command line can be read by any program running as the same user and are kept in
     // process-creation logs, so KillerPDF gets them on standard input when its help says it accepts them
@@ -41,13 +42,14 @@ public static partial class KillerPdfAdapter
         if (!IsFile(path)) return [];
         var help = await Run(path!, ["--help"], 8, 65536, cancellationToken).ConfigureAwait(false);
         if (help.ExitCode != 0) return [];
-        SecretsOnInput[path!] = KillerPdfCapabilities.Supports(help.StandardOutput, "--secrets-stdin");
+        var current = await VersionAsync(path!, cancellationToken).ConfigureAwait(false) is { } version && version >= CurrentVersion;
+        SecretsOnInput[path!] = current;
 
         var adapters = new List<AppAdapter>();
         if (KillerPdfCapabilities.Supports(help.StandardOutput, "--merge <out.pdf>")) adapters.Add(new AppAdapter(MergeTool(), (input, token) => Merge(path!, input, token)));
-        foreach (var definition in Operations())
+        foreach (var operation in Operations())
         {
-            if (KillerPdfCapabilities.Supports(help.StandardOutput, definition.Marker))
+            if (KillerPdfCapabilities.Supports(help.StandardOutput, operation.Marker) && (current ? operation : ForOlderVersion(operation)) is { } definition)
             {
                 adapters.Add(new AppAdapter(definition.Tool, (input, token) => RunOperation(path!, definition, input, token)));
             }
@@ -56,6 +58,45 @@ public static partial class KillerPdfAdapter
         AddReport(help, path!, adapters, "--accessibility", "killerpdf_accessibility", "Check a local PDF for accessibility findings using KillerPDF without changing the file.", Schema(new JsonObject { ["path"] = PdfPath() }, "path"));
         if (KillerPdfCapabilities.Supports(help.StandardOutput, "--verify | /verify")) adapters.Add(new AppAdapter(VerifyTool(), (input, token) => Verify(path!, input, token)));
         return adapters;
+    }
+
+    // KillerPDF 1.9 takes passwords on standard input (--secrets-stdin) and added the split rules and the flatten
+    // color and compression options. An older KillerPDF could only get a password on its command line, where other
+    // programs and process logs can read it, and rejects those options, so its tools leave them out. A version
+    // KillerMCP cannot read counts as older.
+    private static readonly Version CurrentVersion = new(1, 9, 0);
+    private static readonly string[] PasswordInputs = ["password", "userPassword", "ownerPassword", "pfxPassword"];
+    private static readonly Dictionary<string, string[]> NewerOptions = new(StringComparer.Ordinal)
+    {
+        ["killerpdf_split"] = ["every", "parts", "bookmarkLevel", "maxSize", "nameTemplate"],
+        ["killerpdf_flatten"] = ["colorMode", "threshold", "compression", "jpegQuality", "scannedLook"],
+    };
+
+    private static async Task<Version?> VersionAsync(string path, CancellationToken token)
+    {
+        try
+        {
+            var response = await Run(path, ["--version"], 8, 1024, token).ConfigureAwait(false);
+            var match = VersionPattern().Match(response.StandardOutput.Trim());
+            return response.ExitCode == 0 && match.Success && Version.TryParse(match.Value, out var version) ? version : null;
+        }
+        catch (Exception exception) when (exception is TimeoutException or InvalidOperationException or IOException)
+        {
+            return null;
+        }
+    }
+
+    // The tool as an older KillerPDF can run it, or null when it cannot run without a password input.
+    private static Operation? ForOlderVersion(Operation operation)
+    {
+        var schema = operation.Tool.InputSchema.DeepClone().AsObject();
+        var properties = schema["properties"]!.AsObject();
+        var required = schema["required"] is JsonArray list ? list.Select(item => item!.GetValue<string>()).ToHashSet(StringComparer.Ordinal) : [];
+        if (PasswordInputs.Any(required.Contains)) return null;
+        var hadPassword = PasswordInputs.Any(properties.ContainsKey);
+        foreach (var name in PasswordInputs.Concat(NewerOptions.TryGetValue(operation.Tool.Name, out var newer) ? newer : [])) properties.Remove(name);
+        var description = hadPassword ? operation.Tool.Description + " Password-protected PDFs need KillerPDF 1.9 or later." : operation.Tool.Description;
+        return operation with { Tool = operation.Tool with { InputSchema = schema, Description = description } };
     }
 
     private static IEnumerable<Operation> Operations()
@@ -162,6 +203,12 @@ public static partial class KillerPdfAdapter
         finally { TryDelete(temporary); }
     }
 
+    // A KillerPDF that cannot take passwords on standard input is never given one on its command line.
+    private const string SecretsUnsupported = "This KillerPDF version can only take passwords on its command line, where other programs and process logs can read them, so KillerMCP did not run it. Please update KillerPDF, or run this without a password.";
+
+    private static bool NeedsSecretInput(string path, IEnumerable<string> args) =>
+        !(SecretsOnInput.TryGetValue(path, out var supported) && supported) && args.Any(argument => SecretOptions.Any(secret => ReferenceEquals(secret, argument)));
+
     private static async Task<AppCallResult> RunOperation(string path, Operation definition, JsonElement input, CancellationToken token)
     {
         var problem = ValidateOperation(input, definition);
@@ -176,7 +223,18 @@ public static partial class KillerPdfAdapter
                 var action = await Run(path, definition.Arguments(input, string.Empty), definition.TimeoutSeconds, 262144, token).ConfigureAwait(false);
                 if (action.OutputExceeded) return Error("KillerPDF command output exceeded limit");
                 if (!definition.SuccessCodes.Contains(action.ExitCode)) return ProcessError(action);
-                return Ok(JsonSerializer.Serialize(new { completed = true, message = Limit(action.StandardOutput.Trim()) }));
+                // A JSON answer is returned whole as data. Text is returned up to a bound, and says when it was cut.
+                var text = action.StandardOutput.Trim();
+                try
+                {
+                    using var answer = JsonDocument.Parse(text);
+                    if (answer.RootElement.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+                        return Ok(new JsonObject { ["completed"] = true, ["result"] = JsonNode.Parse(answer.RootElement.GetRawText()) }.ToJsonString());
+                }
+                catch (JsonException) { }
+                return Ok(JsonSerializer.Serialize(text.Length <= MessageLimit
+                    ? (object)new { completed = true, message = text }
+                    : new { completed = true, message = text[..MessageLimit], truncated = true, characters = text.Length }));
             }
             if (definition.Kind == OutputKind.Report)
             {
@@ -204,10 +262,18 @@ public static partial class KillerPdfAdapter
             var destination = definition.Kind == OutputKind.File ? String(input, "output") : String(input, "outputFolder");
             if (definition.Kind == OutputKind.File) File.Copy(staged, destination, false); else Directory.Move(staged, destination);
             var created = definition.Kind == OutputKind.File ? 1 : Directory.EnumerateFileSystemEntries(destination).Count();
-            return Ok(JsonSerializer.Serialize(new { output = destination, created }));
+            // Whatever KillerPDF printed while it worked, such as a warning that a fallback dropped bookmarks
+            // or form fields, goes back with the result.
+            var messages = string.Join("\n", new[] { response.StandardOutput.Trim(), response.StandardError.Trim() }.Where(text => text.Length > 0));
+            if (messages.Length == 0) return Ok(JsonSerializer.Serialize(new { output = destination, created }));
+            return Ok(JsonSerializer.Serialize(messages.Length <= MessageLimit
+                ? (object)new { output = destination, created, messages }
+                : new { output = destination, created, messages = messages[..MessageLimit], truncated = true }));
         }
         catch (IOException exception) { return Error(DestinationExists(input, definition) ? "Output already exists" : Limit(exception.Message)); }
         catch (Exception exception) when (exception is UnauthorizedAccessException or ArgumentException) { return Error(Limit(exception.Message)); }
+        // Run refuses before KillerPDF starts when a password would have to go on its command line.
+        catch (InvalidOperationException exception) when (ReferenceEquals(exception.Message, SecretsUnsupported)) { return Error(SecretsUnsupported); }
         finally { TryDelete(temporary); }
     }
 
@@ -379,7 +445,8 @@ public static partial class KillerPdfAdapter
     private static Task<ProcessResult> Run(string path, IEnumerable<string> args, int seconds, int maximum, CancellationToken token)
     {
         var arguments = args.ToList();
-        var secrets = SecretsOnInput.TryGetValue(path, out var supported) && supported ? MoveSecretsToInput(arguments) : null;
+        if (NeedsSecretInput(path, arguments)) throw new InvalidOperationException(SecretsUnsupported);
+        var secrets = MoveSecretsToInput(arguments);
         return ProcessRunner.RunAsync(path, arguments, TimeSpan.FromSeconds(seconds), maximum, token, secrets);
     }
     private static AppCallResult Ok(string text) => new(text);
@@ -404,4 +471,5 @@ public static partial class KillerPdfAdapter
 
     [GeneratedRegex("^[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*\\z", RegexOptions.CultureInvariant)] private static partial Regex PageRangePattern();
     [GeneratedRegex("^[A-Za-z0-9_]+\\z", RegexOptions.CultureInvariant)] private static partial Regex LanguagePattern();
+    [GeneratedRegex("^[0-9]{1,5}\\.[0-9]{1,5}\\.[0-9]{1,5}", RegexOptions.CultureInvariant)] private static partial Regex VersionPattern();
 }

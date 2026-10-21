@@ -125,11 +125,17 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
             return;
         }
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1") Console.WriteLine("  --merge <out.pdf>\n--extract-pages <in.pdf>\n--split <in.pdf>\n--decrypt <in.pdf>\n--to-image <in.pdf>\n--flatten <in.pdf>\n--print <in.pdf>\n--ocr <in.pdf>\n--batch-resave <in>\n--batch-render <in>\n--rotate-pages <in.pdf>\n--delete-pages <in.pdf>\n--move-pages <in.pdf>\n--insert-blank <in.pdf>\n--duplicate-page <in.pdf>\n--document-info <in.pdf>\n--search-text <in.pdf>\n--preflight <in.pdf>\n--accessibility <in.pdf>\n--optimize <in.pdf>\n--number-pages <in.pdf>\n--bates <outDir>\n--booklet <in.pdf>\n--nup <in.pdf>\n--auto-bookmarks <in.pdf>\n--scan-to-text <in.pdf>\n--reverse-pages <in.pdf>\n--fix-orientation <in.pdf>\n--straighten <in.pdf>\n--divide-spreads <in.pdf>\n--rasterize-region <in.pdf>\n--print-production <in.pdf>\n--signatures <in.pdf>\n--layers <in.pdf>\n--portfolio <in.pdf>\n--comments <in.pdf>\n--navigation-audit <in.pdf>\n--measurements <in.pdf>\n--separations <in.pdf>\n--compare-structure <original.pdf>\n--attachments <in.pdf>\n--recognize-fields <in.pdf>\n--set-layer <in.pdf>\n--portfolio-view <in.pdf>\n--add-attachment <in.pdf>\n--edit-attachment <in.pdf>\n--repair-links <in.pdf>\n--toc <in.pdf>\n--page-labels <in.pdf>\n--initial-view <in.pdf>\n--redact <in.pdf>\n--protect <in.pdf>\n--export <in.pdf>\n--convert-office <in.docx\n--data-merge <template.pdf>\n--replace-text <in.pdf>\n--export-form-data <in.pdf>\n--import-form-data <in.pdf>\n--xfa-to-acroform <in.pdf>\n--flatten-forms <in.pdf>\n--macro <in.pdf>\n--sign <in.pdf>\n--scan <out.pdf>\n  KillerPDF.exe --verify | /verify   verify every installed payload file");
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS") == "1") Console.WriteLine("  --secrets-stdin    read passwords from standard input as one JSON object");
+        // KILLERMCP_FAKE_PDF_SECRETS=0 stands in for a KillerPDF from before passwords moved to standard input.
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS") != "0") Console.WriteLine("  --secrets-stdin    read passwords from standard input as one JSON object");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>\ncreate --title title (--content markdown | --content-file absolute.md)");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>\ncreate <json>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>\nlist <folder>\ninfo <path>\nread <file>\nprocesses [--limit]\nservices [--limit]\nevents <log>\nregistry <key>\ndrives\nhash <file>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1") Console.WriteLine("KillerShot command line\n  capture [options]\n  record --seconds <n> [options]\n  recent [options]\n  open <image>\n  monitors\n  windows [--limit <n>]\n  settings");
+        return;
+    }
+    if (arguments.SequenceEqual(["--version"]) && Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1")
+    {
+        Console.WriteLine(Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION") ?? "1.9.0");
         return;
     }
     if (arguments.SequenceEqual(["--verify"]))
@@ -144,6 +150,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     }
     if (arguments.Length > 0 && arguments[0] is "--print" or "--document-info" or "--search-text")
     {
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_INFO_JSON") == "1") { Console.Write(JsonSerializer.Serialize(new { pages = 1, title = new string('t', 3000) })); return; }
         Console.Write("Fixture action completed");
         return;
     }
@@ -182,6 +189,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
             Directory.CreateDirectory(stagedOutput);
             File.WriteAllText(Path.Combine(stagedOutput, "item-1.pdf"), "fixture");
         }
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_WARNING") is { Length: > 0 } stagedWarning) Console.Write(stagedWarning);
         return;
     }
     if (arguments.Length > 0 && arguments[0].StartsWith("--", StringComparison.Ordinal))
@@ -206,6 +214,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
             {
                 File.WriteAllText(output, "fixture pdf");
             }
+            if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_WARNING") is { Length: > 0 } warning) Console.Write(warning);
             return;
         }
     }
@@ -690,7 +699,8 @@ try
     Equal(false, (await Pdf("killerpdf_decrypt", new { path = sourceOne, output = Path.Combine(root, "decrypted.pdf"), password = "secret" })).IsError);
     // A KillerPDF that accepts passwords on standard input gets them there, never on its command line,
     // where other programs and process logs can read them. Text that happens to read like a password
-    // option stays an ordinary value, and a KillerPDF without the option still gets passwords as before.
+    // option stays an ordinary value. A KillerPDF without the option is not started for a call that has a
+    // password, and calls without one still work.
     var argumentsLog = Path.Combine(root, "pdf-arguments.json");
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_ARGS_LOG", argumentsLog);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS", "1");
@@ -717,17 +727,52 @@ try
         var redactArguments = redacted.GetProperty("args").EnumerateArray().Select(item => item.GetString()).ToArray();
         Equal("--password", redactArguments[Array.IndexOf(redactArguments, "--text") + 1]);
         Equal(false, redactArguments.Contains("--secrets-stdin"));
-        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS", null);
+        // Password features are offered by KillerPDF version: before 1.9 a password could only go on the command
+        // line, so tools for an older KillerPDF have no password inputs, and a call that sends one anyway never
+        // starts KillerPDF. The version decides even when the help text says otherwise.
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION", "1.8.91");
         var olderAdapters = (await KillerPdfAdapter.CreateAsync(Environment.ProcessPath)).ToDictionary(item => item.Tool.Name);
-        using var olderRequest = JsonDocument.Parse(JsonSerializer.Serialize(new { path = sourceOne, output = Path.Combine(root, "older-decrypted.pdf"), password = "older" }));
-        Equal(false, (await olderAdapters["killerpdf_decrypt"].CallAsync(olderRequest.RootElement, CancellationToken.None)).IsError);
-        var olderArguments = JsonDocument.Parse(File.ReadAllText(argumentsLog)).RootElement.GetProperty("args").EnumerateArray().Select(item => item.GetString()).ToArray();
-        Equal("older", olderArguments[Array.IndexOf(olderArguments, "--password") + 1]);
+        File.Delete(argumentsLog);
+        string[] passwordInputs = ["password", "userPassword", "ownerPassword", "pfxPassword"];
+        foreach (var olderTool in olderAdapters.Values)
+            Equal(false, olderTool.Tool.InputSchema["properties"]!.AsObject().Any(property => passwordInputs.Contains(property.Key)));
+        foreach (var gated in new[] { "killerpdf_decrypt", "killerpdf_render_pages", "killerpdf_flatten", "killerpdf_print", "killerpdf_ocr" })
+            Equal(true, olderAdapters[gated].Tool.Description.Contains("KillerPDF 1.9", StringComparison.Ordinal));
+        var olderPfx = Path.Combine(root, "older-signer.pfx");
+        File.WriteAllText(olderPfx, "fixture");
+        foreach (var (tool, request) in new (string, object)[]
+        {
+            ("killerpdf_decrypt", new { path = sourceOne, output = Path.Combine(root, "older-decrypted.pdf"), password = "older-sentinel" }),
+            ("killerpdf_protect", new { path = sourceOne, output = Path.Combine(root, "older-protected.pdf"), userPassword = "older-sentinel", ownerPassword = "older-sentinel" }),
+            ("killerpdf_sign", new { path = sourceOne, output = Path.Combine(root, "older-signed.pdf"), pfx = olderPfx, pfxPassword = "older-sentinel" }),
+        })
+        {
+            if (!olderAdapters.TryGetValue(tool, out var olderTool)) continue;
+            using var olderRequest = JsonDocument.Parse(JsonSerializer.Serialize(request));
+            Equal(true, (await olderTool.CallAsync(olderRequest.RootElement, CancellationToken.None)).IsError);
+            Equal(false, File.Exists(argumentsLog));
+        }
+        // A version KillerMCP cannot read counts as older.
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION", "unknown");
+        Equal(false, (await KillerPdfAdapter.CreateAsync(Environment.ProcessPath)).First(item => item.Tool.Name == "killerpdf_decrypt").Tool.InputSchema["properties"]!.AsObject().ContainsKey("password"));
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION", "1.8.91");
+        using var olderPlain = JsonDocument.Parse(JsonSerializer.Serialize(new { path = sourceOne, output = Path.Combine(root, "older-plain.pdf") }));
+        Equal(false, (await olderAdapters["killerpdf_decrypt"].CallAsync(olderPlain.RootElement, CancellationToken.None)).IsError);
+        // KillerPDF 1.8 has none of the split rules or flatten color options, so they are not offered or sent.
+        var olderSplit = olderAdapters["killerpdf_split"].Tool.InputSchema["properties"]!.AsObject();
+        Equal(false, olderSplit.ContainsKey("parts") || olderSplit.ContainsKey("every") || olderSplit.ContainsKey("nameTemplate"));
+        Equal(false, olderAdapters["killerpdf_flatten"].Tool.InputSchema["properties"]!.AsObject().ContainsKey("colorMode"));
+        using var olderParts = JsonDocument.Parse(JsonSerializer.Serialize(new { path = sourceOne, outputFolder = Path.Combine(root, "older-parts"), parts = 2 }));
+        Equal(true, (await olderAdapters["killerpdf_split"].CallAsync(olderParts.RootElement, CancellationToken.None)).IsError);
+        Equal(false, Directory.Exists(Path.Combine(root, "older-parts")));
     }
     finally
     {
         Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_ARGS_LOG", null);
         Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS", null);
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION", null);
+        // Standard input support is remembered per KillerPDF path, and the fixture stood in for an older one.
+        await KillerPdfAdapter.CreateAsync(Environment.ProcessPath);
     }
     Equal(false, (await Pdf("killerpdf_render_pages", new { path = sourceOne, outputFolder = Path.Combine(root, "rendered"), pages = "1", dpi = 150, format = "png", transparent = true })).IsError);
     Equal(false, (await Pdf("killerpdf_flatten", new { path = sourceOne, output = Path.Combine(root, "flattened.pdf"), dpi = 150 })).IsError);
@@ -742,6 +787,16 @@ try
     Equal(false, (await Pdf("killerpdf_duplicate_page", new { path = sourceOne, page = 1, output = Path.Combine(root, "duplicate.pdf") })).IsError);
     Equal(false, (await Pdf("killerpdf_document_info", new { path = sourceOne })).IsError);
     Equal(false, (await Pdf("killerpdf_search_text", new { path = sourceOne, query = "fixture" })).IsError);
+    // A long JSON answer comes back whole and parseable, not cut into invalid JSON.
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_INFO_JSON", "1");
+    var longInfo = JsonDocument.Parse((await Pdf("killerpdf_document_info", new { path = sourceOne })).Text).RootElement;
+    Equal(3000, longInfo.GetProperty("result").GetProperty("title").GetString()!.Length);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_INFO_JSON", null);
+    // A warning KillerPDF prints while it creates a file reaches the caller.
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_WARNING", "Warning: bookmarks and form fields may be lost.");
+    var warned = JsonDocument.Parse((await Pdf("killerpdf_decrypt", new { path = sourceOne, output = Path.Combine(root, "warned.pdf") })).Text).RootElement;
+    Equal("Warning: bookmarks and form fields may be lost.", warned.GetProperty("messages").GetString());
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_WARNING", null);
     var attachmentFile = Path.Combine(root, "notes.txt");
     var officeFile = Path.Combine(root, "letter.docx");
     var dataFile = Path.Combine(root, "records.csv");

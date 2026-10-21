@@ -12,20 +12,21 @@ KillerMCP 0.8.0 makes repairs, scans, passwords, recordings and updates safer, c
 
 - A KillerBench repair is reported as completed only when its full result shows KillerBench verified the change. An empty, malformed, cut-off or failed result is uncertain and locks further repairs, a lock file that cannot be read keeps repairs locked, and turning repairs off while a desktop approval is open stops the repair.
 - Every tool call is checked against the tool's published inputs before anything runs. Unknown, missing, mistyped, too long and out of range values are refused, and arguments that are not an object are rejected.
-- A scan with no target is held to the same 1,024 addresses as one with a target. KillerMCP checks the detected local network first and refuses a larger one instead of letting KillerScan scan all of it, network scans, scan notes and scan PDFs report the range and the number of addresses probed, and a target must be four dotted numbers, so shorthand such as 192.168.1 is refused.
-- PDF passwords and the signing certificate password never go on KillerPDF's command line. A KillerPDF too old to take them on standard input is not started for a call with a password and asks to be updated; calls without a password still work.
+- A scan with no target is held to the same 1,024 addresses as one with a target. KillerMCP checks the detected local network first and refuses a larger one instead of letting KillerScan scan all of it. Network scans, scan notes and scan PDFs report the range and the number of addresses probed, and a target must be four dotted numbers, so shorthand such as 192.168.1 is refused.
+- PDF passwords and the signing certificate password never go on KillerPDF's command line. KillerPDF tools offer password inputs only with KillerPDF 1.9 or later, which takes them on standard input; with an older KillerPDF the tools work without passwords.
 - KillerShot recordings have no sound unless the agent asks for it, instead of following KillerShot's saved setting, which can include the microphone. Screenshots are saved only where asked, and a copy goes into KillerShot's capture library only on request.
 - Note text reaches KillerNotes in a file instead of on its command line whenever KillerNotes supports it, including short notes.
-- Setup refuses an installation manifest that names a file outside the KillerMCP folder, through a parent path, drive, stream or link, before it reads or deletes anything.
-- The update window downloads the installer and its checksum from the same release, refuses a download far larger than an installer, and checks the downloaded installer again right before starting it.
+- Setup refuses an installation manifest that names a file outside the KillerMCP folder, through a parent path, drive, stream, device name or link, before it reads or deletes anything, and leaves alone a folder that holds a link or junction instead of following it.
+- The update window downloads the installer and its checksum from the same release, refuses a download far larger than an installer, and gives up on one that stops arriving after three minutes. Right before it starts the installer, it checks the file again while holding it open so it cannot be replaced, and starts it only if it is setup for the offered version.
 - A bcrypt compare is refused when the hash asks for a cost above 14, the most hashing allows, instead of running for seconds or longer.
 - KillerMCP refuses a message larger than 16 MiB without reading it whole, runs at most 32 tool calls at once, and returns an error instead of a result too large to send.
 - Requests that arrive together can no longer start more than four KillerBench jobs, and old jobs and unused repair previews are kept to a fixed number.
 - KillerScan tools are found again with KillerScan 1.8.2 and later, and scan reports are offered only when KillerScan's scan tools are.
 - KillerPDF tools return long document information and search results whole as data instead of cutting them into invalid JSON, and warnings KillerPDF prints while creating a file, such as bookmarks or form fields that could not be kept, reach the agent.
-- KillerPDF 1.8 is no longer offered the split rules and flatten color options it does not support.
+- KillerPDF before 1.9 is no longer offered the split rules and flatten color options it does not support.
 - Cross-app tools that read a PDF take files up to the same 64 MiB as the KillerPDF tools.
 - The printer repair describes what it does: it clears offline mode on the listed queues.
+- KillerMCP no longer offers KillerBench recipe repairs, which KillerBench refuses to run from a full scan, so the action could never succeed.
 - The note export tool lists RTF, which KillerNotes already exports.
 - The privacy policy explains that tool results go to the connected agent client, which may send them to its AI provider.
 
