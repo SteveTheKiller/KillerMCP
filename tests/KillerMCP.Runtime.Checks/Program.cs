@@ -1042,9 +1042,10 @@ try
     var monitorShot = await Shot("killershot_capture_monitor", new { monitor = "2" });
     Equal(false, monitorShot.IsError);
     var monitorArgs = ShotArgs(monitorShot);
-    Equal(true, monitorArgs.SequenceEqual(["capture", "--mode", "monitor", "--monitor", "2", "--no-clipboard", "--save", "--no-shutter", "--json"]));
+    // A capture saves only the requested file and stays out of the library unless the call asks to keep it there.
+    Equal(true, monitorArgs.SequenceEqual(["capture", "--mode", "monitor", "--monitor", "2", "--no-clipboard", "--save", "--no-recent", "--no-shutter", "--json"]));
     Equal(true, (await Shot("killershot_capture_monitor", new { monitor = "0" })).IsError);
-    var allArgs = ShotArgs(await Shot("killershot_capture_all", new { clipboard = true, cursor = false, delay = 2, output = root }));
+    var allArgs = ShotArgs(await Shot("killershot_capture_all", new { clipboard = true, cursor = false, delay = 2, output = root, keepInLibrary = true }));
     Equal(true, allArgs.SequenceEqual(["capture", "--mode", "all", "--out", root, "--clipboard", "--no-cursor", "--delay", "2", "--save", "--no-shutter", "--json"]));
     Equal(true, (await Shot("killershot_capture_all", new { output = "relative.png" })).IsError);
     Equal(true, ShotArgs(await Shot("killershot_capture_window", new { window = "Fixture" })).Contains("Fixture"));
@@ -1052,7 +1053,11 @@ try
     Equal(true, ShotArgs(await Shot("killershot_capture_region", new { x = -10, y = 0, width = 640, height = 360 })).Contains("-10,0,640,360"));
     Equal(true, (await Shot("killershot_capture_region", new { x = 0, y = 0, width = 640 })).IsError);
     var recordArgs = ShotArgs(await Shot("killershot_record", new { mode = "monitor", monitor = "primary", seconds = 5, format = "gif" }));
-    Equal(true, recordArgs.SequenceEqual(["record", "--mode", "monitor", "--seconds", "5", "--monitor", "primary", "--format", "gif", "--json"]));
+    // A recording has no sound unless the call asks for it, whatever KillerShot's saved setting is.
+    Equal(true, recordArgs.SequenceEqual(["record", "--mode", "monitor", "--seconds", "5", "--monitor", "primary", "--format", "gif", "--sound", "none", "--json"]));
+    var micArgs = ShotArgs(await Shot("killershot_record", new { mode = "all", seconds = 5, format = "mp4", sound = "mic" }));
+    Equal("mic", micArgs[Array.IndexOf(micArgs, "--sound") + 1]);
+    Equal(1, micArgs.Count(item => item == "--sound"));
     Equal(true, (await Shot("killershot_record", new { mode = "region", seconds = 5 })).IsError);
     Equal(true, (await Shot("killershot_record", new { mode = "all", monitor = "1", seconds = 5 })).IsError);
     Equal(true, (await Shot("killershot_record", new { mode = "all", seconds = 301 })).IsError);

@@ -276,12 +276,12 @@ Each repair request, approval, denial and outcome is recorded at `%LOCALAPPDATA%
 - List monitors, numbered left to right, with their bounds in screen pixels.
 - List up to 500 capturable windows with their handles, titles and process names.
 - Take a screenshot of one monitor, every monitor, one window by handle or title, or one rectangle of the desktop, with an optional delay of up to 30 seconds.
-- Record a monitor, every monitor, a window or a rectangle to MP4 or GIF for 1 to 300 seconds. MP4 can include system sound, the microphone or both.
-- List up to 20 of the newest captures in the encrypted library with their ids, times, sizes, window titles and program names.
+- Record a monitor, every monitor, a window or a rectangle to MP4 or GIF for 1 to 300 seconds. Recordings have no sound unless the call asks for it; MP4 can include system sound, the microphone or both.
+- List up to 20 of the newest captures in the capture library with their ids, times, sizes, window titles and program names.
 - Open an image in the KillerShot editor on the user's screen.
 - Read the capture, recording and shortcut settings without changing them.
 
-Captures are saved as PNG or JPEG and recordings as MP4 or GIF. Output paths must be absolute, and an existing file is never replaced. Without an output path, KillerShot saves into its own output folder when that setting is on, and every screenshot also goes into its Recent history. The clipboard is left alone unless the call asks for a copy, and no shutter sound plays. The tools return file paths, not image data. MP4 recordings can be at most 4096 pixels wide; use GIF or a smaller area for a wider desktop. A screenshot can show anything on the screen, including other apps and private information, so review capture requests before approving them.
+Captures are saved as PNG or JPEG and recordings as MP4 or GIF. Output paths must be absolute, and an existing file is never replaced. Without an output path, KillerShot saves into its own output folder. A screenshot is kept in KillerShot's capture library only when the call sets keepInLibrary, and a recording's sound never comes from KillerShot's saved setting. The clipboard is left alone unless the call asks for a copy, and no shutter sound plays. The tools return file paths, not image data. MP4 recordings can be at most 4096 pixels wide; use GIF or a smaller area for a wider desktop. A screenshot can show anything on the screen, including other apps and private information, so review capture requests before approving them.
 
 ## Where data goes
 

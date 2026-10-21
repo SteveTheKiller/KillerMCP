@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 - A KillerBench repair is reported as completed only when its full result shows KillerBench verified the change. An empty, malformed, cut-off or failed result is uncertain and locks further repairs, a lock file that cannot be read keeps repairs locked, and turning repairs off while a desktop approval is open stops the repair.
 - PDF passwords and the signing certificate password never go on KillerPDF's command line. A KillerPDF too old to take them on standard input is not started for a call with a password and asks to be updated; calls without a password still work.
+- KillerShot recordings have no sound unless the agent asks for it, instead of following KillerShot's saved setting, which can include the microphone. Screenshots are saved only where asked, and a copy goes into KillerShot's capture library only on request.
 - Note text reaches KillerNotes in a file instead of on its command line whenever KillerNotes supports it, including short notes.
 - KillerPDF tools return long document information and search results whole as data instead of cutting them into invalid JSON, and warnings KillerPDF prints while creating a file, such as bookmarks or form fields that could not be kept, reach the agent.
 - KillerPDF 1.8 is no longer offered the split rules and flatten color options it does not support.
