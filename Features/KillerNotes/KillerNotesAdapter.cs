@@ -34,7 +34,7 @@ public static class KillerNotesAdapter
             Make(path!, "killernotes_set_group_color", "Set or clear a note group color.", Schema(new() { ["name"] = Text(240), ["color"] = Color(true) }, "name", "color"), i => ["set-group-color", "--name", Str(i, "name"), "--color", Str(i, "color")]),
             Make(path!, "killernotes_set_title_color", "Set or clear a note title color.", Schema(new() { ["id"] = Id(), ["color"] = Color(true) }, "id", "color"), i => ["set-title-color", "--id", Num(i, "id"), "--color", Str(i, "color")]),
             Make(path!, "killernotes_import_image", "Save a local image as a new rich KillerNotes note.", Schema(new() { ["path"] = PathValue("Absolute path to a local image"), ["group"] = Text(240) }, "path"), i => Optional(["import-image", "--path", Str(i, "path")], i, ("group", "--group"))),
-            Make(path!, "killernotes_export", "Export a note to a new TXT, Markdown, HTML, or KNOTE file. Its absolute output path can be passed to another Killer app.", Schema(new() { ["id"] = Id(), ["output"] = PathValue("Absolute path for a new .txt, .md, .html, or .knote file") }, "id", "output"), i => ["export", "--id", Num(i, "id"), "--output", Str(i, "output")]),
+            Make(path!, "killernotes_export", "Export a note to a new TXT, Markdown, HTML, RTF, or KNOTE file. Its absolute output path can be passed to another Killer app.", Schema(new() { ["id"] = Id(), ["output"] = PathValue("Absolute path for a new .txt, .md, .html, .rtf, or .knote file") }, "id", "output"), i => ["export", "--id", Num(i, "id"), "--output", Str(i, "output")]),
         ];
     }
 

@@ -1,0 +1,48 @@
+name: Checks
+
+# Every push and pull request builds KillerMCP and runs the checks that need no signing certificate and
+# change nothing on the machine. Installer, update and desktop scenarios stay in scripts/Test-All.ps1,
+# which release.ps1 runs on a real Windows computer before a release.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          submodules: true
+
+      - name: Build
+        shell: pwsh
+        run: |
+          dotnet build KillerMCP.slnx -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'KillerMCP solution build failed.' }
+
+      - name: Workflow checks
+        shell: pwsh
+        run: ./scripts/Test-Workflows.ps1
+
+      - name: Client checks
+        shell: pwsh
+        run: |
+          dotnet run --project tests/KillerMCP.Clients.Checks/KillerMCP.Clients.Checks.csproj -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { throw 'KillerMCP client checks failed.' }
+
+      - name: Runtime checks
+        shell: pwsh
+        run: |
+          dotnet run --project tests/KillerMCP.Runtime.Checks/KillerMCP.Runtime.Checks.csproj -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { throw 'KillerMCP runtime checks failed.' }
+
+      - name: Native host checks
+        shell: pwsh
+        run: |
+          node scripts/Test-NativeHost.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'KillerMCP native host checks failed.' }
