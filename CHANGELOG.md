@@ -1,4 +1,4 @@
-# Changelog
+# KillerMCP Changelog
 
 All notable changes to KillerMCP are documented here.
 
