@@ -5,4 +5,5 @@
   <Project Path="Shell/KillerMCP.Notify.csproj" />
   <Project Path="tests/KillerMCP.Clients.Checks/KillerMCP.Clients.Checks.csproj" />
   <Project Path="tests/KillerMCP.Runtime.Checks/KillerMCP.Runtime.Checks.csproj" />
+  <Project Path="tests/KillerMCP.Setup.Checks/KillerMCP.Setup.Checks.csproj" />
 </Solution>

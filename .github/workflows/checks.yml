@@ -41,6 +41,12 @@ jobs:
           dotnet run --project tests/KillerMCP.Runtime.Checks/KillerMCP.Runtime.Checks.csproj -c Release --no-build
           if ($LASTEXITCODE -ne 0) { throw 'KillerMCP runtime checks failed.' }
 
+      - name: Setup checks
+        shell: pwsh
+        run: |
+          dotnet run --project tests/KillerMCP.Setup.Checks/KillerMCP.Setup.Checks.csproj -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { throw 'KillerMCP setup checks failed.' }
+
       - name: Native host checks
         shell: pwsh
         run: |

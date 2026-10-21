@@ -12,6 +12,9 @@ if ($LASTEXITCODE -ne 0) { throw 'KillerMCP client checks failed.' }
 dotnet run --project (Join-Path $root 'tests\KillerMCP.Runtime.Checks\KillerMCP.Runtime.Checks.csproj') -c Release --no-build
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP runtime checks failed.' }
 
+dotnet run --project (Join-Path $root 'tests\KillerMCP.Setup.Checks\KillerMCP.Setup.Checks.csproj') -c Release --no-build
+if ($LASTEXITCODE -ne 0) { throw 'KillerMCP setup checks failed.' }
+
 node (Join-Path $PSScriptRoot 'Test-NativeHost.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP native host checks failed.' }
 

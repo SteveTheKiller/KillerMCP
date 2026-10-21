@@ -333,7 +333,10 @@ namespace KillerMCP.Setup
             // A listed name that would reach outside the folder is refused before any file is read or deleted.
             foreach (string name in files.Keys)
                 if (ManifestPaths.Resolve(destination, name) == null) throw new InvalidDataException("The installation manifest lists a file outside the KillerMCP folder: " + name);
-            string[] actual = Directory.GetFiles(destination, "*", SearchOption.AllDirectories).Select(path => path.Substring(destination.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/')).Where(name => name != "manifest.json").ToArray();
+            // KillerMCP installs no links, and following one could reach folders outside, so a folder holding one is
+            // left for the user instead of being checked or removed.
+            if (ManifestPaths.Links(destination).Any()) throw new InvalidOperationException("The installation folder contains a link or junction KillerMCP did not install.");
+            string[] actual = ManifestPaths.Files(destination).Select(path => path.Substring(destination.Length).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/')).Where(name => name != "manifest.json").ToArray();
             if (actual.Any(name => !files.ContainsKey(name))) throw new InvalidOperationException("The installation folder contains files outside the KillerMCP manifest.");
             foreach (KeyValuePair<string, ManifestFile> item in files)
             {
@@ -366,7 +369,7 @@ namespace KillerMCP.Setup
                 if (File.Exists(path)) File.Delete(path);
             }
             File.Delete(Path.Combine(folder, "manifest.json"));
-            foreach (string directory in Directory.GetDirectories(folder, "*", SearchOption.AllDirectories).OrderByDescending(value => value.Length)) Directory.Delete(directory);
+            foreach (string directory in ManifestPaths.Folders(folder).OrderByDescending(value => value.Length)) Directory.Delete(directory);
             Directory.Delete(folder);
         }
 
@@ -388,7 +391,8 @@ namespace KillerMCP.Setup
             }
         }
 
-        private static bool ContainsFiles(string folder) => Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Any();
+        // A link counts as content, so a leftover folder holding one is never removed as empty.
+        private static bool ContainsFiles(string folder) => ManifestPaths.Files(folder).Any() || ManifestPaths.Links(folder).Any();
 
         private static string SetupCopyPath(string destination) => destination + "-Setup.exe";
         private static string RegistryPath(string destination) => string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(TestRootVariable)) ? UninstallRegistryPath : @"Software\KillerMCP\InstallerTests\" + Path.GetFileName(Path.GetDirectoryName(destination));
