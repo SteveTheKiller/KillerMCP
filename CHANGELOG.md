@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ## [0.8.0] - Unreleased
 
+### Fixed
+
+- Every tool call is checked against the tool's published inputs before anything runs. Unknown, missing, mistyped, too long and out of range values are refused, and arguments that are not an object are rejected.
+- A bcrypt compare is refused when the hash asks for a cost above 14, the most hashing allows, instead of running for seconds or longer.
+- KillerMCP refuses a message larger than 16 MiB without reading it whole, runs at most 32 tool calls at once, and returns an error instead of a result too large to send.
+- Requests that arrive together can no longer start more than four KillerBench jobs, and old jobs and unused repair previews are kept to a fixed number.
+
 ### Changed
 
 - Reorganized the app into Features, Services and Models, with a root project and solution and fewer supporting libraries.

@@ -56,7 +56,27 @@ internal static class ToolRegistry
         return null;
     }
 
-    public static void SetAdapters(IEnumerable<AppAdapter> adapters) => Adapters = adapters.ToDictionary(adapter => adapter.Tool.Name, StringComparer.Ordinal);
+    // The schemas every call is checked against are the ones tools/list advertises.
+    private static readonly IReadOnlyDictionary<string, JsonElement> CoreSchemas = BuiltInTools.Definitions.ToDictionary(
+        tool => (string)tool.GetType().GetProperty("name")!.GetValue(tool)!,
+        tool => JsonSerializer.SerializeToElement(tool.GetType().GetProperty("inputSchema")!.GetValue(tool)),
+        StringComparer.Ordinal);
+    private static IReadOnlyDictionary<string, JsonElement> AdapterSchemas = new Dictionary<string, JsonElement>();
+
+    public static void SetAdapters(IEnumerable<AppAdapter> adapters)
+    {
+        var byName = adapters.ToDictionary(adapter => adapter.Tool.Name, StringComparer.Ordinal);
+        AdapterSchemas = byName.ToDictionary(item => item.Key, item => JsonSerializer.SerializeToElement(item.Value.Tool.InputSchema), StringComparer.Ordinal);
+        Adapters = byName;
+    }
+
+    private static string? SchemaRefusal(string? name, JsonElement arguments)
+    {
+        if (name is null) return null;
+        var schema = AdapterSchemas.TryGetValue(name, out var adapterSchema) ? adapterSchema
+            : CoreSchemas.TryGetValue(name, out var coreSchema) ? coreSchema : default;
+        return schema.ValueKind == JsonValueKind.Undefined ? null : ToolSchema.Validate(arguments, schema) is { } problem ? "Invalid arguments: " + problem : null;
+    }
 
     public static object Call(JsonElement parameters, JsonSerializerOptions json, CancellationToken cancellationToken = default)
     {
@@ -66,17 +86,18 @@ internal static class ToolRegistry
             throw new McpRequestException(-32602, "tools/call needs params with a tool name.");
         }
         var name = nameElement.GetString();
-        // MCP makes arguments optional; a tool without inputs is called with an empty object.
-        var arguments = parameters.TryGetProperty("arguments", out var given) && given.ValueKind == JsonValueKind.Object
-            ? given
-            : EmptyArguments;
+        // MCP makes arguments optional; a tool without inputs is called with an empty object. Arguments
+        // that are given must be an object.
+        var hasArguments = parameters.TryGetProperty("arguments", out var given) && given.ValueKind != JsonValueKind.Null;
+        if (hasArguments && given.ValueKind != JsonValueKind.Object) throw new McpRequestException(-32602, "tools/call arguments must be an object.");
+        var arguments = hasArguments ? given : EmptyArguments;
         var loggedName = name is not null && (CoreToolNames.Contains(name) || Adapters.ContainsKey(name))
             ? name : "(unknown)";
         ToolCallLog.Record(loggedName, "started");
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            if (name is not null && PathRefusal(name, arguments) is { } refusal)
+            if ((SchemaRefusal(name, arguments) ?? (name is null ? null : PathRefusal(name, arguments))) is { } refusal)
             {
                 ToolCallLog.Record(loggedName, "error", stopwatch.ElapsedMilliseconds);
                 return new { content = new[] { new { type = "text", text = refusal } }, isError = true };

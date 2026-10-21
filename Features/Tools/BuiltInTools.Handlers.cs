@@ -265,6 +265,12 @@ internal static partial class BuiltInTools
         }
         catch (Exception) { throw new ToolCallException("Invalid cron expression"); }
     }
+    private static int? BcryptCost(string hash) =>
+        hash.Length == 60 && hash[0] == '$' && hash[1] == '2' && hash[2] is 'a' or 'b' or 'x' or 'y' && hash[3] == '$' && hash[6] == '$'
+            && char.IsAsciiDigit(hash[4]) && char.IsAsciiDigit(hash[5])
+            ? (hash[4] - '0') * 10 + (hash[5] - '0')
+            : null;
+
     private static object Bcrypt(JsonElement arguments)
     {
         try
@@ -273,6 +279,9 @@ internal static partial class BuiltInTools
             if (arguments.GetProperty("action").GetString() == "compare")
             {
                 if (!arguments.TryGetProperty("hash", out var hash) || string.IsNullOrEmpty(hash.GetString())) throw new ToolCallException("A bcrypt hash is required");
+                // The hash names its own cost, and each step doubles the work, so a compare is held to the
+                // same 4 to 14 that hashing allows before bcrypt starts.
+                if (BcryptCost(hash.GetString()!) is not (>= 4 and <= 14)) throw new ToolCallException("The bcrypt hash must be a $2a$, $2b$, $2x$ or $2y$ hash with a cost from 4 to 14");
                 return new { matches = PasswordBcrypt.Verify(value, hash.GetString()!) };
             }
             return new { hash = PasswordBcrypt.Hash(value, OptionalInteger(arguments, "rounds", 10)) };

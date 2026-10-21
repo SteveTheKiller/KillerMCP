@@ -216,6 +216,38 @@ const noArguments = await request('tools/call', { name: 'list_film_stocks' });
 assert.equal(JSON.parse(noArguments.content[0].text).length, 41);
 const called = await request('tools/call', { name: 'text_statistics', arguments: { text: 'hello world' } });
 assert.deepEqual(JSON.parse(called.content[0].text), { characterCount: 11, wordCount: 2, lineCount: 1, byteSize: 11 });
+// Every call is checked against the schema the tool advertises before anything runs.
+const unexpected = await request('tools/call', { name: 'text_statistics', arguments: { text: 'abc', unexpected: true } });
+assert.equal(unexpected.isError, true);
+assert.match(unexpected.content[0].text, /unexpected/);
+const tooLong = await request('tools/call', { name: 'text_statistics', arguments: { text: 'x'.repeat(4097) } });
+assert.equal(tooLong.isError, true);
+assert.match(tooLong.content[0].text, /4096/);
+assert.notEqual((await request('tools/call', { name: 'text_statistics', arguments: { text: '😀'.repeat(4096) } })).isError, true);
+const wrongType = await request('tools/call', { name: 'arabic_to_roman', arguments: { number: 'ten' } });
+assert.equal(wrongType.isError, true);
+const outOfRange = await request('tools/call', { name: 'arabic_to_roman', arguments: { number: 4000 } });
+assert.equal(outOfRange.isError, true);
+const missingRequired = await request('tools/call', { name: 'diff_text', arguments: { left: 'a' } });
+assert.equal(missingRequired.isError, true);
+assert.match(missingRequired.content[0].text, /right/);
+const invalidAction = await request('tools/call', { name: 'bcrypt_private', arguments: { action: 'invalid', value: 'review-fixture', rounds: 4 } });
+assert.equal(invalidAction.isError, true);
+const nestedExtra = await request('tools/call', { name: 'calculate_chmod', arguments: { permissions: { owner: { read: true, write: true, execute: true, extra: true }, group: { read: true, write: false, execute: false }, public: { read: true, write: false, execute: false } } } });
+assert.equal(nestedExtra.isError, true);
+// Patterns follow JSON Schema: a match covers the whole value, and \d means ASCII digits only.
+for (const code of ['123456\n', '١٢٣٤٥٦']) {
+  const looseCode = await request('tools/call', { name: 'otp_private', arguments: { secret: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', mode: 'hotp', counter: 0, code } });
+  assert.equal(looseCode.isError, true, JSON.stringify(code));
+}
+const looseColor = await request('tools/call', { name: 'generate_svg_placeholder', arguments: { width: 10, height: 10, bgColor: '#cccccc\n' } });
+assert.equal(looseColor.isError, true);
+const arrayArguments = await request('tools/call', { name: 'list_film_stocks', arguments: ['invalid'] });
+assert.equal(arrayArguments.error.code, -32602);
+// A bcrypt hash names its own cost, so a compare with a cost above what hashing allows is refused before it runs.
+const costly = await request('tools/call', { name: 'bcrypt_private', arguments: { value: 'review-fixture', action: 'compare', hash: '$2a$15$abcdefghijklmnopqrstuuKGQeXj/1sQqQ5dDQnmCzdBoSg3PlMS6' } });
+assert.equal(costly.isError, true);
+assert.match(costly.content[0].text, /cost/);
 const encoded = await request('tools/call', { name: 'encode_base64', arguments: { text: 'hé' } });
 assert.deepEqual(JSON.parse(encoded.content[0].text), { encoded: 'aMOp' });
 const asciiArt = await request('tools/call', { name: 'draw_ascii_text', arguments: { text: 'Killer', font: 'Circle', width: 20 } });
@@ -483,6 +515,11 @@ const afterUnknown = await request('tools/call', { name: 'text_statistics', argu
 assert.notEqual(afterUnknown.isError, true);
 // A line that is valid JSON but not a request object must not end the server.
 child.stdin.write('1\n[]\n"text"\nnull\n{"id":[],"method":7}\n');
+assert.deepEqual(await request('ping'), {});
+// A message over the size limit is refused without being read whole, and the server keeps going.
+const oversized = new Promise(done => pending.set(null, done));
+child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 'oversized', method: 'tools/call', params: { name: 'text_statistics', arguments: { text: 'x'.repeat(17 * 1024 * 1024) } } })}\n`);
+assert.equal((await oversized).error.code, -32600);
 assert.deepEqual(await request('ping'), {});
 
 // A long tool call must not hold up other requests, and cancelling it ends its process without a reply.

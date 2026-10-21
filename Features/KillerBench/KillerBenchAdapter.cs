@@ -93,6 +93,11 @@ public static partial class KillerBenchAdapter
     {
         private readonly ConcurrentDictionary<string, Job> jobs = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, Ticket> tickets = new(StringComparer.Ordinal);
+        private const int MaximumRunningJobs = 4;
+        private const int RetainedJobs = 100;
+        private const int RetainedTickets = 100;
+        private readonly object slotGate = new();
+        private int runningJobs;
         private readonly SemaphoreSlim mutation = new(1, 1);
         // A lock this host could not save to disk still blocks repairs for as long as the host runs.
         private RepairLock? unsavedLock;
@@ -492,7 +497,16 @@ public static partial class KillerBenchAdapter
         private async Task<AppCallResult> StartJob(string kind, string name, Func<Job, Task<JsonObject>> work, CancellationToken token)
         {
             Prune();
-            if (kind != "repair" && jobs.Values.Count(item => !item.Work.IsCompleted) >= 4) return Error("Four KillerBench jobs are already running. Poll them with killerbench_job first.");
+            // The slot is taken before the job starts, so callers that arrive together cannot all pass the check.
+            var counted = kind != "repair";
+            if (counted)
+            {
+                lock (slotGate)
+                {
+                    if (runningJobs >= MaximumRunningJobs) return Error("Four KillerBench jobs are already running. Poll them with killerbench_job first.");
+                    runningJobs++;
+                }
+            }
             var job = new Job { Id = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), Kind = kind, Name = name, Started = Now };
             job.Work = Task.Run(async () =>
             {
@@ -511,6 +525,10 @@ public static partial class KillerBenchAdapter
                 {
                     job.Status = "cancelled";
                     return new JsonObject { ["error"] = "The request that started this job was cancelled." };
+                }
+                finally
+                {
+                    if (counted) lock (slotGate) runningJobs--;
                 }
             }, CancellationToken.None);
             jobs[job.Id] = job;
@@ -531,6 +549,9 @@ public static partial class KillerBenchAdapter
         {
             foreach (var item in jobs.Where(item => item.Value.Work.IsCompleted && Now - item.Value.Started > TimeSpan.FromHours(4)).ToArray()) jobs.TryRemove(item.Key, out _);
             foreach (var item in tickets.Where(item => Now - item.Value.Issued > TimeSpan.FromMinutes(10)).ToArray()) tickets.TryRemove(item.Key, out _);
+            // Finished jobs and unused previews are also kept to a fixed number, oldest dropped first.
+            foreach (var item in jobs.Where(item => item.Value.Work.IsCompleted).OrderByDescending(item => item.Value.Started).Skip(RetainedJobs).ToArray()) jobs.TryRemove(item.Key, out _);
+            foreach (var item in tickets.OrderByDescending(item => item.Value.Issued).Skip(RetainedTickets).ToArray()) tickets.TryRemove(item.Key, out _);
         }
 
         private async Task<JsonElement?> Recipes(CancellationToken token)

@@ -540,6 +540,14 @@ try
     }
     Equal("completed", polled.GetProperty("status").GetString());
     Equal(42, JsonDocument.Parse((await slowAdapters["killerbench_save_scan_note"].CallAsync(note.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("id").GetInt32());
+    // Callers that arrive together still get no more than four running jobs.
+    using (var gate = new SemaphoreSlim(0))
+    {
+        var together = Enumerable.Range(0, 12).Select(_ => Task.Run(async () => { await gate.WaitAsync(); return await slowAdapters["killerbench_scan"].CallAsync(scopes.RootElement, CancellationToken.None); })).ToArray();
+        gate.Release(12);
+        var answers = await Task.WhenAll(together);
+        Equal(4, answers.Count(answer => !answer.IsError));
+    }
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH_SLOW", null);
     Environment.SetEnvironmentVariable("KILLERMCP_STATE_DIR", null);
     Environment.SetEnvironmentVariable("KILLERBENCH_STATE_DIR", null);
