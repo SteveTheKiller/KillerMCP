@@ -196,7 +196,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
             Directory.CreateDirectory(stagedOutput);
             File.WriteAllText(Path.Combine(stagedOutput, "item-1.pdf"), "fixture");
         }
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_WARNING") is { Length: > 0 } stagedWarning) Console.Write(stagedWarning);
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_WARNING") is { Length: > 0 } stagedWarning) Console.Write(stagedWarning.Replace("{staged}", stagedOutput, StringComparison.Ordinal));
         return;
     }
     if (arguments.Length > 0 && arguments[0].StartsWith("--", StringComparison.Ordinal))
@@ -834,6 +834,11 @@ try
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_WARNING", "Warning: bookmarks and form fields may be lost.");
     var warned = JsonDocument.Parse((await Pdf("killerpdf_decrypt", new { path = sourceOne, output = Path.Combine(root, "warned.pdf") })).Text).RootElement;
     Equal("Warning: bookmarks and form fields may be lost.", warned.GetProperty("messages").GetString());
+    // KillerPDF names the file it wrote, which is KillerMCP's temporary copy; the message names the real output instead.
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_WARNING", "Decrypted -> {staged}");
+    var named = Path.Combine(root, "named.pdf");
+    var namedResult = JsonDocument.Parse((await Pdf("killerpdf_decrypt", new { path = sourceOne, output = named })).Text).RootElement;
+    Equal("Decrypted -> " + named, namedResult.GetProperty("messages").GetString());
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_WARNING", null);
     var attachmentFile = Path.Combine(root, "notes.txt");
     var officeFile = Path.Combine(root, "letter.docx");
@@ -896,6 +901,8 @@ try
     Equal(false, (await Pdf("killerpdf_flatten_forms", new { path = sourceOne, output = NewPdf("flat-forms") })).IsError);
     Equal(false, (await Pdf("killerpdf_run_macro", new { path = sourceOne, output = NewPdf("macro"), macro = "starter:privacy", terms = new[] { "secret" } })).IsError);
     Equal(false, (await Pdf("killerpdf_run_macro", new { path = sourceOne, output = NewPdf("macro-file"), macroFile })).IsError);
+    // Phrase and word lists go beside the staged output and nowhere else.
+    Equal(false, File.Exists(Path.Combine(Environment.CurrentDirectory, "terms.txt")) || File.Exists(Path.Combine(Environment.CurrentDirectory, "keep-scanned.txt")));
     Equal(false, (await Pdf("killerpdf_list_macros", new { })).IsError);
     Equal(false, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, appearancePage = 1, appearanceCorner = "bottom-right" })).IsError);
     Equal(false, (await Pdf("killerpdf_scan", new { output = NewPdf("scanned"), showSettings = false })).IsError);
@@ -1114,6 +1121,14 @@ try
     Equal(false, (await Integration("killendar_save_agenda_note", new { date = "2026-09-28", days = 7, limit = 5 })).IsError);
     Equal(false, (await Integration("killershell_save_directory_note", new { path = root, limit = 5 })).IsError);
     Equal(false, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = 150 })).IsError);
+    // Cross-app tools take PDFs up to the same 64 MiB as the KillerPDF tools.
+    var oversizedPdf = Path.Combine(root, "oversized.pdf");
+    using (var oversizedStream = File.Create(oversizedPdf)) oversizedStream.SetLength(64L * 1024 * 1024 + 1);
+    var oversizedResult = await Integration("killerpdf_save_text_as_note", new { path = oversizedPdf });
+    Equal(true, oversizedResult.IsError);
+    Equal(true, oversizedResult.Text.Contains("64 MiB", StringComparison.Ordinal));
+    Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = oversizedPdf, pages = "1" })).IsError);
+    File.Delete(oversizedPdf);
     // Arguments of the wrong kind get the tool's own message instead of an internal error.
     Equal(true, (await Integration("killernotes_export_pdf", new { id = "1", output = Path.Combine(root, "typed.pdf") })).IsError);
     Equal(true, (await Integration("killernotes_export_notes_pdf", new { ids = new object[] { "1" }, output = Path.Combine(root, "typed-notes.pdf") })).IsError);

@@ -264,7 +264,10 @@ public static partial class KillerPdfAdapter
             var created = definition.Kind == OutputKind.File ? 1 : Directory.EnumerateFileSystemEntries(destination).Count();
             // Whatever KillerPDF printed while it worked, such as a warning that a fallback dropped bookmarks
             // or form fields, goes back with the result.
-            var messages = string.Join("\n", new[] { response.StandardOutput.Trim(), response.StandardError.Trim() }.Where(text => text.Length > 0));
+            // KillerPDF wrote into the temporary staging folder, which is gone after this call, so the messages
+            // name the destination the caller asked for instead.
+            var messages = string.Join("\n", new[] { response.StandardOutput.Trim(), response.StandardError.Trim() }.Where(text => text.Length > 0))
+                .Replace(staged, destination, StringComparison.OrdinalIgnoreCase);
             if (messages.Length == 0) return Ok(JsonSerializer.Serialize(new { output = destination, created }));
             return Ok(JsonSerializer.Serialize(messages.Length <= MessageLimit
                 ? (object)new { output = destination, created, messages }

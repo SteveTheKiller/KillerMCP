@@ -107,7 +107,7 @@ public static partial class IntegrationAdapter
 
     private static async Task<AppCallResult> PdfPagesToNotes(string pdf, string notes, JsonElement input, CancellationToken token)
     {
-        if (!Exact(input, "path", "pages", "dpi", "group") || !ExistingFile(input, "path", ".pdf", out var path)) return Error("Provide an existing absolute PDF path");
+        if (!Exact(input, "path", "pages", "dpi", "group") || !ExistingFile(input, "path", ".pdf", out var path)) return Error(TooLarge(input, "path") ?? "Provide an existing absolute PDF path");
         string? pages = "1";
         if (input.TryGetProperty("pages", out var p) && (p.ValueKind != JsonValueKind.String || (pages = p.GetString())!.Length > 200 || !PageList().IsMatch(pages))) return Error("Pages must look like 1-3,5");
         var dpi = 150;
@@ -148,7 +148,7 @@ public static partial class IntegrationAdapter
 
     private static async Task<AppCallResult> PdfTextToNote(string pdf, string notes, JsonElement input, CancellationToken token)
     {
-        if (!Exact(input, "path", "pages", "title", "group") || !ExistingFile(input, "path", ".pdf", out var path)) return Error("Provide an existing absolute PDF path");
+        if (!Exact(input, "path", "pages", "title", "group") || !ExistingFile(input, "path", ".pdf", out var path)) return Error(TooLarge(input, "path") ?? "Provide an existing absolute PDF path");
         string? pages = null, title = Path.GetFileNameWithoutExtension(path), group = null;
         if (input.TryGetProperty("pages", out var p) && (p.ValueKind != JsonValueKind.String || (pages = p.GetString())!.Length > 200 || !PageList().IsMatch(pages))) return Error("Pages must look like 1-3,5");
         if (input.TryGetProperty("title", out var t) && (t.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(title = t.GetString()) || title!.Length > 240)) return Error("Title must be 1 to 240 characters");
@@ -184,7 +184,7 @@ public static partial class IntegrationAdapter
 
     private static async Task<AppCallResult> PdfReportToNote(string pdf, string notes, JsonElement input, CancellationToken token)
     {
-        if (!Exact(input, "path", "report", "title", "group") || !ExistingFile(input, "path", ".pdf", out var path)) return Error("Provide an existing absolute PDF path and a report");
+        if (!Exact(input, "path", "report", "title", "group") || !ExistingFile(input, "path", ".pdf", out var path)) return Error(TooLarge(input, "path") ?? "Provide an existing absolute PDF path and a report");
         if (!input.TryGetProperty("report", out var r) || r.ValueKind != JsonValueKind.String || PdfReports.FirstOrDefault(item => item.Name == r.GetString()) is not { Command: not null } report) return Error("Report must be one of " + string.Join(", ", PdfReports.Select(item => item.Name)));
         string? title = $"KillerPDF {report.Label}: {Path.GetFileName(path)}", group = null;
         if (input.TryGetProperty("title", out var t) && (t.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(title = t.GetString()) || title!.Length > 240)) return Error("Title must be 1 to 240 characters");
@@ -429,7 +429,10 @@ public static partial class IntegrationAdapter
     private static bool OptionalInt(JsonElement input, string name, int min, int max, ref int value) => !input.TryGetProperty(name, out var item) || item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out value) && value >= min && value <= max;
     private static bool ValidScanTarget(string? value) { if (string.IsNullOrWhiteSpace(value) || value.Length > 43) return false; var parts = value.Split('/'); if (parts.Length is < 1 or > 2 || !IPAddress.TryParse(parts[0], out var address) || address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) return false; return parts.Length == 1 || int.TryParse(parts[1], out var prefix) && prefix is >= 22 and <= 32; }
     private static bool Text(JsonElement input, string name, int max, out string? value) { value = null; return input.TryGetProperty(name, out var item) && item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value = item.GetString()) && value.Length <= max; }
-    private static bool ExistingFile(JsonElement input, string name, string extension, out string? path) { path = null; return Text(input, name, 1024, out path) && Path.IsPathFullyQualified(path!) && path!.EndsWith(extension, StringComparison.OrdinalIgnoreCase) && File.Exists(path); }
+    // The same 64 MiB the KillerPDF tools allow, so a cross-app tool cannot send KillerPDF a larger file.
+    private const long MaximumInputBytes = 64L * 1024 * 1024;
+    private static string? TooLarge(JsonElement input, string name) { try { return Text(input, name, 1024, out var path) && Path.IsPathFullyQualified(path!) && new FileInfo(path!) is { Exists: true } info && info.Length > MaximumInputBytes ? "The PDF is larger than the 64 MiB KillerPDF accepts" : null; } catch { return null; } }
+    private static bool ExistingFile(JsonElement input, string name, string extension, out string? path) { path = null; if (!Text(input, name, 1024, out path) || !Path.IsPathFullyQualified(path!) || !path!.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) return false; try { var info = new FileInfo(path); return info.Exists && info.Length <= MaximumInputBytes; } catch { return false; } }
     private static bool Exact(JsonElement input, params string[] allowed) => input.ValueKind == JsonValueKind.Object && input.EnumerateObject().All(property => allowed.Contains(property.Name, StringComparer.Ordinal));
     private static bool NewPdf(string path) { try { return Path.IsPathFullyQualified(path) && path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && Directory.Exists(Path.GetDirectoryName(path)) && !File.Exists(path) && !Directory.Exists(path); } catch { return false; } }
     private static bool IsFile(string? path) { try { return !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path) && File.Exists(path); } catch { return false; } }
