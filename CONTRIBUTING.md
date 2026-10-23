@@ -60,4 +60,3 @@ Be prepared to revise an approved contribution after review. Contributions must 
 ## Project-specific guidance
 
 Keep tool definitions, schemas, and client behavior compatible unless a contract change has been approved. Test the actual client-to-host path and keep credentials and private tool output out of fixtures.
-
