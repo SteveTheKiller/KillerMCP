@@ -1,16 +1,21 @@
 param(
     [ValidateSet('win-x64', 'win-arm64', 'linux-x64', 'linux-arm64', 'osx-x64', 'osx-arm64')]
     [string]$RuntimeIdentifier = 'win-x64',
-    [switch]$SkipTest
+    [switch]$SkipTest,
+    [string]$ArtifactRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 & (Join-Path $PSScriptRoot 'Test-PluginVersion.ps1')
-$output = Join-Path $root "artifacts\packages\$RuntimeIdentifier"
-$staging = Join-Path $root "artifacts\staging\$RuntimeIdentifier"
+$ArtifactRoot = & (Join-Path $PSScriptRoot 'Get-ArtifactRoot.ps1') -ArtifactRoot $ArtifactRoot
+$output = Join-Path $ArtifactRoot "packages\$RuntimeIdentifier"
+$staging = Join-Path $ArtifactRoot "staging\$RuntimeIdentifier"
 
 if (Test-Path -LiteralPath $staging) {
+    if (-not ([IO.Path]::GetFullPath($staging)).StartsWith($ArtifactRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Staging cleanup escaped the packaging root.'
+    }
     Remove-Item -LiteralPath $staging -Recurse -Force
 }
 New-Item -ItemType Directory -Path $staging -Force | Out-Null

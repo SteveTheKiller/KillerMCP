@@ -56,4 +56,6 @@ The former Runtime library is compiled into the main host. Client registration i
 
 Build `KillerMCP.slnx` from the root. This builds the host, configuration helper, notifier and checks. The installer is built through `scripts/Build-WindowsInstaller.ps1`, which first prepares its embedded native package.
 
+Packaging, installer checks and `release.ps1` share `-ArtifactRoot`, defaulting to `scratch/KillerMCP-packaging` under the current user's home directory. Packages, staging, installers, checksums and release notes stay there. Output inside a Git repository is rejected. Existing `-Installer` inputs remain supported for testing an exact package.
+
 Run the client and runtime check projects plus `scripts/Test-NativeHost.mjs` to verify registration, integrations and MCP behavior. `scripts/Test-NativePackage.ps1` verifies the published executables. Installer and update integration checks belong in the disposable Windows lab.

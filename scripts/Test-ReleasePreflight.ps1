@@ -1,8 +1,9 @@
-param()
+param([string]$ScratchRoot = '')
 
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent $PSScriptRoot
-$scratch = Join-Path ([IO.Path]::GetTempPath()) ('killermcp-release-preflight-' + [guid]::NewGuid().ToString('N'))
+$ScratchRoot = & (Join-Path $PSScriptRoot 'Get-ArtifactRoot.ps1') -ArtifactRoot $ScratchRoot
+$scratch = Join-Path $ScratchRoot ('killermcp-release-preflight-' + [guid]::NewGuid().ToString('N'))
 $seed = Join-Path $scratch 'seed'
 $engine = Join-Path $scratch 'engine'
 $remote = Join-Path $scratch 'remote.git'
@@ -34,6 +35,8 @@ Git $seed @('init', '--initial-branch=main', '--quiet')
 Git $seed @('config', 'user.name', $authorName)
 Git $seed @('config', 'user.email', $authorEmail)
 Copy-Item -LiteralPath (Join-Path $repository 'release.ps1') -Destination (Join-Path $seed 'release.ps1')
+[IO.Directory]::CreateDirectory((Join-Path $seed 'scripts')) | Out-Null
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Get-ArtifactRoot.ps1') -Destination (Join-Path $seed 'scripts\Get-ArtifactRoot.ps1')
 FixtureFile (Join-Path $seed 'KillerMCP.csproj') '<Project><PropertyGroup><Version>0.6.0</Version><ReleaseDate>2026-10-20</ReleaseDate></PropertyGroup></Project>'
 FixtureFile (Join-Path $seed 'scripts\Test-PluginVersion.ps1') "Write-Output 'Fixture plugin check'"
 FixtureFile (Join-Path $seed 'CHANGELOG.md') '## [0.6.0] - 2026-10-20'

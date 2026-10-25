@@ -1,12 +1,15 @@
-param([string]$Installer = '')
+param([string]$Installer = '', [string]$ArtifactRoot = '')
 
 # Updates started by the update window or the update check run setup with /silent /notify, so
 # nobody watches its console. When such an update cannot install, setup must show why.
 $ErrorActionPreference = 'Stop'
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) { throw 'The update failure test requires Windows.' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-if (-not $Installer) { & (Join-Path $PSScriptRoot 'Build-WindowsInstaller.ps1') | Out-Null }
-$setup = if ($Installer) { [IO.Path]::GetFullPath($Installer) } else { Join-Path $root 'artifacts\installer\KillerMCP-Setup.exe' }
+if (-not $Installer) {
+    $ArtifactRoot = & (Join-Path $PSScriptRoot 'Get-ArtifactRoot.ps1') -ArtifactRoot $ArtifactRoot
+    & (Join-Path $PSScriptRoot 'Build-WindowsInstaller.ps1') -ArtifactRoot $ArtifactRoot | Out-Null
+}
+$setup = if ($Installer) { [IO.Path]::GetFullPath($Installer) } else { Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe' }
 dotnet build (Join-Path $root 'tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj') -c Release -v:q | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'The fake Codex client build failed.' }
 $fakeCodex = Join-Path $root 'tests\KillerMCP.Clients.Checks\bin\Release\net10.0\KillerMCP.Clients.Checks.exe'

@@ -1,4 +1,4 @@
-param([string]$Installer = '')
+param([string]$Installer = '', [string]$ArtifactRoot = '')
 
 # Agent clients such as Codex run each KillerMCP host inside a job object that kills every
 # process in it when the client tears the job down. An update started from the host's update
@@ -8,8 +8,11 @@ param([string]$Installer = '')
 $ErrorActionPreference = 'Stop'
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) { throw 'The client job update test requires Windows.' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-if (-not $Installer) { & (Join-Path $PSScriptRoot 'Build-WindowsInstaller.ps1') | Out-Null }
-$setup = if ($Installer) { [IO.Path]::GetFullPath($Installer) } else { Join-Path $root 'artifacts\installer\KillerMCP-Setup.exe' }
+if (-not $Installer) {
+    $ArtifactRoot = & (Join-Path $PSScriptRoot 'Get-ArtifactRoot.ps1') -ArtifactRoot $ArtifactRoot
+    & (Join-Path $PSScriptRoot 'Build-WindowsInstaller.ps1') -ArtifactRoot $ArtifactRoot | Out-Null
+}
+$setup = if ($Installer) { [IO.Path]::GetFullPath($Installer) } else { Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe' }
 $setupVersion = [version](Get-Item -LiteralPath $setup).VersionInfo.FileVersion
 $version = "$($setupVersion.Major).$($setupVersion.Minor).$($setupVersion.Build)"
 dotnet build (Join-Path $root 'tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj') -c Release -v:q | Out-Null

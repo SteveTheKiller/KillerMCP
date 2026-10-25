@@ -7,7 +7,8 @@ param(
     [switch]$DryRun,
     [string]$CertThumbprint = '',
     [string]$CertName = 'Open Source Developer Stephen Riley',
-    [switch]$SkipSign
+    [switch]$SkipSign,
+    [string]$ArtifactRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,8 +43,9 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') { Fail 'KillerMCP.csproj does not cont
 & (Join-Path $PSScriptRoot 'scripts\Test-PluginVersion.ps1')
 
 $Tag = "v$Version"
-$installer = Join-Path $PSScriptRoot 'artifacts\installer\KillerMCP-Setup.exe'
-$sumsFile = Join-Path $PSScriptRoot 'artifacts\installer\SHA256SUMS.txt'
+$ArtifactRoot = & (Join-Path $PSScriptRoot 'scripts\Get-ArtifactRoot.ps1') -ArtifactRoot $ArtifactRoot
+$installer = Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe'
+$sumsFile = Join-Path $ArtifactRoot 'installer\SHA256SUMS.txt'
 $changelogFile = Join-Path $PSScriptRoot 'CHANGELOG.md'
 $engineProject = Join-Path $PSScriptRoot 'dependencies\KillerTools\src\KillerTools.Engine\KillerTools.Engine.csproj'
 
@@ -114,7 +116,7 @@ Invoke-Checked { dotnet run --project tests\KillerMCP.Runtime.Checks\KillerMCP.R
 Invoke-Checked { node scripts\Test-NativeHost.mjs } 'Native host checks failed.'
 
 Step 'Building KillerMCP Setup'
-Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Build-WindowsInstaller.ps1 } 'KillerMCP installer build failed.'
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Build-WindowsInstaller.ps1 -ArtifactRoot $ArtifactRoot } 'KillerMCP installer build failed.'
 if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { Fail "Installer was not produced: $installer" }
 
 if ($SkipSign) {
@@ -178,7 +180,7 @@ foreach ($line in $changelogLines) {
     if ($inSection) { $notes.Add($line) }
 }
 if ($notes.Count -eq 0) { Fail "Could not extract [$Version] notes from CHANGELOG.md." }
-$notesFile = Join-Path $env:TEMP "KillerMCP-$Version-notes.md"
+$notesFile = Join-Path $ArtifactRoot "installer\KillerMCP-$Version-notes.md"
 [IO.File]::WriteAllText($notesFile, ($notes -join "`r`n"), [Text.UTF8Encoding]::new($false))
 
 if (-not $DryRun) {
