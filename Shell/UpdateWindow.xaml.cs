@@ -243,7 +243,7 @@ public partial class UpdateWindow : Window
                 });
                 HeadingText.Inlines.Add(new Run("MCP")
                 {
-                    Foreground = (Brush)FindResource("Fuchsia"),
+                    Foreground = (Brush)FindResource("AccentLogo"),
                     FontFamily = (FontFamily)FindResource("WordmarkAccent"),
                     FontSize = HeadingText.FontSize * 1.068,
                 });
@@ -327,9 +327,9 @@ public partial class UpdateWindow : Window
         NotesHeading.Text = $"What's new in {_latestVersion}";
         NotesLink.ToolTip = $"Open the {_latestVersion} release notes on GitHub";
         System.Windows.Automation.AutomationProperties.SetName(NotesLink, "Full release notes");
-        var text = new SolidColorBrush(Color.FromRgb(0xd0, 0xd0, 0xd0));
-        var muted = new SolidColorBrush(Color.FromRgb(0x92, 0x92, 0x92));
-        var accent = (Brush)FindResource("Fuchsia");
+        var text = (Brush)FindResource("MutedTextBrush");
+        var muted = (Brush)FindResource("DimTextBrush");
+        var accent = (Brush)FindResource("PrimaryBrush");
         if (notes.Summary.Length > 0)
             NotesList.Children.Add(new TextBlock { Text = notes.Summary, Foreground = text, TextWrapping = TextWrapping.Wrap, LineHeight = 16, Margin = new Thickness(0, 0, 0, 4) });
         foreach (ReleaseNotes.Section section in notes.Sections)

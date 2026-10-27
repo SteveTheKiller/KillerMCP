@@ -5,122 +5,126 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="KillerMCP Setup" Width="650" Height="390" WindowStartupLocation="CenterScreen"
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
-        FontFamily="./Assets/#Killer Sans UI, Segoe UI" Foreground="#ffffff" TextOptions.TextFormattingMode="Display"
+        FontFamily="./Assets/#Killer Sans UI, Segoe UI" Foreground="{DynamicResource TextBrush}" TextOptions.TextFormattingMode="Display"
         TextOptions.TextRenderingMode="ClearType" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0" CornerRadius="7" GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/KillerMCP-Setup;component/Themes/Black.xaml"/>
+                <ResourceDictionary Source="/KillerMCP-Setup;component/Themes/Accents/Black/Magenta.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
         <FontFamily x:Key="Wordmark">./Assets/#Punktype</FontFamily>
         <FontFamily x:Key="WordmarkAccent">./Assets/#Lacquer</FontFamily>
         <FontFamily x:Key="BrandSans">./Assets/#Killer Sans</FontFamily>
         <FontFamily x:Key="UiFont">./Assets/#Killer Sans UI, Segoe UI</FontFamily>
-        <SolidColorBrush x:Key="Accent" Color="#ff2bbd"/>
-        <LinearGradientBrush x:Key="AccentFill" StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#ff2bbd" Offset="0"/><GradientStop Color="#d6249f" Offset="1"/></LinearGradientBrush>
         <Style x:Key="Button" TargetType="Button">
             <Setter Property="Height" Value="28"/><Setter Property="MinWidth" Value="68"/><Setter Property="Margin" Value="6,0,0,0"/>
-            <Setter Property="Padding" Value="12,2"/><Setter Property="Foreground" Value="#ffffff"/><Setter Property="Background" Value="#0a0a0a"/>
-            <Setter Property="BorderBrush" Value="#2a2a2a"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Padding" Value="12,2"/><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="Background" Value="{DynamicResource PaneBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-                <Grid><Border x:Name="FaceRing" IsHitTestVisible="False" CornerRadius="{Binding CornerRadius, ElementName=Face}" BorderThickness="{Binding BorderThickness, ElementName=Face}" BorderBrush="{Binding Background, ElementName=Face}" Margin="{Binding Margin, ElementName=Face}" Visibility="{Binding Visibility, ElementName=Face}" Opacity="{Binding Opacity, ElementName=Face}"/><Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></Grid>
+                <Grid><Border x:Name="FaceRing" IsHitTestVisible="False" CornerRadius="{Binding CornerRadius, ElementName=Face}" BorderThickness="{Binding BorderThickness, ElementName=Face}" BorderBrush="{Binding Background, ElementName=Face}" Margin="{Binding Margin, ElementName=Face}" Visibility="{Binding Visibility, ElementName=Face}" Opacity="{Binding Opacity, ElementName=Face}"/><Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource SmallCornerRadius}" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></Grid>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#333333"/><Setter TargetName="Face" Property="BorderBrush" Value="#aaaaaa"/></Trigger>
-                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#4a103a"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/><Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource InputHoverBrush}"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="{DynamicResource OutlinePressedBrush}"/><Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/></Trigger>
                     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.35"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
         <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource Button}">
-            <Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="{StaticResource Accent}"/><Setter Property="Foreground" Value="#ff52c9"/>
+            <Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/><Setter Property="Foreground" Value="{DynamicResource OutlineBtnBrush}"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-                <Grid><Border x:Name="FaceRing" IsHitTestVisible="False" CornerRadius="{Binding CornerRadius, ElementName=Face}" BorderThickness="{Binding BorderThickness, ElementName=Face}" BorderBrush="{Binding Background, ElementName=Face}" Margin="{Binding Margin, ElementName=Face}" Visibility="{Binding Visibility, ElementName=Face}" Opacity="{Binding Opacity, ElementName=Face}"/><Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></Grid>
+                <Grid><Border x:Name="FaceRing" IsHitTestVisible="False" CornerRadius="{Binding CornerRadius, ElementName=Face}" BorderThickness="{Binding BorderThickness, ElementName=Face}" BorderBrush="{Binding Background, ElementName=Face}" Margin="{Binding Margin, ElementName=Face}" Visibility="{Binding Visibility, ElementName=Face}" Opacity="{Binding Opacity, ElementName=Face}"/><Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource SmallCornerRadius}" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></Grid>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="{StaticResource AccentFill}"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource AccentFill}"/><Setter Property="Foreground" Value="#0a0a0a"/></Trigger>
-                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#4a103a"/><Setter Property="Foreground" Value="#ffffff"/></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="{DynamicResource SelectionBg}"/><Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource SelectionBg}"/><Setter Property="Foreground" Value="{DynamicResource SelectionFg}"/></Trigger>
+                    <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="{DynamicResource OutlinePressedBrush}"/><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/></Trigger>
                     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.35"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
         <Style TargetType="ComboBox">
-            <Setter Property="Foreground" Value="#ff52c9"/><Setter Property="Background" Value="#24101f"/>
-            <Setter Property="BorderBrush" Value="#7a155f"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="9,2"/>
+            <Setter Property="Foreground" Value="{DynamicResource OutlineBtnBrush}"/><Setter Property="Background" Value="{DynamicResource PaneBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="9,2"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
                 <Grid>
                     <ToggleButton Focusable="False" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" Background="Transparent" BorderThickness="0">
                         <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><ContentPresenter/></ControlTemplate></ToggleButton.Template>
-                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource SmallCornerRadius}">
                             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="26"/></Grid.ColumnDefinitions>
-                                <TextBlock Margin="{TemplateBinding Padding}" VerticalAlignment="Center" Foreground="#f4edf3" Text="{TemplateBinding SelectionBoxItem}"/>
-                                <Border Grid.Column="1" BorderBrush="#7a155f" BorderThickness="1,0,0,0"><Path Width="8" Height="5" Stretch="Fill" Fill="#ff52c9" Data="M 0 0 L 8 0 L 4 5 Z"/></Border>
+                                <TextBlock Margin="{TemplateBinding Padding}" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" Text="{TemplateBinding SelectionBoxItem}"/>
+                                <Border Grid.Column="1" BorderBrush="{DynamicResource InputBorderBrush}" BorderThickness="1,0,0,0"><Path Width="8" Height="5" Stretch="Fill" Fill="{DynamicResource OutlineBtnBrush}" Data="M 0 0 L 8 0 L 4 5 Z"/></Border>
                             </Grid>
                         </Border>
                     </ToggleButton>
                     <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" PopupAnimation="Fade" Focusable="False">
-                        <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" Margin="0,2,0,0" Background="#171116" BorderBrush="#ff2bbd" BorderThickness="1" CornerRadius="3"><ScrollViewer MaxHeight="220"><StackPanel IsItemsHost="True"/></ScrollViewer></Border>
+                        <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" Margin="0,2,0,0" Background="{DynamicResource MenuBackgroundBrush}" BorderBrush="{DynamicResource MenuBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource SmallCornerRadius}"><ScrollViewer MaxHeight="220"><StackPanel IsItemsHost="True"/></ScrollViewer></Border>
                     </Popup>
                 </Grid>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
         <Style TargetType="ComboBoxItem">
-            <Setter Property="Foreground" Value="#f4edf3"/><Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="Padding" Value="8,5"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
                 <Border x:Name="ItemFace" Background="Transparent" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemFace" Property="Background" Value="#7a155f"/></Trigger>
-                    <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemFace" Property="Background" Value="#a71980"/><Setter Property="Foreground" Value="#ffffff"/></Trigger>
+                    <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemFace" Property="Background" Value="{DynamicResource MenuHoverBrush}"/></Trigger>
+                    <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemFace" Property="Background" Value="{DynamicResource SelectionBg}"/><Setter Property="Foreground" Value="{DynamicResource SelectionFg}"/></Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
+        </ResourceDictionary>
     </Window.Resources>
-    <Border Margin="8" Background="#000000" BorderBrush="#2a2a2a" BorderThickness="1" CornerRadius="7" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+    <Border Margin="8" Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource WindowCornerRadius}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
         <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect>
         <Grid ClipToBounds="True">
             <Grid.ColumnDefinitions><ColumnDefinition Width="152"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-            <Border x:Name="FrameGrain" Grid.ColumnSpan="2" CornerRadius="7" IsHitTestVisible="False" Opacity="0.24"/>
-            <Border Grid.Column="0" Background="#000000" CornerRadius="7,0,0,7">
+            <Border x:Name="FrameGrain" Grid.ColumnSpan="2" CornerRadius="{DynamicResource WindowCornerRadius}" IsHitTestVisible="False" Opacity="0.24"/>
+            <Border Grid.Column="0" Background="{DynamicResource BackgroundBrush}" CornerRadius="7,0,0,7">
                 <Grid>
                     <Border x:Name="SidebarGrain" CornerRadius="7,0,0,7" IsHitTestVisible="False" Opacity="0.24"/>
                     <Grid Margin="22,16,14,16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <icons:AppIcon Source="Assets/mcp.png" Width="96" Height="96" Margin="6,-3,0,-3" HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="NearestNeighbor"><icons:AppIcon.Effect><DropShadowEffect Color="Black" BlurRadius="5" ShadowDepth="2" Opacity="0.9"/></icons:AppIcon.Effect></icons:AppIcon>
                     <StackPanel Grid.Row="1" Margin="0,6,0,0">
-                        <Grid HorizontalAlignment="Left"><TextBlock Foreground="#D8000000" Opacity="0.45" Margin="1,2,-1,-2" IsHitTestVisible="False"><TextBlock.Effect><BlurEffect Radius="3"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37"/></TextBlock><TextBlock><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37" Foreground="{StaticResource Accent}"/></TextBlock></Grid>
-                        <icons:SetupVersionText x:Name="VersionLabel" TextElement.FontFamily="{StaticResource UiFont}" TextElement.FontSize="10.5" TextElement.Foreground="#a0a0a0" Margin="1,2,0,0"/>
+                        <Grid HorizontalAlignment="Left"><TextBlock Foreground="#D8000000" Opacity="0.45" Margin="1,2,-1,-2" IsHitTestVisible="False"><TextBlock.Effect><BlurEffect Radius="3"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37"/></TextBlock><TextBlock><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37" Foreground="{DynamicResource AccentLogo}"/></TextBlock></Grid>
+                        <icons:SetupVersionText x:Name="VersionLabel" TextElement.FontFamily="{StaticResource UiFont}" TextElement.FontSize="10.5" TextElement.Foreground="{DynamicResource DimTextBrush}" Margin="1,2,0,0"/>
                     </StackPanel>
                     <StackPanel Grid.Row="2" Margin="1,10,0,0">
-                        <TextBlock FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="#a0a0a0" Text="Works with"/>
+                        <TextBlock FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="{DynamicResource DimTextBrush}" Text="Works with"/>
                         <StackPanel x:Name="AppList" Margin="0,3,0,0">
-                            <TextBlock><Run Text="Killer" Foreground="#ffffff"/><Run Text="PDF" Foreground="#00ff66"/></TextBlock>
-                            <TextBlock><Run Text="Killer" Foreground="#ffffff"/><Run Text="Notes" Foreground="#bf80ff"/></TextBlock>
-                            <TextBlock><Run Text="Killer" Foreground="#ffffff"/><Run Text="Scan" Foreground="#ff901f"/></TextBlock>
-                            <TextBlock><Run Text="Killer" Foreground="#ffffff"/><Run Text="Shell" Foreground="#50aee8"/></TextBlock>
-                            <TextBlock><Run Text="The " Foreground="#ffffff"/><Run Text="Killendar" Foreground="#ff5555"/></TextBlock>
-                            <TextBlock><Run Text="Killer" Foreground="#ffffff"/><Run Text="Bench" Foreground="#fff500"/></TextBlock>
-                            <TextBlock><Run Text="Killer" Foreground="#ffffff"/><Run Text="Shot" Foreground="#0affe7"/></TextBlock>
+                            <TextBlock><Run Text="Killer" Foreground="{DynamicResource TextBrush}"/><Run Text="PDF" Foreground="#00ff66"/></TextBlock>
+                            <TextBlock><Run Text="Killer" Foreground="{DynamicResource TextBrush}"/><Run Text="Notes" Foreground="#bf80ff"/></TextBlock>
+                            <TextBlock><Run Text="Killer" Foreground="{DynamicResource TextBrush}"/><Run Text="Scan" Foreground="#ff901f"/></TextBlock>
+                            <TextBlock><Run Text="Killer" Foreground="{DynamicResource TextBrush}"/><Run Text="Shell" Foreground="#50aee8"/></TextBlock>
+                            <TextBlock><Run Text="The " Foreground="{DynamicResource TextBrush}"/><Run Text="Killendar" Foreground="#ff5555"/></TextBlock>
+                            <TextBlock><Run Text="Killer" Foreground="{DynamicResource TextBrush}"/><Run Text="Bench" Foreground="#fff500"/></TextBlock>
+                            <TextBlock><Run Text="Killer" Foreground="{DynamicResource TextBrush}"/><Run Text="Shot" Foreground="#0affe7"/></TextBlock>
                         </StackPanel>
                     </StackPanel>
-                    <TextBlock Grid.Row="3" FontFamily="{StaticResource BrandSans}" FontSize="14" TextOptions.TextFormattingMode="Ideal" Foreground="#a0a0a0" Text="© 2026 Steve the Killer"/>
+                    <TextBlock Grid.Row="3" FontFamily="{StaticResource BrandSans}" FontSize="14" TextOptions.TextFormattingMode="Ideal" Foreground="{DynamicResource DimTextBrush}" Text="© 2026 Steve the Killer"/>
                     </Grid>
                 </Grid>
             </Border>
             <Grid Grid.Column="1" Margin="8">
-                <Border Background="#000000" CornerRadius="6"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect></Border>
-                <Border Background="#0a0a0a" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="6">
+                <Border Background="{DynamicResource BackgroundBrush}" CornerRadius="{DynamicResource PanelCornerRadius}"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect></Border>
+                <Border Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource InputBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PanelCornerRadius}">
                   <Grid>
-                    <Border x:Name="GrainLayer" CornerRadius="6" IsHitTestVisible="False" Opacity="0.24"/>
-                    <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click" Panel.ZIndex="3" ToolTip="Close" AutomationProperties.Name="Close"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><TextBlock x:Name="CloseGlyph" Text="&#x2715;" FontSize="11" Foreground="#b8b8b8" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Foreground" Value="#e04444"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
+                    <Border x:Name="GrainLayer" CornerRadius="{DynamicResource PanelCornerRadius}" IsHitTestVisible="False" Opacity="0.24"/>
+                    <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Cancel_Click" Panel.ZIndex="3" ToolTip="Close" AutomationProperties.Name="Close"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><TextBlock x:Name="CloseGlyph" Text="&#x2715;" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Foreground" Value="#e04444"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
                   <Grid Margin="24,22,24,16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <TextBlock x:Name="Heading" Text="Welcome to KillerMCP Setup" FontFamily="{StaticResource BrandSans}" FontSize="20" TextOptions.TextFormattingMode="Ideal" Margin="0,0,28,0"/>
-                    <TextBlock Grid.Row="1" Margin="0,6,25,14" Foreground="#b8b8b8" TextWrapping="Wrap" LineHeight="19" Text="Install the native KillerMCP host and connect compatible agent clients on this computer."/>
+                    <TextBlock Grid.Row="1" Margin="0,6,25,14" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" LineHeight="19" Text="Install the native KillerMCP host and connect compatible agent clients on this computer."/>
                     <StackPanel Grid.Row="2">
-                        <Border Background="#0a0a0a" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="3" Padding="11,9">
-                            <StackPanel><TextBlock Text="Install location" FontSize="10" Foreground="#929292"/><TextBlock x:Name="InstallLocation" FontFamily="{StaticResource UiFont}" FontSize="10.5" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel>
+                        <Border Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource InputBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource SmallCornerRadius}" Padding="11,9">
+                            <StackPanel><TextBlock Text="Install location" FontSize="10" Foreground="{DynamicResource DimTextBrush}"/><TextBlock x:Name="InstallLocation" FontFamily="{StaticResource UiFont}" FontSize="10.5" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel>
                         </Border>
                         <TextBlock x:Name="RuntimeStatus" Margin="1,13,0,0" FontFamily="{StaticResource UiFont}" FontSize="10.5" TextWrapping="Wrap"/>
-                        <TextBlock Margin="1,10,0,0" Foreground="#cfcfcf" TextWrapping="Wrap" Text="Setup installs the verified runtime, detects supported Killer apps, and registers one shared MCP connection."/>
-                        <TextBlock x:Name="RuntimeLink" Margin="1,12,0,0"><Hyperlink Foreground="#ff52c9" Click="RuntimeLink_Click">Download .NET 10 runtime</Hyperlink></TextBlock>
-                        <TextBlock Margin="1,12,0,4" Foreground="#929292" FontSize="10" Text="Update behavior"/>
+                        <TextBlock Margin="1,10,0,0" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Text="Setup installs the verified runtime, detects supported Killer apps, and registers one shared MCP connection."/>
+                        <TextBlock x:Name="RuntimeLink" Margin="1,12,0,0"><Hyperlink Foreground="{DynamicResource OutlineBtnBrush}" Click="RuntimeLink_Click">Download .NET 10 runtime</Hyperlink></TextBlock>
+                        <TextBlock Margin="1,12,0,4" Foreground="{DynamicResource DimTextBrush}" FontSize="10" Text="Update behavior"/>
                         <ComboBox x:Name="UpdateBehaviorBox" Width="210" Height="28" HorizontalAlignment="Left" AutomationProperties.Name="Update behavior">
                             <ComboBoxItem Tag="off">Do not check</ComboBoxItem>
                             <ComboBoxItem Tag="check">Check and ask</ComboBoxItem>
@@ -128,7 +132,7 @@
                             <ComboBoxItem Tag="install">Install automatically</ComboBoxItem>
                         </ComboBox>
                     </StackPanel>
-                    <TextBlock x:Name="Status" Grid.Row="3" Margin="0,8,0,10" FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="#aaaaaa" Text="Ready to install" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="Status" Grid.Row="3" Margin="0,8,0,10" FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="{DynamicResource DimTextBrush}" Text="Ready to install" TextWrapping="Wrap"/>
                     <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Content="Cancel" Style="{StaticResource Button}" Click="Cancel_Click"/>
                         <Button x:Name="UninstallButton" Content="Uninstall" Style="{StaticResource Button}" Click="Uninstall_Click" Visibility="Collapsed"/>

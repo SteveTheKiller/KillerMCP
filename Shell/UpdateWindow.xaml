@@ -6,26 +6,29 @@
         Title="KillerMCP Update" Icon="Assets/app-icon.ico" Width="650" Height="390"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize"
         AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True"
-        FontFamily="./Assets/#Killer Sans UI, Segoe UI" Foreground="#ffffff" UseLayoutRounding="True" SnapsToDevicePixels="True"
+        FontFamily="./Assets/#Killer Sans UI, Segoe UI" Foreground="{DynamicResource TextBrush}" UseLayoutRounding="True" SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="0" CornerRadius="7"
                             GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/KillerMCP.Notify;component/Themes/Black.xaml"/>
+                <ResourceDictionary Source="/KillerMCP.Notify;component/Themes/Accents/Black/Magenta.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
         <FontFamily x:Key="Wordmark">./Assets/#Punktype</FontFamily>
         <FontFamily x:Key="WordmarkAccent">./Assets/#Lacquer</FontFamily>
         <FontFamily x:Key="BrandSans">./Assets/#Killer Sans</FontFamily>
         <FontFamily x:Key="UiFont">./Assets/#Killer Sans UI, Segoe UI</FontFamily>
-        <SolidColorBrush x:Key="Fuchsia" Color="#ff2bbd"/>
-        <LinearGradientBrush x:Key="AccentFill" StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#ff2bbd" Offset="0"/><GradientStop Color="#d6249f" Offset="1"/></LinearGradientBrush>
         <Style x:Key="UpdateButton" TargetType="Button">
             <Setter Property="Height" Value="28"/>
             <Setter Property="MinWidth" Value="68"/>
             <Setter Property="Padding" Value="12,2"/>
-            <Setter Property="Foreground" Value="#ff52c9"/>
+            <Setter Property="Foreground" Value="{DynamicResource OutlineBtnBrush}"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Fuchsia}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -33,18 +36,18 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Grid><Border x:Name="FaceRing" IsHitTestVisible="False" CornerRadius="{Binding CornerRadius, ElementName=Face}" BorderThickness="{Binding BorderThickness, ElementName=Face}" BorderBrush="{Binding Background, ElementName=Face}" Margin="{Binding Margin, ElementName=Face}" Visibility="{Binding Visibility, ElementName=Face}" Opacity="{Binding Opacity, ElementName=Face}"/><Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource ControlCornerRadius}" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border></Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Face" Property="Background" Value="{StaticResource AccentFill}"/>
-                                <Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource AccentFill}"/>
-                                <Setter Property="Foreground" Value="#13000d"/>
+                                <Setter TargetName="Face" Property="Background" Value="{DynamicResource SelectionBg}"/>
+                                <Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource SelectionBg}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource SelectionFg}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Face" Property="Background" Value="#7a155f"/>
-                                <Setter Property="Foreground" Value="#ffffff"/>
+                                <Setter TargetName="Face" Property="Background" Value="{DynamicResource OutlinePressedBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
                         </ControlTemplate.Triggers>
@@ -56,9 +59,9 @@
             <Setter Property="Height" Value="28"/>
             <Setter Property="MinWidth" Value="68"/>
             <Setter Property="Padding" Value="12,2"/>
-            <Setter Property="Foreground" Value="#e0e0e0"/>
-            <Setter Property="Background" Value="#0a0a0a"/>
-            <Setter Property="BorderBrush" Value="#2a2a2a"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource PaneBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -66,40 +69,21 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Grid><Border x:Name="FaceRing" IsHitTestVisible="False" CornerRadius="{Binding CornerRadius, ElementName=Face}" BorderThickness="{Binding BorderThickness, ElementName=Face}" BorderBrush="{Binding Background, ElementName=Face}" Margin="{Binding Margin, ElementName=Face}" Visibility="{Binding Visibility, ElementName=Face}" Opacity="{Binding Opacity, ElementName=Face}"/><Border x:Name="Face" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource ControlCornerRadius}" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border></Grid>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="#333333"/><Setter TargetName="Face" Property="BorderBrush" Value="#aaaaaa"/></Trigger>
-                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="#4a103a"/><Setter TargetName="Face" Property="BorderBrush" Value="{StaticResource Fuchsia}"/></Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style x:Key="CloseButton" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#cfbdca"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="CloseFace" Background="{TemplateBinding Background}" CornerRadius="3">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseFace" Property="Background" Value="#7a155f"/><Setter Property="Foreground" Value="#ffffff"/></Trigger>
-                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="CloseFace" Property="Background" Value="#ff2bbd"/><Setter Property="Foreground" Value="#13000d"/></Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Face" Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/><Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource InputHoverBrush}"/></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Face" Property="Background" Value="{DynamicResource OutlinePressedBrush}"/><Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/></Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
         <Style TargetType="ComboBox">
-            <Setter Property="Foreground" Value="#ff52c9"/>
-            <Setter Property="Background" Value="#24101f"/>
-            <Setter Property="BorderBrush" Value="#7a155f"/>
+            <Setter Property="Foreground" Value="{DynamicResource OutlineBtnBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource PaneBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="9,2"/>
             <Setter Property="Template">
@@ -113,13 +97,13 @@
                                     <ControlTemplate TargetType="ToggleButton"><ContentPresenter/></ControlTemplate>
                                 </ToggleButton.Template>
                                 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3">
+                                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource SmallCornerRadius}">
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="26"/></Grid.ColumnDefinitions>
                                         <TextBlock Margin="{TemplateBinding Padding}" VerticalAlignment="Center" HorizontalAlignment="Left"
-                                                   Foreground="#f4edf3" Text="{TemplateBinding SelectionBoxItem}"/>
-                                        <Border Grid.Column="1" BorderBrush="#7a155f" BorderThickness="1,0,0,0">
-                                            <Path Width="8" Height="5" Stretch="Fill" Fill="#ff52c9" Data="M 0 0 L 8 0 L 4 5 Z"/>
+                                                   Foreground="{DynamicResource TextBrush}" Text="{TemplateBinding SelectionBoxItem}"/>
+                                        <Border Grid.Column="1" BorderBrush="{DynamicResource InputBorderBrush}" BorderThickness="1,0,0,0">
+                                            <Path Width="8" Height="5" Stretch="Fill" Fill="{DynamicResource OutlineBtnBrush}" Data="M 0 0 L 8 0 L 4 5 Z"/>
                                         </Border>
                                     </Grid>
                                 </Border>
@@ -127,7 +111,7 @@
                             <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
                                    AllowsTransparency="True" PopupAnimation="Fade" Focusable="False">
                                 <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
-                                        Margin="0,2,0,0" Background="#171116" BorderBrush="#ff2bbd" BorderThickness="1" CornerRadius="3">
+                                        Margin="0,2,0,0" Background="{DynamicResource MenuBackgroundBrush}" BorderBrush="{DynamicResource MenuBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource SmallCornerRadius}">
                                     <ScrollViewer MaxHeight="220"><StackPanel IsItemsHost="True"/></ScrollViewer>
                                 </Border>
                             </Popup>
@@ -137,7 +121,7 @@
             </Setter>
         </Style>
         <Style TargetType="ComboBoxItem">
-            <Setter Property="Foreground" Value="#f4edf3"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
             <Setter Property="Padding" Value="8,5"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -146,15 +130,15 @@
                             <ContentPresenter/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemFace" Property="Background" Value="#7a155f"/></Trigger>
-                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemFace" Property="Background" Value="#a71980"/><Setter Property="Foreground" Value="#ffffff"/></Trigger>
+                            <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemFace" Property="Background" Value="{DynamicResource MenuHoverBrush}"/></Trigger>
+                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemFace" Property="Background" Value="{DynamicResource SelectionBg}"/><Setter Property="Foreground" Value="{DynamicResource SelectionFg}"/></Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
         <Style x:Key="NotesLink" TargetType="Hyperlink">
-            <Setter Property="Foreground" Value="#ff52c9"/>
+            <Setter Property="Foreground" Value="{DynamicResource OutlineBtnBrush}"/>
             <Setter Property="TextDecorations" Value="{x:Null}"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Style.Triggers>
@@ -187,10 +171,10 @@
                                 <Thumb>
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
-                                            <Border x:Name="ThumbFace" Background="#88ff2bbd" CornerRadius="3" Margin="4,0"/>
+                                            <Border x:Name="ThumbFace" Background="{DynamicResource ScrollThumbBrush}" CornerRadius="{DynamicResource SmallCornerRadius}" Margin="4,0"/>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="ThumbFace" Property="Background" Value="#ff2bbd"/>
+                                                    <Setter TargetName="ThumbFace" Property="Background" Value="{DynamicResource ScrollThumbHoverBrush}"/>
                                                     <Setter TargetName="ThumbFace" Property="Margin" Value="2,2"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
@@ -203,34 +187,35 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        </ResourceDictionary>
     </Window.Resources>
-    <Border Margin="8" Background="#000000" BorderBrush="#2a2a2a" BorderThickness="1" CornerRadius="7" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+    <Border Margin="8" Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource WindowCornerRadius}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
         <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect>
         <Grid ClipToBounds="True">
             <Grid.ColumnDefinitions><ColumnDefinition Width="152"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-            <Border x:Name="GrainLayer" Grid.ColumnSpan="2" CornerRadius="7" IsHitTestVisible="False" Opacity="0.24"/>
+            <Border x:Name="GrainLayer" Grid.ColumnSpan="2" CornerRadius="{DynamicResource WindowCornerRadius}" IsHitTestVisible="False" Opacity="0.24"/>
             <Grid Grid.Column="0" Margin="22,16,14,16">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <icons:AppIcon Source="Assets/mcp.png" Width="96" Height="96" Margin="6,0,0,0" HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="NearestNeighbor"><icons:AppIcon.Effect><DropShadowEffect Color="Black" BlurRadius="5" ShadowDepth="2" Opacity="0.9"/></icons:AppIcon.Effect></icons:AppIcon>
                 <StackPanel Grid.Row="1" Margin="0,8,0,0">
-                    <Grid HorizontalAlignment="Left"><TextBlock Foreground="#D8000000" Opacity="0.45" Margin="1,2,-1,-2" IsHitTestVisible="False"><TextBlock.Effect><BlurEffect Radius="3"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37"/></TextBlock><TextBlock><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37" Foreground="{StaticResource Fuchsia}"/></TextBlock></Grid>
-                    <icons:SetupVersionText x:Name="SidebarVersion" TextElement.FontFamily="{StaticResource UiFont}" TextElement.FontSize="10.5" TextElement.Foreground="#a0a0a0" Margin="1,2,0,0"/>
+                    <Grid HorizontalAlignment="Left"><TextBlock Foreground="#D8000000" Opacity="0.45" Margin="1,2,-1,-2" IsHitTestVisible="False"><TextBlock.Effect><BlurEffect Radius="3"/></TextBlock.Effect><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37"/></TextBlock><TextBlock><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="19.56"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="29.37" Foreground="{DynamicResource AccentLogo}"/></TextBlock></Grid>
+                    <icons:SetupVersionText x:Name="SidebarVersion" TextElement.FontFamily="{StaticResource UiFont}" TextElement.FontSize="10.5" TextElement.Foreground="{DynamicResource DimTextBrush}" Margin="1,2,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Row="2" Margin="1,14,0,0">
-                    <TextBlock x:Name="VersionText" FontFamily="{StaticResource UiFont}" FontSize="12" Foreground="#d0d0d0" TextWrapping="Wrap" LineHeight="17"/>
+                    <TextBlock x:Name="VersionText" FontFamily="{StaticResource UiFont}" FontSize="12" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" LineHeight="17"/>
                 </StackPanel>
-                <TextBlock Grid.Row="3" Margin="0,12,0,0" FontFamily="{StaticResource BrandSans}" FontSize="14" TextOptions.TextFormattingMode="Ideal" Foreground="#a0a0a0" Text="&#x00A9; 2026 Steve the Killer"/>
+                <TextBlock Grid.Row="3" Margin="0,12,0,0" FontFamily="{StaticResource BrandSans}" FontSize="14" TextOptions.TextFormattingMode="Ideal" Foreground="{DynamicResource DimTextBrush}" Text="&#x00A9; 2026 Steve the Killer"/>
             </Grid>
             <Grid Grid.Column="1" Margin="8">
-                <Border Background="#000000" CornerRadius="6"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect></Border>
-                <Border Background="#0a0a0a" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="6">
+                <Border Background="{DynamicResource BackgroundBrush}" CornerRadius="{DynamicResource PanelCornerRadius}"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect></Border>
+                <Border Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource InputBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PanelCornerRadius}">
                     <Grid>
-                        <Border x:Name="PaneGrain" CornerRadius="6" IsHitTestVisible="False" Opacity="0.24"/>
-                        <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Later_Click" Panel.ZIndex="3" ToolTip="Close"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><TextBlock x:Name="CloseGlyph" Text="&#x2715;" FontSize="11" Foreground="#b8b8b8" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Foreground" Value="#e04444"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
+                        <Border x:Name="PaneGrain" CornerRadius="{DynamicResource PanelCornerRadius}" IsHitTestVisible="False" Opacity="0.24"/>
+                        <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Later_Click" Panel.ZIndex="3" ToolTip="Close"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><TextBlock x:Name="CloseGlyph" Text="&#x2715;" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Foreground" Value="#e04444"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
                         <Grid Margin="24,22,24,16">
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                            <TextBlock x:Name="HeadingText" FontFamily="{StaticResource BrandSans}" FontSize="20" TextOptions.TextFormattingMode="Ideal" Margin="0,0,28,0" TextWrapping="Wrap"><Run Text="A new "/><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="14.22"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="21.36" Foreground="{StaticResource Fuchsia}"/><Run Text=" is ready"/></TextBlock>
-                            <TextBlock x:Name="BodyText" Grid.Row="1" Margin="0,6,25,14" Foreground="#b8b8b8" TextWrapping="Wrap" LineHeight="19"
+                            <TextBlock x:Name="HeadingText" FontFamily="{StaticResource BrandSans}" FontSize="20" TextOptions.TextFormattingMode="Ideal" Margin="0,0,28,0" TextWrapping="Wrap"><Run Text="A new "/><Run Text="Killer" FontFamily="{StaticResource Wordmark}" FontSize="14.22"/><Run Text="MCP" FontFamily="{StaticResource WordmarkAccent}" FontSize="21.36" Foreground="{DynamicResource AccentLogo}"/><Run Text=" is ready"/></TextBlock>
+                            <TextBlock x:Name="BodyText" Grid.Row="1" Margin="0,6,25,14" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" LineHeight="19"
                                        Text="Update the local host, reconnect supported agent clients, and pick up the newest Killer tools."/>
                             <Grid Grid.Row="2">
                                 <Grid.RowDefinitions><RowDefinition x:Name="NotesRow" Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -238,16 +223,16 @@
                                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                                     <DockPanel Margin="1,0,1,4">
                                         <TextBlock DockPanel.Dock="Right" FontSize="10"><Hyperlink x:Name="NotesLink" Style="{StaticResource NotesLink}" Click="ReleaseNotes_Click"><Run Text="Full release notes"/></Hyperlink></TextBlock>
-                                        <TextBlock x:Name="NotesHeading" FontSize="10" Foreground="#929292" Text="What's new"/>
+                                        <TextBlock x:Name="NotesHeading" FontSize="10" Foreground="{DynamicResource DimTextBrush}" Text="What's new"/>
                                     </DockPanel>
-                                    <Border Grid.Row="1" Background="#050505" BorderBrush="#1c1c1c" BorderThickness="1" CornerRadius="4">
+                                    <Border Grid.Row="1" Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource InputBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource ControlCornerRadius}">
                                         <ScrollViewer x:Name="NotesScroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Padding="10,6,2,7">
                                             <StackPanel x:Name="NotesList" TextElement.FontSize="11.5"/>
                                         </ScrollViewer>
                                     </Border>
                                 </Grid>
                                 <StackPanel Grid.Row="1">
-                                    <TextBlock Text="Future updates" FontSize="10" Foreground="#929292" Margin="1,0,0,4"/>
+                                    <TextBlock Text="Future updates" FontSize="10" Foreground="{DynamicResource DimTextBrush}" Margin="1,0,0,4"/>
                                     <ComboBox x:Name="BehaviorBox" Width="210" Height="28" HorizontalAlignment="Left" AutomationProperties.Name="Future updates" SelectionChanged="BehaviorBox_SelectionChanged">
                                         <ComboBoxItem Tag="off">Do not check</ComboBoxItem>
                                         <ComboBoxItem Tag="check">Check and ask</ComboBoxItem>
@@ -256,7 +241,7 @@
                                     </ComboBox>
                                 </StackPanel>
                             </Grid>
-                            <TextBlock x:Name="StatusText" Grid.Row="3" Margin="0,8,0,10" FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="#aaaaaa" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="StatusText" Grid.Row="3" Margin="0,8,0,10" FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="{DynamicResource DimTextBrush}" TextWrapping="Wrap"/>
                             <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button x:Name="LaterButton" Content="Later" Style="{StaticResource LaterButton}" Margin="0,0,6,0" Click="Later_Click"/>
                                 <Button x:Name="UpdateButton" Content="Update now" Style="{StaticResource UpdateButton}" IsDefault="True" Click="Update_Click"/>

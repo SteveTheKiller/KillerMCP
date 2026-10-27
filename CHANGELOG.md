@@ -4,6 +4,14 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+KillerMCP's setup, update, repair approval and tray menu windows now take their colors from the shared Killer Tools theme.
+
+### Changed
+
+- Setup, the uninstall prompt, the update window, the repair approval window and the tray menu use the KillerUI Black theme with the Magenta accent instead of their own copies of its colors, so buttons, lists, menus and scroll bars match the rest of the Killer Tools family.
+
 ## [0.8.0] - 2026-10-21
 
 KillerMCP 0.8.0 makes repairs, scans, passwords, recordings and updates safer, checks every tool call before it runs, and finds KillerScan's tools again.

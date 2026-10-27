@@ -33,4 +33,9 @@
   <Target Name="RequirePayload" BeforeTargets="CoreCompile">
     <Error Condition="'$(PayloadZip)' == '' or !Exists('$(PayloadZip)')" Text="Build the verified native payload before compiling the installer." />
   </Target>
+  <ItemGroup>
+    <!-- KillerUI kit theme dictionaries (Black with the Magenta accent), shared at the repo root. -->
+    <Page Include="..\Themes\Black.xaml" Link="Themes\Black.xaml" />
+    <Page Include="..\Themes\Accents\Black\Magenta.xaml" Link="Themes\Accents\Black\Magenta.xaml" />
+  </ItemGroup>
 </Project>
