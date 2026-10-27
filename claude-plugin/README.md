@@ -7,7 +7,7 @@ KillerMCP gives Claude one local connection to KillerTools and the Killer apps i
 This plugin needs Windows and the KillerMCP app. Install the app first with the [signed installer](https://github.com/SteveTheKiller/KillerMCP/releases/latest/download/KillerMCP-Setup.exe), WinGet or Chocolatey:
 
 ```powershell
-winget install SteveTheKiller.KillerMCP
+winget install killermcp
 choco install killermcp
 ```
 

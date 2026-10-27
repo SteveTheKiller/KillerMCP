@@ -14,7 +14,7 @@ KillerMCP is a native .NET 10 host. It detects supported Killer apps, exposes th
 You can also install it with WinGet or Chocolatey. Both install the .NET 10 Desktop Runtime for you when it is missing.
 
 ```powershell
-winget install SteveTheKiller.KillerMCP
+winget install killermcp
 choco install killermcp
 ```
 
