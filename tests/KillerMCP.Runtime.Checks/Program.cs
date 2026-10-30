@@ -158,6 +158,12 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     if (arguments.Length > 0 && arguments[0] is "--print" or "--document-info" or "--search-text")
     {
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_INFO_JSON") == "1") { Console.Write(JsonSerializer.Serialize(new { pages = 1, title = new string('t', 3000) })); return; }
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_PARTIAL_SEARCH") == "1")
+        {
+            Console.Write(JsonSerializer.Serialize(new { totalHits = 1, pages = new[] { 1 }, unreadablePages = new[] { 2 } }));
+            Environment.ExitCode = 3;
+            return;
+        }
         Console.Write("Fixture action completed");
         return;
     }
@@ -832,6 +838,12 @@ try
     Equal(false, (await Pdf("killerpdf_duplicate_page", new { path = sourceOne, page = 1, output = Path.Combine(root, "duplicate.pdf") })).IsError);
     Equal(false, (await Pdf("killerpdf_document_info", new { path = sourceOne })).IsError);
     Equal(false, (await Pdf("killerpdf_search_text", new { path = sourceOne, query = "fixture" })).IsError);
+    // Exit 3 is a search that left unreadable pages out: the hits come back and name those pages.
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_PARTIAL_SEARCH", "1");
+    var partialSearch = await Pdf("killerpdf_search_text", new { path = sourceOne, query = "fixture" });
+    Equal(false, partialSearch.IsError);
+    Equal(2, JsonDocument.Parse(partialSearch.Text).RootElement.GetProperty("result").GetProperty("unreadablePages")[0].GetInt32());
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_PARTIAL_SEARCH", null);
     // A long JSON answer comes back whole and parseable, not cut into invalid JSON.
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_INFO_JSON", "1");
     var longInfo = JsonDocument.Parse((await Pdf("killerpdf_document_info", new { path = sourceOne })).Text).RootElement;

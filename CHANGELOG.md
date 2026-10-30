@@ -6,7 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ## [Unreleased]
 
-KillerMCP's setup, update, repair approval and tray menu windows now take their colors from the shared Killer Tools theme.
+KillerMCP's setup, update, repair approval and tray menu windows now take their colors from the shared Killer Tools theme, and PDF text search keeps its hits when some pages cannot be read.
+
+### Fixed
+
+- `killerpdf_search_text` returns its hits and an `unreadablePages` list when KillerPDF 1.9.1 or newer could not read some pages, instead of reporting the search as failed.
 
 ### Changed
 

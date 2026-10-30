@@ -144,9 +144,10 @@ public static partial class KillerPdfAdapter
             (input, output) => ["--duplicate-page", String(input, "path"), Number(input, "page"), output]);
         yield return Action("killerpdf_document_info", "--document-info <in.pdf>", "Read page count, PDF version, metadata, language, and dates from a local PDF without changing it.",
             Schema(new JsonObject { ["path"] = PdfPath() }, "path"), input => ["--document-info", String(input, "path")]);
-        yield return Action("killerpdf_search_text", "--search-text <in.pdf>", "Search text in a local PDF and return the matching page numbers without changing it.",
+        // Exit 3 is a search that left unreadable pages out: the hits are real and unreadablePages names the rest.
+        yield return Action("killerpdf_search_text", "--search-text <in.pdf>", "Search text in a local PDF and return the matching page numbers without changing it. Pages it could not read are listed in unreadablePages.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["query"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 512 } }, "path", "query"),
-            input => ["--search-text", String(input, "path"), String(input, "query")]);
+            input => ["--search-text", String(input, "path"), String(input, "query")]) with { SuccessCodes = [0, 3] };
         foreach (var operation in DocumentOperations()) yield return operation;
     }
 
