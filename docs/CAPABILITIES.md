@@ -190,8 +190,8 @@ PDF creation uses the installed Microsoft Edge print engine in a private session
 - Run a quick discovery scan against one IPv4 address or a CIDR containing no more than 1,024 addresses.
 - Run a full scan with fingerprinting and port checks when explicitly requested.
 - Deep probe one IPv4 host, including ports 1 through 1024.
-- With KillerScan 1.9.0 or later, list the saved Locations with their names, IDs, customers, and last targets and adapters. Listing reads only and sends no network traffic.
-- With KillerScan 1.9.0 or later, use a saved Location by name or ID. A scan records the run and its devices there and reports whether that saved, plus any baseline or new-device notes. A probe only reads the Location's device names and types. Without a Location nothing is saved.
+- With KillerScan 1.9.0 or later, list the saved Locations with their names, IDs, customers, and last targets and adapters. Listing reads only and sends no network traffic. An older install lists none until KillerScan moves its data into Locations, which opening KillerScan or scanning with a Location does.
+- With KillerScan 1.9.0 or later, use a saved Location by name or ID. A scan records the run and its devices there and reports whether that saved, plus any baseline or new-device notes. A probe uses the Location's device names and types and records no run. Without a Location nothing is saved.
 - With KillerScan 1.9.0 or later, turn off named checks and send every probe from one connected adapter.
 - Look up a MAC address manufacturer in KillerScan's offline OUI database.
 - Ping one IPv4 address or hostname and report latency and packet loss.
