@@ -110,6 +110,9 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
         // KillerScan 1.8.2 and later list commands by name; earlier versions list the slash forms.
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_HELP_STYLE") == "modern")
             Console.WriteLine("KillerScan command line\n  killerscan scan [targets]        scan one or several CIDRs, hosts, or ranges\n  killerscan uiscan [targets]      open the interface and begin scanning\n  killerscan probe <IPv4>          deep-probe one host, including ports 1-1024\n  killerscan network               show the detected interface, subnet, gateway, and DNS\n  killerscan vendor <MAC>          look up a MAC address in the offline OUI database\n  killerscan ping <target>         send a bounded set of ICMP checks\n  killerscan trace <target>        trace the network path to an IPv4 target\n  killerscan diagnose <target>     check DNS, ping, route, and TCP ports\n  killerscan watch <targets>       sample up to 16 IPv4 targets for availability\n  killerscan speedtest             run the native KillerSpeed test\n  killerscan version               print the version             /help  show this text");
+        // KillerScan 1.9.0 and later also list these scan and probe options.
+        else if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_HELP_STYLE") == "options")
+            Console.WriteLine("KillerScan command line\r\n  killerscan scan [targets]        scan one or several CIDRs, hosts, or ranges\r\n  killerscan probe <IPv4>          deep-probe one host, including ports 1-1024\r\n  killerscan network               show the detected interface, subnet, gateway, and DNS\r\n  killerscan vendor <MAC>          look up a MAC address in the offline OUI database\r\n  killerscan ping <target>         send a bounded set of ICMP checks\r\n  killerscan trace <target>        trace the network path to an IPv4 target\r\n  killerscan diagnose <target>     check DNS, ping, route, and TCP ports\r\n  killerscan watch <targets>       sample up to 16 IPv4 targets for availability\r\n  killerscan speedtest             run the native KillerSpeed test\r\n  /location <name|id>    use and record into a saved Location; without it nothing is saved\r\n  /skip <check,...>      turn checks off: neighbor-cache, arp, icmp, tcp-liveness, dns, mdns, ssdp, ports, http, tls, ssh, snmp, netbios\r\n  /adapter <name|ip>     send every probe from one adapter; only its own network is reachable\r\n");
         else Console.WriteLine("/network /scan [targets] /probe <IPv4> /vendor <MAC> /ping <target> /trace <target> /diagnose <target> /watch <targets> /speedtest");
         return;
     }
@@ -127,11 +130,13 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     if (arguments.Length > 0 && arguments[0] == "/scan")
     {
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG") is { Length: > 0 } scanLog) File.WriteAllText(scanLog, string.Join(" ", arguments));
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_STDERR") is { Length: > 0 } scanNotes) Console.Error.Write(scanNotes);
         Console.Write("[{\"IpAddress\":\"192.0.2.10\",\"Hostname\":\"workstation.example\",\"MacAddress\":\"00:11:22:33:44:55\",\"Vendor\":\"Example Devices\",\"DeviceType\":\"Computer\",\"OpenPortsDisplay\":\"80, 443\"},{\"IpAddress\":\"192.0.2.1\",\"Hostname\":\"gateway.example\",\"MacAddress\":\"00:11:22:33:44:01\",\"Vendor\":\"Example Networks\",\"DeviceType\":\"Router\",\"OpenPortsDisplay\":\"443\"}]");
         return;
     }
     if (arguments.Length > 0 && arguments[0] == "/probe")
     {
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG") is { Length: > 0 } probeLog) File.WriteAllText(probeLog, string.Join(" ", arguments));
         Console.Write("[{\"IpAddress\":\"192.0.2.20\",\"Hostname\":\"probe.example\"}]");
         return;
     }
@@ -1046,6 +1051,99 @@ try
     // KillerScan's current help lists commands by name, and every tool is still found.
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_HELP_STYLE", "modern");
     Equal(9, (await KillerScanAdapter.CreateAsync(Environment.ProcessPath)).Count);
+
+    // A KillerScan that does not list the options is not offered them, and asking anyway runs nothing.
+    File.Delete(scanLog);
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG", scanLog);
+    var olderScan = (await KillerScanAdapter.CreateAsync(Environment.ProcessPath)).ToDictionary(item => item.Tool.Name);
+    foreach (var name in new[] { "killerscan_scan_network", "killerscan_probe_host" })
+        foreach (var option in new[] { "location", "skip", "adapter" })
+            Equal(false, olderScan[name].Tool.InputSchema["properties"]!.AsObject().ContainsKey(option));
+    async Task<AppCallResult> ScanTool(Dictionary<string, AppAdapter> tools, string name, object arguments)
+    {
+        using var input = JsonDocument.Parse(JsonSerializer.Serialize(arguments));
+        return await tools[name].CallAsync(input.RootElement, CancellationToken.None);
+    }
+    var tooOld = await ScanTool(olderScan, "killerscan_scan_network", new { target = "198.51.100.7", location = "Main Office" });
+    Equal(true, tooOld.IsError);
+    Equal(true, tooOld.Text.Contains("1.9.0", StringComparison.Ordinal));
+    Equal(false, File.Exists(scanLog));
+
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_HELP_STYLE", "options");
+    var optionScan = (await KillerScanAdapter.CreateAsync(Environment.ProcessPath)).ToDictionary(item => item.Tool.Name);
+    Equal(9, optionScan.Count);
+    foreach (var name in new[] { "killerscan_scan_network", "killerscan_probe_host" })
+    {
+        var options = optionScan[name].Tool.InputSchema["properties"]!.AsObject();
+        Equal(true, options.ContainsKey("location") && options.ContainsKey("adapter"));
+        // The check names come from KillerScan's own help, line endings and all.
+        Equal(13, options["skip"]!["items"]!["enum"]!.AsArray().Count);
+        Equal("netbios", options["skip"]!["items"]!["enum"]!.AsArray()[12]!.GetValue<string>());
+        Equal(true, optionScan[name].Tool.Description.Contains("location", StringComparison.Ordinal));
+    }
+    string Arguments() { var text = File.ReadAllText(scanLog); File.Delete(scanLog); return text; }
+
+    // Every option reaches KillerScan, and the result says the run was saved and what KillerScan noted.
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_STDERR", "KillerScan: scanning 198.51.100.7 (1 addresses)...\r\nBaseline set: 2 devices are now known. None are approved yet.\r\n");
+    var saved = await ScanTool(optionScan, "killerscan_scan_network", new { target = "198.51.100.7", location = "  Main Office ", skip = new[] { "mdns", "ssdp" }, adapter = "Ethernet 2" });
+    Equal(false, saved.IsError);
+    Equal("/scan 198.51.100.7 /json /timeout 60 /limit 100 /quick /location Main Office /adapter Ethernet 2 /skip mdns,ssdp", Arguments());
+    var savedResult = JsonDocument.Parse(saved.Text).RootElement;
+    Equal("Main Office", savedResult.GetProperty("location").GetString());
+    Equal(true, savedResult.GetProperty("saved").GetBoolean());
+    Equal(1, savedResult.GetProperty("notes").GetArrayLength());
+    Equal("Baseline set: 2 devices are now known. None are approved yet.", savedResult.GetProperty("notes")[0].GetString());
+    Equal(2, savedResult.GetProperty("devices").GetArrayLength());
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_STDERR", "Alert: 1 devices are new since the baseline.\r\n");
+    Equal("Alert: 1 devices are new since the baseline.", JsonDocument.Parse((await ScanTool(optionScan, "killerscan_scan_network", new { location = "Main Office" })).Text).RootElement.GetProperty("notes")[0].GetString());
+    File.Delete(scanLog);
+
+    // KillerScan exits 0 when the save fails, so that has to show in the result, with the devices kept.
+    foreach (var failure in new[] { "Warning: the scan could not be saved to history - disk full", "Warning: known devices could not be saved - access denied", "Warning: Location \"Main Office\" was deleted during the scan, so the run was not recorded." })
+    {
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_STDERR", failure + "\r\n");
+        var failedSave = await ScanTool(optionScan, "killerscan_scan_network", new { target = "198.51.100.7", location = "Main Office" });
+        Equal(false, failedSave.IsError);
+        var unsavedResult = JsonDocument.Parse(failedSave.Text).RootElement;
+        Equal(false, unsavedResult.GetProperty("saved").GetBoolean());
+        Equal(failure, unsavedResult.GetProperty("notes")[0].GetString());
+        Equal(2, unsavedResult.GetProperty("devices").GetArrayLength());
+        File.Delete(scanLog);
+    }
+
+    // Without a Location nothing is saved, so the result claims nothing about saving.
+    var temporary = JsonDocument.Parse((await ScanTool(optionScan, "killerscan_scan_network", new { target = "198.51.100.7" })).Text).RootElement;
+    Equal(false, temporary.TryGetProperty("saved", out _) || temporary.TryGetProperty("location", out _) || temporary.TryGetProperty("notes", out _));
+    Equal("/scan 198.51.100.7 /json /timeout 60 /limit 100 /quick", Arguments());
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_STDERR", null);
+    await ScanTool(optionScan, "killerscan_scan_network", new { target = "198.51.100.7", skip = Array.Empty<string>() });
+    Equal("/scan 198.51.100.7 /json /timeout 60 /limit 100 /quick", Arguments());
+
+    var probed = await ScanTool(optionScan, "killerscan_probe_host", new { target = "192.0.2.20", location = "site-id", skip = new[] { "snmp" }, adapter = "192.0.2.10" });
+    Equal(false, probed.IsError);
+    Equal("/probe 192.0.2.20 /json /timeout 60 /limit 1 /location site-id /adapter 192.0.2.10 /skip snmp", Arguments());
+    Equal(JsonValueKind.Array, JsonDocument.Parse(probed.Text).RootElement.ValueKind);
+
+    // Bad options are refused before anything is probed, by the adapter and by the host's schema check.
+    foreach (var bad in new object[]
+    {
+        new { target = "198.51.100.7", location = "" }, new { target = "198.51.100.7", location = "   " },
+        new { target = "198.51.100.7", location = "two\nlines" }, new { target = "198.51.100.7", location = new string('x', 257) },
+        new { target = "198.51.100.7", location = 7 }, new { target = "198.51.100.7", adapter = "" },
+        new { target = "198.51.100.7", adapter = "Ethernet\u0000 2" }, new { target = "198.51.100.7", skip = new[] { "nope" } },
+        new { target = "198.51.100.7", skip = new[] { "dns", "dns" } }, new { target = "198.51.100.7", skip = "dns" },
+        new { target = "198.51.100.7", skip = new[] { "dns,mdns" } },
+    })
+    {
+        foreach (var name in new[] { "killerscan_scan_network", "killerscan_probe_host" })
+            Equal(true, (await ScanTool(optionScan, name, bad)).IsError);
+        Equal(false, File.Exists(scanLog));
+    }
+    using var unknownCheck = JsonDocument.Parse("{\"skip\":[\"nope\"]}");
+    using var optionSchema = JsonDocument.Parse(optionScan["killerscan_scan_network"].Tool.InputSchema.ToJsonString());
+    Equal(false, KillerMCP.Services.Mcp.ToolSchema.Validate(unknownCheck.RootElement, optionSchema.RootElement) is null);
+
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG", null);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_HELP_STYLE", null);
     using var probe = JsonDocument.Parse("{\"target\":\"192.0.2.20\"}");
     Equal(false, (await scanByName["killerscan_probe_host"].CallAsync(probe.RootElement, CancellationToken.None)).IsError);

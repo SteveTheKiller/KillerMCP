@@ -14,11 +14,12 @@ public static partial class KillerScanAdapter
         var help = await Run(path!, ["/help"], 8, 65536, cancellationToken).ConfigureAwait(false);
         if (help.ExitCode != 0) return [];
         var adapters = new List<AppAdapter>();
+        var options = ScanOptions.From(help.StandardOutput);
         // KillerScan 1.8.2 and later list commands by name in their help and still accept the slash forms
         // this adapter sends; earlier versions list the slash forms.
         Add(help, ["/network", "killerscan network "], adapters, Tool("killerscan_local_network", "Use KillerScan to identify the active local IPv4 network, interface, gateway, and DNS server without scanning hosts.", EmptySchema()), (input, token) => Network(path!, input, token));
-        Add(help, ["/scan [targets]", "killerscan scan [targets]"], adapters, Tool("killerscan_scan_network", "Scan the active local IPv4 network, an IPv4 host, or a CIDR of at most 1,024 addresses with KillerScan and return the scanned range, its address count and the discovered devices as JSON. Omit target for requests such as \"killerscan my network\"; a local network larger than 1,024 addresses needs a target inside it. Runs quick discovery by default; set full for fingerprinting and port checks. Scanning sends network probes.", ScanSchema()), (input, token) => Scan(path!, input, token));
-        Add(help, ["/probe <IPv4>", "killerscan probe <IPv4>"], adapters, Tool("killerscan_probe_host", "Deep probe one IPv4 host with KillerScan, including ports 1 through 1024, and return its device details as JSON. Probing sends network traffic to the selected host.", ProbeSchema()), (input, token) => Probe(path!, input, token));
+        Add(help, ["/scan [targets]", "killerscan scan [targets]"], adapters, Tool("killerscan_scan_network", "Scan the active local IPv4 network, an IPv4 host, or a CIDR of at most 1,024 addresses with KillerScan and return the scanned range, its address count and the discovered devices as JSON. Omit target for requests such as \"killerscan my network\"; a local network larger than 1,024 addresses needs a target inside it. Runs quick discovery by default; set full for fingerprinting and port checks. Scanning sends network probes." + options.ScanText, ScanSchema(options)), (input, token) => Scan(path!, options, input, token));
+        Add(help, ["/probe <IPv4>", "killerscan probe <IPv4>"], adapters, Tool("killerscan_probe_host", "Deep probe one IPv4 host with KillerScan, including ports 1 through 1024, and return its device details as JSON. Probing sends network traffic to the selected host." + options.ProbeText, ProbeSchema(options)), (input, token) => Probe(path!, options, input, token));
         Add(help, ["/vendor <MAC>", "killerscan vendor <MAC>"], adapters, Tool("killerscan_mac_vendor", "Look up the manufacturer of a MAC address in KillerScan's bundled offline OUI database.", VendorSchema()), (input, token) => Vendor(path!, input, token));
         Add(help, ["/ping <target>", "killerscan ping <target>"], adapters, Tool("killerscan_ping", "Send a bounded set of ICMP checks to one IPv4 address or hostname with KillerScan and return latency and packet loss as JSON.", TargetIntegerSchema("count", 1, 20, 4)), (input, token) => Ping(path!, input, token));
         Add(help, ["/trace <target>", "killerscan trace <target>"], adapters, Tool("killerscan_trace_route", "Trace the network path to one IPv4 address or hostname with KillerScan and return up to 64 hops as JSON.", TargetIntegerSchema("maxHops", 1, 64, 30)), (input, token) => Trace(path!, input, token));
@@ -43,9 +44,9 @@ public static partial class KillerScanAdapter
         return result.Count == labels.Count ? Ok(result.ToJsonString()) : Error("KillerScan returned an incomplete network response");
     }
 
-    private static async Task<AppCallResult> Scan(string path, JsonElement input, CancellationToken token)
+    private static async Task<AppCallResult> Scan(string path, ScanOptions options, JsonElement input, CancellationToken token)
     {
-        if (!ObjectWith(input, "target", "full", "limit")) return Error("Expected scan arguments");
+        if (!ObjectWith(input, "target", "full", "limit", "location", "skip", "adapter")) return Error("Expected scan arguments");
         string? target = null;
         if (input.TryGetProperty("target", out var targetValue))
         {
@@ -54,12 +55,61 @@ public static partial class KillerScanAdapter
         }
         if (!OptionalBoolean(input, "full", out var full)) return Error("Full must be true or false");
         if (!OptionalInteger(input, "limit", 1, 100, 100, out var limit)) return Error("Limit must be between 1 and 100");
+        var selected = new List<string>();
+        if (OptionArguments(input, options, selected, out var location) is { } refused) return Error(refused);
         var (scope, problem) = await ResolveScopeAsync(path, target, token).ConfigureAwait(false);
         if (scope is null) return Error(problem!);
-        var devices = await JsonArray(path, ScanArguments(scope, full, limit), 70, 100, "scan", token).ConfigureAwait(false);
+        var response = await Run(path, [.. ScanArguments(scope, full, limit), .. selected], 70, 1048576, token).ConfigureAwait(false);
+        var devices = DeviceArray(response, 100, "scan");
         if (devices.IsError) return devices;
-        return Ok(new JsonObject { ["target"] = scope.Target, ["addresses"] = scope.Addresses, ["devices"] = JsonNode.Parse(devices.Text) }.ToJsonString());
+        var result = new JsonObject { ["target"] = scope.Target, ["addresses"] = scope.Addresses, ["devices"] = JsonNode.Parse(devices.Text) };
+        if (location is not null)
+        {
+            // KillerScan exits 0 when a finished scan cannot be saved, and says so only on stderr.
+            var notes = response.StandardError.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Where(line => LocationNote().IsMatch(line)).ToArray();
+            result["location"] = location;
+            result["saved"] = !notes.Any(note => note.StartsWith("Warning:", StringComparison.Ordinal));
+            result["notes"] = new JsonArray(notes.Select(note => JsonValue.Create(note)).ToArray<JsonNode?>());
+        }
+        return Ok(result.ToJsonString());
     }
+
+    /// <summary>
+    /// What the installed KillerScan's help offers scans and probes. Versions before 1.9.0 offer none of this,
+    /// and the check names are read from the help so they cannot fall behind KillerScan.
+    /// </summary>
+    private sealed record ScanOptions(bool Location, bool Adapter, string[] Checks)
+    {
+        public static ScanOptions From(string help) => new(help.Contains("/location <name|id>", StringComparison.Ordinal), help.Contains("/adapter <name|ip>", StringComparison.Ordinal),
+            SkipChecks().Match(help) is { Success: true } line ? line.Groups[1].Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : []);
+
+        public string ScanText => (Location ? " With location, the scan uses that saved KillerScan Location's device names and types and records the run and its devices there, and the result reports whether that saved plus any baseline or new-device notes. The Location must already exist in KillerScan and is given by its name or ID. Without location nothing is saved." : "") + SharedText;
+        public string ProbeText => (Location ? " With location, the probe uses that saved KillerScan Location's device names and types and records nothing." : "") + SharedText;
+        private string SharedText => (Checks.Length > 0 ? " skip lists checks to turn off." : "") + (Adapter ? " adapter sends every probe from one connected adapter, given by its Windows name or address, so the target must be on that adapter's network or routed through it." : "");
+    }
+
+    // KillerScan reads the word after /location or /adapter as its value, so a name that looks like a flag stays a name.
+    private static string? OptionArguments(JsonElement input, ScanOptions options, List<string> arguments, out string? location)
+    {
+        location = null;
+        foreach (var (name, flag, offered) in new[] { ("location", "/location", options.Location), ("adapter", "/adapter", options.Adapter) })
+        {
+            if (!input.TryGetProperty(name, out var element)) continue;
+            if (!offered) return $"The {name} option needs KillerScan 1.9.0 or later";
+            var value = element.ValueKind == JsonValueKind.String ? element.GetString()!.Trim() : string.Empty;
+            if (value.Length is 0 or > MaximumOptionLength || value.Any(char.IsControl)) return $"The {name} must be a name of 1 to {MaximumOptionLength} characters on one line";
+            arguments.AddRange([flag, value]);
+            if (name == "location") location = value;
+        }
+        if (!input.TryGetProperty("skip", out var skip)) return null;
+        if (options.Checks.Length == 0) return "The skip option needs KillerScan 1.9.0 or later";
+        var checks = skip.ValueKind == JsonValueKind.Array ? skip.EnumerateArray().Select(check => check.ValueKind == JsonValueKind.String ? check.GetString()! : string.Empty).ToArray() : [string.Empty];
+        if (checks.Distinct(StringComparer.Ordinal).Count() != checks.Length || checks.Any(check => !options.Checks.Contains(check, StringComparer.Ordinal))) return "Skip must list different checks from: " + string.Join(", ", options.Checks);
+        if (checks.Length > 0) arguments.AddRange(["/skip", string.Join(',', checks)]);
+        return null;
+    }
+
+    private const int MaximumOptionLength = 256;
 
     /// <summary>The range a scan will cover and how many addresses that is.</summary>
     public sealed record ScanScope(string Target, long Addresses);
@@ -108,11 +158,13 @@ public static partial class KillerScanAdapter
         return true;
     }
 
-    private static Task<AppCallResult> Probe(string path, JsonElement input, CancellationToken token)
+    private static Task<AppCallResult> Probe(string path, ScanOptions options, JsonElement input, CancellationToken token)
     {
-        if (!ObjectWith(input, "target", "timeout") || !RequiredString(input, "target", out var target) || !IsIpv4(target!)) return Task.FromResult(Error("Target must be one IPv4 address"));
+        if (!ObjectWith(input, "target", "timeout", "location", "skip", "adapter") || !RequiredString(input, "target", out var target) || !IsIpv4(target!)) return Task.FromResult(Error("Target must be one IPv4 address"));
         if (!OptionalInteger(input, "timeout", 5, 300, 60, out var timeout)) return Task.FromResult(Error("Timeout must be between 5 and 300 seconds"));
-        return JsonArray(path, ["/probe", target!, "/json", "/timeout", timeout.ToString(), "/limit", "1"], timeout + 10, 1, "probe", token);
+        var arguments = new List<string> { "/probe", target!, "/json", "/timeout", timeout.ToString(), "/limit", "1" };
+        if (OptionArguments(input, options, arguments, out _) is { } refused) return Task.FromResult(Error(refused));
+        return JsonArray(path, arguments, timeout + 10, 1, "probe", token);
     }
 
     private static async Task<AppCallResult> Vendor(string path, JsonElement input, CancellationToken token)
@@ -163,7 +215,11 @@ public static partial class KillerScanAdapter
 
     private static async Task<AppCallResult> JsonArray(string path, IEnumerable<string> args, int timeout, int maximum, string label, CancellationToken token)
     {
-        var response = await Run(path, args, timeout, 1048576, token).ConfigureAwait(false);
+        return DeviceArray(await Run(path, args, timeout, 1048576, token).ConfigureAwait(false), maximum, label);
+    }
+
+    private static AppCallResult DeviceArray(ProcessResult response, int maximum, string label)
+    {
         if (response.ExitCode != 0) return ProcessError(response);
         try
         {
@@ -209,8 +265,16 @@ public static partial class KillerScanAdapter
     private static AppCallResult ProcessError(ProcessResult response) { var text = string.IsNullOrWhiteSpace(response.StandardError) ? "KillerScan command failed" : response.StandardError.Trim(); return Error(text.Length <= 1024 ? text : text[..1024]); }
 
     private static JsonObject EmptySchema() => new() { ["type"] = "object", ["properties"] = new JsonObject(), ["additionalProperties"] = false };
-    private static JsonObject ScanSchema() => Schema(new JsonObject { ["target"] = new JsonObject { ["type"] = "string" }, ["full"] = new JsonObject { ["type"] = "boolean", ["default"] = false }, ["limit"] = Integer(1, 100, 100) });
-    private static JsonObject ProbeSchema() => Schema(new JsonObject { ["target"] = new JsonObject { ["type"] = "string" }, ["timeout"] = Integer(5, 300, 60) }, "target");
+    private static JsonObject ScanSchema(ScanOptions options) => Schema(WithOptions(new JsonObject { ["target"] = new JsonObject { ["type"] = "string" }, ["full"] = new JsonObject { ["type"] = "boolean", ["default"] = false }, ["limit"] = Integer(1, 100, 100) }, options));
+    private static JsonObject ProbeSchema(ScanOptions options) => Schema(WithOptions(new JsonObject { ["target"] = new JsonObject { ["type"] = "string" }, ["timeout"] = Integer(5, 300, 60) }, options), "target");
+    private static JsonObject WithOptions(JsonObject properties, ScanOptions options)
+    {
+        if (options.Location) properties["location"] = OptionName();
+        if (options.Checks.Length > 0) properties["skip"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(options.Checks.Select(check => JsonValue.Create(check)).ToArray<JsonNode?>()) }, ["uniqueItems"] = true, ["maxItems"] = options.Checks.Length };
+        if (options.Adapter) properties["adapter"] = OptionName();
+        return properties;
+    }
+    private static JsonObject OptionName() => new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = MaximumOptionLength };
     private static JsonObject VendorSchema() => Schema(new JsonObject { ["mac"] = new JsonObject { ["type"] = "string" } }, "mac");
     private static JsonObject TargetIntegerSchema(string property, int min, int max, int defaultValue) => Schema(new JsonObject { ["target"] = new JsonObject { ["type"] = "string" }, [property] = Integer(min, max, defaultValue) }, "target");
     private static JsonObject DiagnoseSchema() => Schema(new JsonObject { ["target"] = new JsonObject { ["type"] = "string" }, ["ports"] = new JsonObject { ["type"] = "array", ["items"] = Integer(1, 65535), ["maxItems"] = 32 } }, "target");
@@ -219,6 +283,8 @@ public static partial class KillerScanAdapter
     private static JsonObject Integer(int min, int max, int? defaultValue = null) { var value = new JsonObject { ["type"] = "integer", ["minimum"] = min, ["maximum"] = max }; if (defaultValue.HasValue) value["default"] = defaultValue.Value; return value; }
 
     [GeneratedRegex("^(INTERFACE|LOCAL IP|SUBNET|GATEWAY|DNS)\\s{2,}(.+)$", RegexOptions.CultureInvariant)] private static partial Regex NetworkLine();
+    [GeneratedRegex("^\\s*/skip <check,\\.\\.\\.>[^:\\r\\n]*:[ \\t]*([a-z0-9, -]+?)[ \\t]*\\r?$", RegexOptions.CultureInvariant | RegexOptions.Multiline)] private static partial Regex SkipChecks();
+    [GeneratedRegex("^(?:Warning:|Baseline set:|Alert:) ", RegexOptions.CultureInvariant)] private static partial Regex LocationNote();
     [GeneratedRegex("^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?:\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}\\z", RegexOptions.CultureInvariant)] private static partial Regex DottedQuad();
     [GeneratedRegex("^(?=.{1,253}\\z)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\z", RegexOptions.CultureInvariant)] private static partial Regex Hostname();
 }

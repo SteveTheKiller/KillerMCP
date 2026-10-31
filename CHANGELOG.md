@@ -4,6 +4,14 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - Unreleased
+
+KillerMCP 0.9.1 reaches KillerScan 1.9.0's Locations, scan settings and adapter choice.
+
+### Added
+
+- `killerscan_scan_network` and `killerscan_probe_host` take `location`, `skip` and `adapter` when the installed KillerScan offers them. A scan with `location` uses that Location's saved names and types and records the run there, and its result says whether the save worked and passes on KillerScan's baseline and new-device notes. `skip` lists the checks to turn off, and `adapter` sends every probe from one connected adapter.
+
 ## [0.9.0] - 2026-10-31
 
 KillerMCP 0.9.0 adds KillerShot text recognition, QR reading, image edits, recording controls and library search, improves KillerPDF compatibility, and brings its windows onto the shared theme.
