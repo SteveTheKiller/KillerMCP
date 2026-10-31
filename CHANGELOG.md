@@ -11,6 +11,7 @@ KillerMCP's setup, update, repair approval and tray menu windows now take their 
 ### Fixed
 
 - `killerpdf_search_text` returns its hits and an `unreadablePages` list when KillerPDF 1.9.1 or newer could not read some pages, instead of reporting the search as failed.
+- `killerpdf_optimize` takes `invalidateSignatures`, so a PDF with signatures or Reader usage rights can be optimized on purpose with KillerPDF 1.9.1 or newer.
 
 ### Changed
 
