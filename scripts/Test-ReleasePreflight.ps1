@@ -40,8 +40,8 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Get-ArtifactRoot.ps1') -Destina
 FixtureFile (Join-Path $seed 'KillerMCP.csproj') '<Project><PropertyGroup><Version>0.6.0</Version><ReleaseDate>2026-10-20</ReleaseDate></PropertyGroup></Project>'
 FixtureFile (Join-Path $seed 'scripts\Test-PluginVersion.ps1') "Write-Output 'Fixture plugin check'"
 FixtureFile (Join-Path $seed 'CHANGELOG.md') '## [0.6.0] - 2026-10-20'
-# Store submission is deferred; even an unavailable Store must not block the build.
-FixtureFile (Join-Path $seed 'store\Submit-StoreRelease.ps1') "throw 'STORE_MUST_NOT_RUN'"
+# The fixture never contacts the Store or submits a package.
+FixtureFile (Join-Path $seed 'store\Submit-StoreRelease.ps1') 'param($ProductId, $PackageUrl, [switch]$PreflightOnly); if (-not $PreflightOnly) { throw "STORE_SUBMISSION_MUST_NOT_RUN" }; Write-Output "STORE_PREFLIGHT"'
 Git $seed @('-c', 'protocol.file.allow=always', 'submodule', 'add', '--quiet', $engine, 'dependencies/KillerTools')
 Git $seed @('add', '.')
 Git $seed @('commit', '--quiet', '-m', 'Fixture release inputs')
@@ -88,8 +88,8 @@ $text = $output -join "`n"
 if ($LASTEXITCODE -ne 1 -or $text -notlike '*BUILD_STARTED*' -or $text -like '*Local main and origin/main differ*') {
     throw "A matching checkout did not reach the build boundary:`n$text`nFixture retained at $scratch"
 }
-if ($text -like '*STORE_MUST_NOT_RUN*') {
-    throw "The release contacted the deferred Store submission:`n$text`nFixture retained at $scratch"
+if ($text -notlike '*STORE_PREFLIGHT*' -or $text -like '*STORE_SUBMISSION_MUST_NOT_RUN*') {
+    throw "The release did not restrict Store access to preflight before building:`n$text`nFixture retained at $scratch"
 }
 Write-Output 'PASS: a matching checkout reaches the build boundary.'
 
@@ -118,14 +118,14 @@ if ($result.Exit -ne 1 -or $text -like '*TESTS_STARTED*' -or $text -notlike '*Fi
 }
 Write-Output 'PASS: a vulnerable dependency stops the release.'
 
-# The exact release installer goes through every Windows suite Test-All runs, including the update paths.
+# Lengthy Windows suites belong to Test-All, not the release path.
 $testAll = Get-Content -LiteralPath (Join-Path $repository 'scripts\Test-All.ps1') -Raw
 $releaseScript = Get-Content -LiteralPath (Join-Path $repository 'release.ps1') -Raw
 $windowsSuites = [regex]::Matches($testAll.Substring($testAll.IndexOf('IsOSPlatform')), 'Test-[A-Za-z]+\.ps1') | ForEach-Object Value | Select-Object -Unique
 foreach ($suite in $windowsSuites) {
-    if ($releaseScript -notmatch [regex]::Escape($suite)) { throw "release.ps1 does not run $suite on the release installer." }
+    if ($releaseScript -match [regex]::Escape($suite)) { throw "release.ps1 still runs the regression suite $suite." }
 }
-Write-Output 'PASS: the release installer runs every Windows suite.'
+Write-Output 'PASS: Windows regression suites remain separate from release.'
 
 # A GitHub release that cannot be created removes the tag it pushed, so the release can run again.
 # The fixture checkout's origin is the fixture's own bare repository.

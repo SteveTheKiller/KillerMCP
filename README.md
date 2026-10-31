@@ -97,7 +97,7 @@ The native host requires the .NET 10 runtime. The Windows installer checks for i
 
 For development builds or custom app locations, set `KILLERPDF_CLI`, `KILLERSCAN_CLI`, `KILLERNOTES_CLI`, `KILLENDAR_CLI`, `KILLERSHELL_CLI`, `KILLERBENCH_CLI`, or `KILLERSHOT_CLI` to an absolute executable path. An invalid override leaves that app unavailable instead of silently selecting another copy.
 
-Run `powershell -NoProfile -File release.ps1` to build, sign, verify, test, and publish the release. The reviewed source must be on `origin/main` and the changelog entry must be dated for release. Use `-DryRun` to stop before tagging and publishing. `-SkipSign` produces an unsigned local test build and never publishes.
+Run `powershell -NoProfile -File release.ps1` to build, sign, verify, publish to GitHub, and submit to Microsoft Store. The reviewed source must be on `origin/main` and the changelog entry must be dated for release. Run `scripts\Test-All.ps1` separately for the full regression and installer suites. Use `-DryRun` to build and sign without tagging, publishing, or submitting to the Store. `-SkipSign` produces an unsigned local test build and never publishes or contacts the Store.
 
 Public installers are published through [KillerMCP releases](https://github.com/SteveTheKiller/KillerMCP/releases).
 

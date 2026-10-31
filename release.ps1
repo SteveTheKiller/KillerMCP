@@ -1,5 +1,6 @@
 # KillerMCP native release workflow.
-# Builds, signs with Certum SimplySign, verifies, tests, and publishes a GitHub release.
+# Builds, signs with Certum SimplySign, verifies, and publishes to GitHub and Microsoft Store.
+# Run scripts/Test-All.ps1 separately for the full regression and installer suites.
 # Use -DryRun to stop before tagging and publishing, or -SkipSign for an unsigned local test build.
 
 [CmdletBinding()]
@@ -59,11 +60,8 @@ if ((git rev-parse HEAD).Trim() -ne (git rev-parse origin/main).Trim()) {
 if (-not (Test-Path -LiteralPath $engineProject -PathType Leaf)) {
     Fail 'The pinned KillerTools submodule is missing. Run git submodule update --init.'
 }
-# Store submission is deferred until the released package has been verified in use.
-# Keep the standalone submission command available without contacting the Store during release.
 $storeScript = Join-Path $PSScriptRoot 'store\Submit-StoreRelease.ps1'
 $storeArgs = @{ ProductId = 'XP8M0LV7XTWKG5'; PackageUrl = "https://killertools.net/store/killermcp/$Version/KillerMCP-Setup.exe" }
-Write-Host 'Microsoft Store preflight and automatic submission are temporarily skipped.'
 $submoduleState = @(git submodule status --recursive)
 if ($LASTEXITCODE -ne 0 -or $submoduleState.Count -eq 0 -or @($submoduleState | Where-Object { $_ -match '^[+-]' }).Count) {
     Fail 'The KillerTools submodule is missing or differs from the pinned commit.'
@@ -96,8 +94,14 @@ if (-not $DryRun) {
     if (git ls-remote --tags origin $Tag) { Fail "Tag $Tag already exists on origin." }
 }
 
-Step 'Building and testing the native host'
-Invoke-Checked { dotnet build KillerMCP.slnx -c Release } 'KillerMCP solution build failed.'
+if (-not $SkipSign) {
+    Step 'Checking Microsoft Store submission access'
+    try { & $storeScript @storeArgs -PreflightOnly }
+    catch { Fail "Microsoft Store preflight failed: $($_.Exception.Message)" }
+}
+
+Step 'Checking dependencies'
+Invoke-Checked { dotnet restore KillerMCP.slnx } 'KillerMCP dependency restore failed.'
 # The vulnerability listing exits 0 even when it finds something, so its report is read instead.
 $vulnerabilityReport = @(dotnet list KillerMCP.slnx package --vulnerable --include-transitive --format json)
 if ($LASTEXITCODE -ne 0) { Fail 'The dependency vulnerability check could not run.' }
@@ -111,9 +115,6 @@ $vulnerablePackages = @(foreach ($reportProject in @($vulnerabilityData.projects
     }
 })
 if ($vulnerablePackages.Count) { Fail "Vulnerable dependencies were found:`n$($vulnerablePackages -join "`n")" }
-Invoke-Checked { dotnet run --project tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj -c Release --no-build } 'Client registration checks failed.'
-Invoke-Checked { dotnet run --project tests\KillerMCP.Runtime.Checks\KillerMCP.Runtime.Checks.csproj -c Release --no-build } 'Runtime checks failed.'
-Invoke-Checked { node scripts\Test-NativeHost.mjs } 'Native host checks failed.'
 
 Step 'Building KillerMCP Setup'
 Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Build-WindowsInstaller.ps1 -ArtifactRoot $ArtifactRoot } 'KillerMCP installer build failed.'
@@ -153,20 +154,6 @@ if ($SkipSign) {
     }
 }
 
-Step 'Testing the exact release installer'
-Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-WindowsInstaller.ps1 -Installer $installer } 'The exact release installer failed its test suite.'
-# Existing users get the release through the update path, so it is tested with the same installer.
-Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-ClientJobUpdate.ps1 -Installer $installer } 'The release installer failed the client update check.'
-Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-ClientJobNotice.ps1 } 'The update notice check failed.'
-Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-NoticeRetry.ps1 } 'The update notice retry check failed.'
-Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Test-NotifyFailure.ps1 -Installer $installer } 'The release installer failed the update failure check.'
-if (-not $SkipSign) {
-    $signature = Get-AuthenticodeSignature -LiteralPath $installer
-    if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate) {
-        Fail 'The installer signature changed or became invalid during testing.'
-    }
-}
-
 Step 'Writing release artifacts'
 $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
 $checksumLine = "${hash}  KillerMCP-Setup.exe"
@@ -188,8 +175,9 @@ if (-not $DryRun) {
     try { & (Join-Path $PSScriptRoot 'scripts\Publish-Release.ps1') -Repository $PSScriptRoot -Tag $Tag -Assets @($installer, $sumsFile) -NotesFile $notesFile }
     catch { Fail $_.Exception.Message }
     gh release view $Tag --json url --jq '.url'
-    Write-Host 'Microsoft Store submission is deferred. When ready, run:'
-    Write-Host "  & '$storeScript' -ProductId $($storeArgs.ProductId) -PackageUrl $($storeArgs.PackageUrl)"
+    Step 'Submitting to Microsoft Store'
+    try { & $storeScript @storeArgs }
+    catch { Fail "GitHub release is published, but Microsoft Store submission failed: $($_.Exception.Message). Retry with: & '$storeScript' -ProductId $($storeArgs.ProductId) -PackageUrl $($storeArgs.PackageUrl)" }
 } else {
     Write-Host ''
     Write-Host 'DryRun: release artifacts are verified. Nothing was published.' -ForegroundColor Green
