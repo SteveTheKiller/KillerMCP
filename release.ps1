@@ -41,7 +41,7 @@ if ($SkipSign) {
 [xml]$project = Get-Content -LiteralPath 'KillerMCP.csproj' -Raw
 $Version = [string]$project.Project.PropertyGroup.Version
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { Fail 'KillerMCP.csproj does not contain an x.y.z version.' }
-& (Join-Path $PSScriptRoot 'scripts\Test-PluginVersion.ps1')
+# Build-NativePackage.ps1 checks all component and plugin versions once.
 
 $Tag = "v$Version"
 $ArtifactRoot = & (Join-Path $PSScriptRoot 'scripts\Get-ArtifactRoot.ps1') -ArtifactRoot $ArtifactRoot
