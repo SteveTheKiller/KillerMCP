@@ -42,14 +42,15 @@ public static partial class KillerPdfAdapter
         if (!IsFile(path)) return [];
         var help = await Run(path!, ["--help"], 8, 65536, cancellationToken).ConfigureAwait(false);
         if (help.ExitCode != 0) return [];
-        var current = await VersionAsync(path!, cancellationToken).ConfigureAwait(false) is { } version && version >= CurrentVersion;
+        var installedVersion = await VersionAsync(path!, cancellationToken).ConfigureAwait(false);
+        var current = installedVersion is { } version && version >= CurrentVersion;
         SecretsOnInput[path!] = current;
 
         var adapters = new List<AppAdapter>();
         if (KillerPdfCapabilities.Supports(help.StandardOutput, "--merge <out.pdf>")) adapters.Add(new AppAdapter(MergeTool(), (input, token) => Merge(path!, input, token)));
         foreach (var operation in Operations())
         {
-            if (KillerPdfCapabilities.Supports(help.StandardOutput, operation.Marker) && (current ? operation : ForOlderVersion(operation)) is { } definition)
+            if (KillerPdfCapabilities.Supports(help.StandardOutput, operation.Marker) && ForVersion(operation, installedVersion) is { } definition)
             {
                 adapters.Add(new AppAdapter(definition.Tool, (input, token) => RunOperation(path!, definition, input, token)));
             }
@@ -86,6 +87,20 @@ public static partial class KillerPdfAdapter
         }
     }
 
+    private static Operation? ForVersion(Operation operation, Version? version)
+    {
+        var definition = version is not null && version >= CurrentVersion ? operation : ForOlderVersion(operation);
+        if (definition is null || operation.Tool.Name != "killerpdf_optimize" || version is not null && version >= new Version(1, 9, 1))
+            return definition;
+        var schema = definition.Tool.InputSchema.DeepClone().AsObject();
+        schema["properties"]!.AsObject().Remove("invalidateSignatures");
+        return definition with { Tool = definition.Tool with
+        {
+            InputSchema = schema,
+            Description = definition.Tool.Description + " Signature invalidation requires KillerPDF 1.9.1 or later."
+        } };
+    }
+
     // The tool as an older KillerPDF can run it, or null when it cannot run without a password input.
     private static Operation? ForOlderVersion(Operation operation)
     {
@@ -117,7 +132,7 @@ public static partial class KillerPdfAdapter
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["dpi"] = Integer(36, 1200, 150), ["password"] = Password(), ["colorMode"] = Choice("color", "grayscale", "black-white"), ["threshold"] = Integer(0, 255), ["compression"] = Choice("lossless", "jpeg"), ["jpegQuality"] = Integer(1, 100), ["scannedLook"] = Text(64, "^(?:all|[a-z-]+(?:,[a-z-]+)*)$", "all, or any of tilt, paper, grain, soft-focus, shadow") }, "path", "output"),
             (input, output) => Options(Append(["--flatten", String(input, "path"), output, "--dpi", Number(input, "dpi", 150)], input, "password", PasswordOption), input, ("colorMode", "--color-mode"), ("threshold", "--threshold"), ("compression", "--compression"), ("jpegQuality", "--jpeg-quality"), ("scannedLook", "--scanned-look")), 300);
         yield return Action("killerpdf_print", "--print <in.pdf>", "Print selected pages from a local PDF. This sends a real print job to the selected or default printer.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["printer"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 256 }, ["pages"] = PageRange(), ["copies"] = Integer(1, 99, 1), ["password"] = Password() }, "path"), PrintArguments);
+            Schema(new JsonObject { ["path"] = PdfPath(), ["printer"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 256 }, ["pages"] = PageRange(), ["copies"] = Integer(1, 99, 1), ["password"] = Password() }, "path"), PrintArguments, 900);
         yield return FileOperation("killerpdf_ocr", "--ocr <in.pdf>", "Create a new searchable PDF with OCR. A language model may be downloaded on first use. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["language"] = new JsonObject { ["type"] = "string", ["minLength"] = 3, ["maxLength"] = 32, ["pattern"] = "^[A-Za-z0-9_]+$", ["default"] = "eng" }, ["password"] = Password() }, "path", "output"),
             (input, output) => Append(["--ocr", String(input, "path"), output, "--lang", OptionalString(input, "language", "eng")], input, "password", PasswordOption), 600);

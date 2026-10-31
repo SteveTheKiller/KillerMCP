@@ -1,6 +1,16 @@
 using KillerMCP;
 using System.Text.Json;
 
+if (Environment.GetEnvironmentVariable("KILLERMCP_REAL_SHOT") is { Length: > 0 } realShot)
+{
+    string isolated = Environment.GetEnvironmentVariable("KILLERMCP_REAL_SHOT_ROOT") ?? throw new InvalidOperationException("Missing owned Shot test directory");
+    var response = await ProcessRunner.RunAsync(realShot, new[] { "--selftest-cli-safety", isolated, "account" }.Concat(args), TimeSpan.FromSeconds(150), 262144, CancellationToken.None);
+    Console.Write(response.StandardOutput);
+    Console.Error.Write(response.StandardError);
+    Environment.ExitCode = response.ExitCode;
+    return;
+}
+
 // Stands in for an app that never answers, so the host checks can show it is left out.
 if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_HANG") == "1") Thread.Sleep(Timeout.Infinite);
 
@@ -54,6 +64,19 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH") == "1")
 if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1")
 {
     var shot = Environment.GetCommandLineArgs().Skip(1).ToArray();
+    if (shot.SequenceEqual(["version"])) { Console.WriteLine(Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_VERSION") ?? "1.1.1"); return; }
+    if (shot.Length == 3 && shot[0] == "recording") { Console.Write(JsonSerializer.Serialize(new { sent = shot[1], args = shot })); return; }
+    if (shot.Length > 0 && shot[0] == "edit")
+    {
+        int destination = Array.IndexOf(shot, "--out");
+        if (destination < 0) { Environment.ExitCode = 2; return; }
+        File.WriteAllText(shot[destination + 1], "edited fixture");
+        Console.Write(JsonSerializer.Serialize(new { path = shot[destination + 1], args = shot }));
+        return;
+    }
+    if (shot.SequenceEqual(["text", "--languages", "--json"])) { Console.Write(JsonSerializer.Serialize(new { languages = new[] { new { tag = "en-US", name = "English" } } })); return; }
+    if (shot.Length > 0 && shot[0] == "qr") { Console.Write(JsonSerializer.Serialize(new { codes = new[] { new { text = "https://example.com/", link = new { disposition = "Web" } } }, args = shot })); return; }
+    if (shot.Length > 0 && shot[0] == "text" && !shot.Contains("--languages")) { Console.Write(JsonSerializer.Serialize(new { text = "Fixture recognized text", args = shot })); return; }
     string? Option(string name) { int i = Array.IndexOf(shot, name); return i >= 0 && i + 1 < shot.Length ? shot[i + 1] : null; }
     if (shot.SequenceEqual(["monitors", "--json"])) { Console.Write(JsonSerializer.Serialize(new { monitors = new[] { new { index = 1, primary = true, left = 0, top = 0, width = 1920, height = 1080 } } })); return; }
     if (shot.Length == 4 && shot[0] == "windows") { Console.Write(JsonSerializer.Serialize(new { windows = new[] { new { handle = "0x10", title = "Fixture", process = "fixture", limit = shot[2] } }, limitReached = false })); return; }
@@ -74,7 +97,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1")
     }
     if (shot.Length > 0 && shot[0] == "capture") { Console.Write(JsonSerializer.Serialize(new { path = Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_NULL_PATH") == "1" ? null : "C:\\fixture.png", mode = Option("--mode"), args = shot })); return; }
     if (shot.Length > 0 && shot[0] == "record") { Console.Write(JsonSerializer.Serialize(new { path = "C:\\fixture.mp4", mode = Option("--mode"), args = shot })); return; }
-    if (shot.Length == 4 && shot[0] == "recent") { Console.Write(JsonSerializer.Serialize(new { folder = "C:\\Recent", items = Array.Empty<object>(), limit = shot[2] })); return; }
+    if (shot.Length >= 4 && shot[0] == "recent") { Console.Write(JsonSerializer.Serialize(new { folder = "C:\\Recent", items = Array.Empty<object>(), limit = shot[2], args = shot })); return; }
     if (shot.Length == 3 && shot[0] == "open") { Console.Write(JsonSerializer.Serialize(new { opened = shot[1] })); return; }
     if (shot.SequenceEqual(["settings", "--json"])) { Console.Write(JsonSerializer.Serialize(new { capture = new { format = "png" } })); return; }
 }
@@ -137,7 +160,11 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>\ncreate --title title (--content markdown | --content-file absolute.md)");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>\ncreate <json>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>\nlist <folder>\ninfo <path>\nread <file>\nprocesses [--limit]\nservices [--limit]\nevents <log>\nregistry <key>\ndrives\nhash <file>");
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1") Console.WriteLine("KillerShot command line\n  capture [options]\n  record --seconds <n> [options]\n  recent [options]\n  open <image>\n  monitors\n  windows [--limit <n>]\n  settings");
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1")
+        {
+            Console.WriteLine("KillerShot command line\n  capture [options]\n  record --seconds <n> [options]\n  recent [options]\n  open <image>\n  monitors\n  windows [--limit <n>]\n  settings");
+            if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_ENHANCED") == "1") Console.WriteLine("  text <image|region> [--copy]\n  text --languages\n  qr <image|region> [--json]\n  recording pause|resume|stop|cancel\n  edit <image> [options]\n  --search <words>  Filter recent captures");
+        }
         return;
     }
     if (arguments.SequenceEqual(["--version"]) && Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF") == "1")
@@ -307,6 +334,30 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
 var root = Path.Combine(Path.GetTempPath(), "killermcp-discovery-" + Guid.NewGuid().ToString("N"));
 try
 {
+    if (args.Length == 4 && args[0] == "--real-print")
+    {
+        await RealAppCompatibilityChecks.PrintAsync(args[1], args[2], args[3]);
+        return;
+    }
+    if (args.Length == 2 && args[0] == "--real-shot")
+    {
+        Directory.CreateDirectory(root);
+        await RealAppCompatibilityChecks.ShotAsync(args[1], root);
+        return;
+    }
+    if (args.Contains("--shot-review-only", StringComparer.Ordinal))
+    {
+        Directory.CreateDirectory(root);
+        await KillerShotReviewChecks.RunAsync(Environment.ProcessPath!, root);
+        await KillerShotEnhancedChecks.RunAsync(Environment.ProcessPath!, root);
+        return;
+    }
+    if (args.Contains("--pdf-create-only", StringComparer.Ordinal))
+    {
+        Directory.CreateDirectory(root);
+        await PdfCreationChecks.RunAsync(root);
+        return;
+    }
     if (args.Contains("--pdf-review-only", StringComparer.Ordinal))
     {
         Directory.CreateDirectory(root);
@@ -1107,6 +1158,7 @@ try
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT", null);
     Console.WriteLine("PASS native KillerShot adapters");
     await KillerShotReviewChecks.RunAsync(Environment.ProcessPath!, root);
+    await KillerShotEnhancedChecks.RunAsync(Environment.ProcessPath!, root);
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", "1");
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", "1");

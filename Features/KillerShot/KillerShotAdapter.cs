@@ -8,7 +8,7 @@ namespace KillerMCP;
 /// runs KillerShot.exe --cli in its own process, which never touches a running KillerShot's tray
 /// or shortcuts. Captures are saved as files and the result carries their paths; nothing is put
 /// on the clipboard unless the call asks for it.</summary>
-public static class KillerShotAdapter
+public static partial class KillerShotAdapter
 {
     private static readonly Version MinimumVersion = new(0, 1, 0);
 
@@ -52,6 +52,7 @@ public static class KillerShotAdapter
         Add(help, "settings", adapters,
             new RuntimeTool("killershot_settings", "Read KillerShot's capture, recording and shortcut settings without changing them.", EmptySchema()),
             (input, token) => SimpleAsync(path!, input, ["settings", "--json"], "capture", token));
+        await AddEnhancedAsync(path!, help.StandardOutput, adapters, cancellationToken).ConfigureAwait(false);
         return adapters;
     }
 

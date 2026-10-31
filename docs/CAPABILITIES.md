@@ -173,6 +173,7 @@ PDF creation uses the installed Microsoft Edge print engine in a private session
 - Render selected pages as PNG or JPEG images.
 - Flatten a PDF into a new uneditable raster PDF.
 - Print selected pages to a named or default printer.
+- Allow up to 15 minutes for print preparation and submission. Signature invalidation during optimization requires KillerPDF 1.9.1 or newer; ordinary optimization remains available on older supported versions.
 - Add a searchable OCR text layer, downloading the selected language model on first use when needed.
 - Resave a PDF through KillerPDF's standard pipeline.
 - Render bounded benchmark images with timing data.
@@ -282,6 +283,12 @@ Each repair request, approval, denial and outcome is recorded at `%LOCALAPPDATA%
 - List up to 20 of the newest captures in the capture library with their ids, times, sizes, window titles and program names.
 - Open an image in the KillerShot editor on the user's screen.
 - Read the capture, recording and shortcut settings without changing them.
+- Read text and QR codes from existing local images without capturing the screen, changing the clipboard or opening decoded links; list installed OCR languages.
+- Trim, rotate, flip, resize or add a border to an image, saving a new PNG or JPEG without replacing existing files.
+- Send pause, resume, stop or cancel to a running recording. Stop finishes the file; cancel discards it and requires `confirmDiscard=true`. The response acknowledges the request rather than proving the recording has finished.
+- Filter recent captures by words in their titles, program names, notes, collections and recognized text.
+
+OCR, QR reading, image editing, recording controls and library search require KillerShot 1.1.1 or newer and the advertised command. If the version cannot be identified, these additions stay unavailable while the existing supported tools remain available.
 
 Captures are saved as PNG or JPEG and recordings as MP4 or GIF. Output paths must be absolute, and an existing file is never replaced. Without an output path, KillerShot saves into its own output folder. A screenshot is kept in KillerShot's capture library only when the call sets keepInLibrary, and a recording's sound never comes from KillerShot's saved setting. The clipboard is left alone unless the call asks for a copy, and no shutter sound plays. The tools return file paths, not image data. MP4 recordings can be at most 4096 pixels wide; use GIF or a smaller area for a wider desktop. A screenshot can show anything on the screen, including other apps and private information, so review capture requests before approving them.
 

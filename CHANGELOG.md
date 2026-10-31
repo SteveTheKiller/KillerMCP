@@ -4,14 +4,19 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.0] - Unreleased
 
-KillerMCP's setup, update, repair approval and tray menu windows now take their colors from the shared Killer Tools theme, and PDF text search keeps its hits when some pages cannot be read.
+KillerMCP 0.9.0 adds KillerShot text recognition, QR reading, image edits, recording controls and library search, improves KillerPDF compatibility, and brings its windows onto the shared theme.
 
 ### Fixed
 
+- `killerpdf_optimize` offers signature invalidation only with KillerPDF 1.9.1 or newer. Older or unidentified versions keep ordinary optimization.
 - `killerpdf_search_text` returns its hits and an `unreadablePages` list when KillerPDF 1.9.1 or newer could not read some pages, instead of reporting the search as failed.
-- `killerpdf_optimize` takes `invalidateSignatures`, so a PDF with signatures or Reader usage rights can be optimized on purpose with KillerPDF 1.9.1 or newer.
+- PDF printing allows up to 15 minutes for large jobs instead of stopping after three.
+
+### Added
+
+- KillerShot 1.1.1 or newer can read image text and QR codes, list OCR languages, save image edits to a new file, control a running recording, and search the capture library. Each feature also requires its advertised command; canceling a recording requires explicit discard consent.
 
 ### Changed
 

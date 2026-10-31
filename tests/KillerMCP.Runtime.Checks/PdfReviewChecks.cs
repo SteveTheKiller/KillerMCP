@@ -5,6 +5,7 @@ internal static class PdfReviewChecks
 {
     internal static async Task RunAsync(string executable, string root)
     {
+        await OptimizeVersionGate(executable, root);
         Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_HELP_STYLE", "modern");
         try
         {
@@ -66,6 +67,31 @@ internal static class PdfReviewChecks
             finally { if (Directory.Exists(destination)) Directory.Delete(destination, true); }
         }
         Console.WriteLine("PASS PDF review regressions");
+    }
+
+    private static async Task OptimizeVersionGate(string executable, string root)
+    {
+        string source = Path.Combine(root, "version-gate-source.pdf");
+        File.WriteAllText(source, "fixture");
+        string? previousVersion = Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION");
+        try
+        {
+            foreach (var (version, supported) in new[] { ("1.9.0", false), ("unknown", false), ("1.8.91", false), ("1.9.1", true), ("1.10.0", true) })
+            {
+                Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION", version);
+                var tool = (await KillerPdfAdapter.CreateAsync(executable)).Single(item => item.Tool.Name == "killerpdf_optimize");
+                Require(tool.Tool.InputSchema["properties"]!.AsObject().ContainsKey("invalidateSignatures") == supported,
+                    "Optimize signature consent must be offered only for PDF 1.9.1 or newer: " + version);
+                using var consent = JsonDocument.Parse(JsonSerializer.Serialize(new { path = source, output = Path.Combine(root, "consent-" + version + ".pdf"), invalidateSignatures = true }));
+                Require((await tool.CallAsync(consent.RootElement, CancellationToken.None)).IsError != supported,
+                    "Optimize must reject unsupported signature consent: " + version);
+                using var ordinary = JsonDocument.Parse(JsonSerializer.Serialize(new { path = source, output = Path.Combine(root, "plain-" + version + ".pdf") }));
+                Require(!(await tool.CallAsync(ordinary.RootElement, CancellationToken.None)).IsError,
+                    "Ordinary optimization must remain available: " + version);
+            }
+        }
+        finally { Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION", previousVersion); }
+        Console.WriteLine("PASS PDF optimize version gates");
     }
 
     private static void Require(bool condition, string message)
