@@ -190,6 +190,7 @@ PDF creation uses the installed Microsoft Edge print engine in a private session
 - Run a quick discovery scan against one IPv4 address or a CIDR containing no more than 1,024 addresses.
 - Run a full scan with fingerprinting and port checks when explicitly requested.
 - Deep probe one IPv4 host, including ports 1 through 1024.
+- With KillerScan 1.9.0 or later, list the saved Locations with their names, IDs, customers, and last targets and adapters. Listing reads only and sends no network traffic.
 - With KillerScan 1.9.0 or later, use a saved Location by name or ID. A scan records the run and its devices there and reports whether that saved, plus any baseline or new-device notes. A probe only reads the Location's device names and types. Without a Location nothing is saved.
 - With KillerScan 1.9.0 or later, turn off named checks and send every probe from one connected adapter.
 - Look up a MAC address manufacturer in KillerScan's offline OUI database.
@@ -200,7 +201,7 @@ PDF creation uses the installed Microsoft Edge print engine in a private session
 - Run KillerScan's native KillerSpeed test when explicitly requested.
 - Return no more than 100 discovered devices.
 
-Network tools send probes from the local computer. Only test networks that the user is authorized to test. KillerMCP cannot list or create Locations, so the Location must already exist in KillerScan. Scan reports stay unsaved and use every check. KillerSpeed contacts speed.killerscan.net and can transfer up to 6 GiB of generated test data plus network overhead.
+Network tools send probes from the local computer. Only test networks that the user is authorized to test. KillerMCP cannot create Locations, so a Location must already exist in KillerScan. Scan reports stay unsaved and use every check. KillerSpeed contacts speed.killerscan.net and can transfer up to 6 GiB of generated test data plus network overhead.
 
 ### KillerShell
 

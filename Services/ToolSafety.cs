@@ -6,7 +6,7 @@ internal static class ToolSafety
     {
         "killernotes_search", "killernotes_list", "killernotes_get", "killernotes_groups",
         "killernotes_tags", "killernotes_backlinks", "killernotes_links", "killernotes_history",
-        "killernotes_stats", "killendar_agenda", "killerscan_local_network",
+        "killernotes_stats", "killendar_agenda", "killerscan_local_network", "killerscan_list_locations",
         "killerscan_mac_vendor", "killerpdf_document_info", "killerpdf_search_text",
         "killerpdf_preflight", "killerpdf_accessibility", "killerpdf_verify_install",
         "killerpdf_print_production", "killerpdf_signatures", "killerpdf_layers", "killerpdf_portfolio",
@@ -60,7 +60,7 @@ internal static class ToolSafety
     {
         bool readOnly = IsReadOnly(name);
         bool openWorld = name.StartsWith("killerscan_", StringComparison.Ordinal)
-            && name is not ("killerscan_local_network" or "killerscan_mac_vendor")
+            && name is not ("killerscan_local_network" or "killerscan_list_locations" or "killerscan_mac_vendor")
             || name is "open_browser_companion_local" or "killerpdf_print" or "killerpdf_ocr"
             or "killerpdf_scan_to_text" or "killerpdf_fix_orientation" or "killerpdf_run_macro" or "killerpdf_sign" or "killerpdf_scan"
             or "killerbench_check" or "killerbench_scan" or "killerbench_repair_preview" or "killerbench_repair_execute"
