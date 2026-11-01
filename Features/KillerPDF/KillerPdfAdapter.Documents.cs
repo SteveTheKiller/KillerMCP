@@ -44,11 +44,11 @@ public static partial class KillerPdfAdapter
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["pages"] = PageRange() }, "path", "output"),
             (input, output) => Options(["--reverse-pages", String(input, "path"), output], input, ("pages", "--pages")));
         yield return FileOperation("killerpdf_fix_orientation", "--fix-orientation <in.pdf>", "Turn the pages of a local PDF to read upright, reading scans with OCR, into a new PDF. A language model may be downloaded on first use. Never changes the source.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["pages"] = PageRange(), ["language"] = Language() }, "path", "output"),
-            (input, output) => Options(["--fix-orientation", String(input, "path"), output, "--lang", OptionalString(input, "language", "eng")], input, ("pages", "--pages")), 600);
+            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["pages"] = PageRange(), ["language"] = Language(), ["password"] = Password() }, "path", "output"),
+            (input, output) => Append(Options(["--fix-orientation", String(input, "path"), output, "--lang", OptionalString(input, "language", "eng")], input, ("pages", "--pages")), input, "password", PasswordOption), 600);
         yield return FileOperation("killerpdf_straighten", "--straighten <in.pdf>", "Level tilted scanned pages that have no text layer in a local PDF, into a new PDF. Never changes the source.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["pages"] = PageRange() }, "path", "output"),
-            (input, output) => Options(["--straighten", String(input, "path"), output], input, ("pages", "--pages")), 300);
+            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["pages"] = PageRange(), ["password"] = Password() }, "path", "output"),
+            (input, output) => Append(Options(["--straighten", String(input, "path"), output], input, ("pages", "--pages")), input, "password", PasswordOption), 300);
         yield return FileOperation("killerpdf_divide_spreads", "--divide-spreads <in.pdf>", "Split scanned two-page spreads of a local PDF into separate pages in reading order, in a new PDF. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["pages"] = PageRange(), ["direction"] = Choice("vertical", "horizontal"), ["splitAt"] = new JsonObject { ["type"] = "number", ["minimum"] = 0.1, ["maximum"] = 0.9, ["description"] = "Where the split falls across the page, 0.5 for the middle" } }, "path", "output"),
             (input, output) => Options(["--divide-spreads", String(input, "path"), output], input, ("pages", "--pages"), ("direction", "--direction"), ("splitAt", "--position")));
@@ -66,8 +66,8 @@ public static partial class KillerPdfAdapter
         yield return ReportOperation("killerpdf_measurements", "--measurements <in.pdf>", "Report the distance, perimeter, area and angle measurements saved in a local PDF without changing it.");
         yield return ReportOperation("killerpdf_separations", "--separations <in.pdf>", "List the process and spot inks used on each page of a local PDF without changing it.");
         yield return DirectoryOperation("killerpdf_render_separations", "--separations <in.pdf>", "Write each page's ink plates of a local PDF as images into a new folder. Never changes the source.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["outputFolder"] = NewFolder(), ["pages"] = PageRange(), ["dpi"] = Integer(36, 1200, 150) }, "path", "outputFolder"),
-            (input, output) => Options(["--separations", String(input, "path"), output, "--dpi", Number(input, "dpi", 150)], input, ("pages", "--pages")), 600);
+            Schema(new JsonObject { ["path"] = PdfPath(), ["outputFolder"] = NewFolder(), ["pages"] = PageRange(), ["dpi"] = Integer(36, 1200, 150), ["password"] = Password() }, "path", "outputFolder"),
+            (input, output) => Append(Options(["--separations", String(input, "path"), output, "--dpi", Number(input, "dpi", 150)], input, ("pages", "--pages")), input, "password", PasswordOption), 600);
         yield return new Operation("--compare-structure <original.pdf>", OutputKind.Report, new RuntimeTool("killerpdf_compare_structure", "Compare the content, resources and page geometry of two local PDFs and report what changed. Changes neither file.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["changed"] = PdfPath() }, "path", "changed")),
             (input, _) => ["--compare-structure", String(input, "path"), String(input, "changed"), "--json"], 120)

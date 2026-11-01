@@ -10,6 +10,7 @@ KillerMCP 0.9.1 reaches KillerScan 1.9.0's Locations, scan settings and adapter 
 
 ### Added
 
+- `killerpdf_print` takes `duplex` and `reverse`, and `killerpdf_fix_orientation`, `killerpdf_straighten` and `killerpdf_render_separations` take `password`.
 - `killerscan_list_locations` lists KillerScan's saved Locations with the name or ID a scan takes. It reads only and sends no network traffic.
 - `killerscan_scan_network` and `killerscan_probe_host` take `location`, `skip` and `adapter` when the installed KillerScan offers them. A scan with `location` uses that Location's saved names and types and records the run there, and its result says whether the save worked and passes on KillerScan's baseline and new-device notes. `skip` lists the checks to turn off, and `adapter` sends every probe from one connected adapter.
 
