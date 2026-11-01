@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace KillerMCP;
 
@@ -52,11 +53,24 @@ public static class KillerShellAdapter
         // Older KillerShell builds do not know these options, so the inputs exist only when the help names them.
         bool detail = help.StandardOutput.Contains("--detail", StringComparison.Ordinal);
         bool filter = help.StandardOutput.Contains("--filter", StringComparison.Ordinal);
+        string maskNote = " Values after --password, --token and --api-key, Authorization headers and Password= in connection strings are masked as ***, but other private text can remain, so leave detail off unless it is needed.";
         Add(help, "processes [", adapters,
-            new RuntimeTool("killershell_list_processes", "List running processes with their process IDs and memory use. This tool cannot start or stop processes.", LimitSchema(100, detail, filter)),
+            new RuntimeTool("killershell_list_processes",
+                "List running processes with their process IDs and memory use."
+                + (detail ? " Detail is off by default; with detail=true each row also exposes the process path and full command line (cut to " + DetailTextLimit.ToString(CultureInfo.InvariantCulture) + " characters)." + maskNote : "")
+                + " This tool cannot start or stop processes.",
+                LimitSchema(100,
+                    detail ? "Add the parent process ID, path, command line (secret-looking values masked) and start time to each row" : null,
+                    filter ? "Only processes whose name contains this text (case-insensitive) or whose PID equals it exactly" + (detail ? "; with detail=true the path and command line are matched as well" : "") : null)),
             (input, token) => ProcessOrServiceAsync(path!, "processes", input, detail, filter, token));
         Add(help, "services [", adapters,
-            new RuntimeTool("killershell_list_services", "List Windows services and their current status. This tool cannot start, stop, or reconfigure services.", LimitSchema(100, detail, filter)),
+            new RuntimeTool("killershell_list_services",
+                "List Windows services and their current status."
+                + (detail ? " Detail is off by default; with detail=true each row also exposes the service path, which is its command line, and its logon account (the path is cut to " + DetailTextLimit.ToString(CultureInfo.InvariantCulture) + " characters)." + maskNote : "")
+                + " This tool cannot start, stop, or reconfigure services.",
+                LimitSchema(100,
+                    detail ? "Add the start mode, path (the service command line, secret-looking values masked), logon account and description to each row" : null,
+                    filter ? "Only services whose name or display name contains this text (case-insensitive)" : null)),
             (input, token) => ProcessOrServiceAsync(path!, "services", input, detail, filter, token));
         Add(help, "events <", adapters,
             new RuntimeTool("killershell_read_event_log", "Read recent entries from the local Application, System, or Security event log. This tool cannot clear or change logs.", EventSchema()),
@@ -72,42 +86,110 @@ public static class KillerShellAdapter
             (input, token) => HashAsync(path!, input, token));
         if (AppVersion.IsAtLeast(path!, StorageMinimumVersion))
         {
+            // A KillerShell build that names --max-seconds stops its own scan, so the host can wait a little longer for it.
+            bool timeLimit = help.StandardOutput.Contains("--max-seconds", StringComparison.Ordinal);
             Add(help, "storage <", adapters,
-                new RuntimeTool("killershell_storage_report", "Report the largest folders and files under one local directory with KillerShell. Read-only: it scans folder sizes and never changes, moves, or deletes anything.", PathSchema("Absolute directory path to scan", includeLimit: true)),
-                (input, token) => StorageAsync(path!, input, token));
+                new RuntimeTool("killershell_storage_report", "Report the largest folders and files under one local directory with KillerShell. Read-only: it scans folder sizes and never changes, moves, or deletes anything." + (timeLimit ? " A scan that runs past " + StorageScanSeconds.ToString(CultureInfo.InvariantCulture) + " seconds stops early and the report says truncated." : ""), PathSchema("Absolute directory path to scan", includeLimit: true)),
+                (input, token) => StorageAsync(path!, input, timeLimit, token));
         }
         return adapters;
     }
 
     private static readonly Version StorageMinimumVersion = new(1, 5, 1);
 
-    private static Task<AppCallResult> StorageAsync(string path, JsonElement input, CancellationToken cancellationToken)
+    // KillerShell stops a storage scan after this many seconds and reports it truncated; the host waits ten seconds longer.
+    private const int StorageScanSeconds = 25;
+    internal static readonly TimeSpan StorageTimeout = TimeSpan.FromSeconds(35);
+
+    internal static List<string> StorageArguments(string target, int limit, bool timeLimit)
+    {
+        var arguments = new List<string> { "storage", target, "--limit", limit.ToString(CultureInfo.InvariantCulture) };
+        if (timeLimit) arguments.AddRange(["--max-seconds", StorageScanSeconds.ToString(CultureInfo.InvariantCulture)]);
+        return arguments;
+    }
+
+    // A detail row can carry a command line of up to 32,767 characters and a listing holds 100 rows,
+    // so detail reads more than the plain cap. What reaches the model is cut down again below.
+    internal static int OutputLimit(bool detail) => detail ? 4194304 : 262144;
+
+    private const int DetailTextLimit = 1024;
+
+    private static readonly TimeSpan MaskTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex[] SecretShapes =
+    [
+        // --password x, --password=x, --token x, --api-key "x y", also with - or / in front.
+        new(@"(?<![\w-])((?:--?|/)(?:password|passwd|pwd|token|api[-_]?key|apikey|secret)(?:\s*[=:]\s*|\s+))(""[^""]*""|'[^']*'|[^\s""']+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, MaskTimeout),
+        // Authorization: Bearer x (the scheme is kept, the credential is not).
+        new(@"(Authorization[""']?\s*[:=]\s*(?:(?:Bearer|Basic|Digest|Negotiate|NTLM|Token)\s+)?)([^\s""']+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, MaskTimeout),
+        // Password=x; or Pwd=x in a connection string; the value runs to the next semicolon or quote.
+        new(@"(\b(?:Password|Pwd)\s*=\s*)(""[^""]*""|'[^']*'|[^;""']*)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, MaskTimeout),
+    ];
+
+    /// <summary>Replaces the value of a secret-looking argument with ***. It matches the common shapes
+    /// only, so it is a safety net and not a promise that a command line holds nothing private.</summary>
+    internal static string MaskSecrets(string value)
+    {
+        foreach (var shape in SecretShapes)
+        {
+            try { value = shape.Replace(value, "$1***"); }
+            catch (RegexMatchTimeoutException) { return "*** (command line withheld)"; }
+        }
+        return value;
+    }
+
+    private static string ProtectText(string value)
+    {
+        value = MaskSecrets(value);
+        return value.Length <= DetailTextLimit ? value : value[..DetailTextLimit] + "...";
+    }
+
+    /// <summary>Masks and shortens the command line of each process row and the path (the command line)
+    /// of each service row. A response in any other shape goes back unchanged.</summary>
+    internal static string ProtectDetailRows(string json, string command)
+    {
+        string field = command == "processes" ? "commandLine" : "path";
+        try
+        {
+            if (JsonNode.Parse(json) is not JsonObject root || root[command] is not JsonArray rows) return json;
+            foreach (var row in rows.OfType<JsonObject>())
+                if (row[field] is JsonValue value && value.TryGetValue<string>(out var text))
+                    row[field] = ProtectText(text);
+            return root.ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+        }
+        catch (JsonException) { return json; }
+    }
+
+    private static Task<AppCallResult> StorageAsync(string path, JsonElement input, bool timeLimit, CancellationToken cancellationToken)
     {
         if (!ValidatePathInput(input, allowLimit: true, allowMaximum: false, out var target, out var limit))
             return Task.FromResult(new AppCallResult("Expected an absolute directory path and an optional limit from 1 to 100", true));
-        return RunJsonAsync(path, ["storage", target!, "--limit", limit.ToString(CultureInfo.InvariantCulture)], "topFolders", JsonValueKind.Array, 262144, cancellationToken);
+        return RunJsonAsync(path, StorageArguments(target!, limit, timeLimit), "topFolders", JsonValueKind.Array, 262144, cancellationToken,
+            timeout: timeLimit ? StorageTimeout : null);
     }
 
-    private static Task<AppCallResult> ProcessOrServiceAsync(string path, string command, JsonElement input, bool detailAllowed, bool filterAllowed, CancellationToken cancellationToken)
+    private static async Task<AppCallResult> ProcessOrServiceAsync(string path, string command, JsonElement input, bool detailAllowed, bool filterAllowed, CancellationToken cancellationToken)
     {
         const string Expected = "Expected an optional limit from 1 to 100, an optional detail flag, and an optional filter text";
         if (input.ValueKind != JsonValueKind.Object
             || input.EnumerateObject().Any(item => item.Name is not ("limit" or "detail" or "filter")
                 || (item.Name == "detail" && !detailAllowed) || (item.Name == "filter" && !filterAllowed))
             || !ReadOptionalLimit(input, 100, 100, out var limit))
-            return Task.FromResult(new AppCallResult(Expected, true));
+            return new AppCallResult(Expected, true);
         var arguments = new List<string> { command, "--limit", limit.ToString(CultureInfo.InvariantCulture) };
+        bool detail = false;
         if (input.TryGetProperty("detail", out var detailValue))
         {
-            if (detailValue.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return Task.FromResult(new AppCallResult(Expected, true));
-            if (detailValue.GetBoolean()) arguments.Add("--detail");
+            if (detailValue.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return new AppCallResult(Expected, true);
+            detail = detailValue.GetBoolean();
+            if (detail) arguments.Add("--detail");
         }
         if (input.TryGetProperty("filter", out _))
         {
-            if (!ReadString(input, "filter", 256, out var text)) return Task.FromResult(new AppCallResult(Expected, true));
+            if (!ReadString(input, "filter", 256, out var text)) return new AppCallResult(Expected, true);
             arguments.AddRange(["--filter", text!]);
         }
-        return RunJsonAsync(path, arguments, command, JsonValueKind.Array, 262144, cancellationToken);
+        var result = await RunJsonAsync(path, arguments, command, JsonValueKind.Array, OutputLimit(detail), cancellationToken).ConfigureAwait(false);
+        return detail && !result.IsError ? new AppCallResult(ProtectDetailRows(result.Text, command)) : result;
     }
 
     private static async Task<AppCallResult> SearchAsync(string path, JsonElement input, CancellationToken cancellationToken)
@@ -208,11 +290,11 @@ public static class KillerShellAdapter
         return RunJsonAsync(path, ["hash", target!], "hash", JsonValueKind.String, 32768, cancellationToken);
     }
 
-    private static async Task<AppCallResult> RunJsonAsync(string path, IEnumerable<string> arguments, string property, JsonValueKind kind, int maximumOutput, CancellationToken cancellationToken, JsonValueKind? alternateKind = null)
+    private static async Task<AppCallResult> RunJsonAsync(string path, IEnumerable<string> arguments, string property, JsonValueKind kind, int maximumOutput, CancellationToken cancellationToken, JsonValueKind? alternateKind = null, TimeSpan? timeout = null)
     {
         try
         {
-            var response = await RunAsync(path, arguments, TimeSpan.FromSeconds(10), maximumOutput, cancellationToken).ConfigureAwait(false);
+            var response = await RunAsync(path, arguments, timeout ?? TimeSpan.FromSeconds(10), maximumOutput, cancellationToken).ConfigureAwait(false);
             if (response.ExitCode != 0) return new AppCallResult(ErrorText(response), true);
             if (response.OutputExceeded) return InvalidResponse();
             using var document = JsonDocument.Parse(response.StandardOutput);
@@ -256,11 +338,12 @@ public static class KillerShellAdapter
         return schema;
     }
 
-    private static JsonObject LimitSchema(int maximum, bool detail = false, bool filter = false)
+    // A null description leaves that input out, for a KillerShell build that does not offer it.
+    private static JsonObject LimitSchema(int maximum, string? detailDescription = null, string? filterDescription = null)
     {
         var properties = new JsonObject { ["limit"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = maximum, ["default"] = Math.Min(100, maximum) } };
-        if (detail) properties["detail"] = new JsonObject { ["type"] = "boolean", ["default"] = false, ["description"] = "Add paths, command lines and start details to each row" };
-        if (filter) properties["filter"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 256, ["description"] = "Only rows whose name contains this text (case-insensitive)" };
+        if (detailDescription != null) properties["detail"] = new JsonObject { ["type"] = "boolean", ["default"] = false, ["description"] = detailDescription };
+        if (filterDescription != null) properties["filter"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 256, ["description"] = filterDescription };
         return new JsonObject { ["type"] = "object", ["properties"] = properties, ["additionalProperties"] = false };
     }
 
