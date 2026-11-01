@@ -10,6 +10,8 @@ KillerMCP 0.9.1 reaches KillerScan 1.9.0's Locations, scan settings and adapter 
 
 ### Added
 
+- `killershell_storage_report` reports the largest folders and files under one directory and appears with KillerShell 1.5.1 or later. It only reads folder sizes.
+- `killershell_list_processes` and `killershell_list_services` take `detail` and `filter` when the installed KillerShell offers them. Older KillerShell versions keep the plain listings.
 - `killerpdf_set_metadata`, `killerpdf_set_bookmarks`, `killerpdf_add_comment`, `killerpdf_delete_comments` and `killerpdf_crop` appear with KillerPDF 1.9.2 or later.
 - `killerpdf_print` takes `duplex` and `reverse` with KillerPDF 1.9.2 or later, and `killerpdf_fix_orientation`, `killerpdf_straighten` and `killerpdf_render_separations` take `password`.
 - `killerscan_list_locations` lists KillerScan's saved Locations with the name or ID a scan takes. It reads only and sends no network traffic.

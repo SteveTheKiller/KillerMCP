@@ -49,12 +49,15 @@ public static class KillerShellAdapter
         Add(help, "read <file>", adapters,
             new RuntimeTool("killershell_read_text_file", "Read a bounded amount of text from one local file with KillerShell.", ReadSchema()),
             (input, token) => ReadAsync(path!, input, token));
+        // Older KillerShell builds do not know these options, so the inputs exist only when the help names them.
+        bool detail = help.StandardOutput.Contains("--detail", StringComparison.Ordinal);
+        bool filter = help.StandardOutput.Contains("--filter", StringComparison.Ordinal);
         Add(help, "processes [", adapters,
-            new RuntimeTool("killershell_list_processes", "List running processes with their process IDs and memory use. This tool cannot start or stop processes.", LimitSchema(100)),
-            (input, token) => LimitedCommandAsync(path!, "processes", "processes", input, 100, token));
+            new RuntimeTool("killershell_list_processes", "List running processes with their process IDs and memory use. This tool cannot start or stop processes.", LimitSchema(100, detail, filter)),
+            (input, token) => ProcessOrServiceAsync(path!, "processes", input, detail, filter, token));
         Add(help, "services [", adapters,
-            new RuntimeTool("killershell_list_services", "List Windows services and their current status. This tool cannot start, stop, or reconfigure services.", LimitSchema(100)),
-            (input, token) => LimitedCommandAsync(path!, "services", "services", input, 100, token));
+            new RuntimeTool("killershell_list_services", "List Windows services and their current status. This tool cannot start, stop, or reconfigure services.", LimitSchema(100, detail, filter)),
+            (input, token) => ProcessOrServiceAsync(path!, "services", input, detail, filter, token));
         Add(help, "events <", adapters,
             new RuntimeTool("killershell_read_event_log", "Read recent entries from the local Application, System, or Security event log. This tool cannot clear or change logs.", EventSchema()),
             (input, token) => EventsAsync(path!, input, token));
@@ -67,7 +70,44 @@ public static class KillerShellAdapter
         Add(help, "hash <file>", adapters,
             new RuntimeTool("killershell_hash_file", "Calculate the SHA-256 hash of one local file without changing it.", PathSchema("Absolute path to a local file")),
             (input, token) => HashAsync(path!, input, token));
+        if (AppVersion.IsAtLeast(path!, StorageMinimumVersion))
+        {
+            Add(help, "storage <", adapters,
+                new RuntimeTool("killershell_storage_report", "Report the largest folders and files under one local directory with KillerShell. Read-only: it scans folder sizes and never changes, moves, or deletes anything.", PathSchema("Absolute directory path to scan", includeLimit: true)),
+                (input, token) => StorageAsync(path!, input, token));
+        }
         return adapters;
+    }
+
+    private static readonly Version StorageMinimumVersion = new(1, 5, 1);
+
+    private static Task<AppCallResult> StorageAsync(string path, JsonElement input, CancellationToken cancellationToken)
+    {
+        if (!ValidatePathInput(input, allowLimit: true, allowMaximum: false, out var target, out var limit))
+            return Task.FromResult(new AppCallResult("Expected an absolute directory path and an optional limit from 1 to 100", true));
+        return RunJsonAsync(path, ["storage", target!, "--limit", limit.ToString(CultureInfo.InvariantCulture)], "topFolders", JsonValueKind.Array, 262144, cancellationToken);
+    }
+
+    private static Task<AppCallResult> ProcessOrServiceAsync(string path, string command, JsonElement input, bool detailAllowed, bool filterAllowed, CancellationToken cancellationToken)
+    {
+        const string Expected = "Expected an optional limit from 1 to 100, an optional detail flag, and an optional filter text";
+        if (input.ValueKind != JsonValueKind.Object
+            || input.EnumerateObject().Any(item => item.Name is not ("limit" or "detail" or "filter")
+                || (item.Name == "detail" && !detailAllowed) || (item.Name == "filter" && !filterAllowed))
+            || !ReadOptionalLimit(input, 100, 100, out var limit))
+            return Task.FromResult(new AppCallResult(Expected, true));
+        var arguments = new List<string> { command, "--limit", limit.ToString(CultureInfo.InvariantCulture) };
+        if (input.TryGetProperty("detail", out var detailValue))
+        {
+            if (detailValue.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return Task.FromResult(new AppCallResult(Expected, true));
+            if (detailValue.GetBoolean()) arguments.Add("--detail");
+        }
+        if (input.TryGetProperty("filter", out _))
+        {
+            if (!ReadString(input, "filter", 256, out var text)) return Task.FromResult(new AppCallResult(Expected, true));
+            arguments.AddRange(["--filter", text!]);
+        }
+        return RunJsonAsync(path, arguments, command, JsonValueKind.Array, 262144, cancellationToken);
     }
 
     private static async Task<AppCallResult> SearchAsync(string path, JsonElement input, CancellationToken cancellationToken)
@@ -216,12 +256,13 @@ public static class KillerShellAdapter
         return schema;
     }
 
-    private static JsonObject LimitSchema(int maximum) => new()
+    private static JsonObject LimitSchema(int maximum, bool detail = false, bool filter = false)
     {
-        ["type"] = "object",
-        ["properties"] = new JsonObject { ["limit"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = maximum, ["default"] = Math.Min(100, maximum) } },
-        ["additionalProperties"] = false,
-    };
+        var properties = new JsonObject { ["limit"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = maximum, ["default"] = Math.Min(100, maximum) } };
+        if (detail) properties["detail"] = new JsonObject { ["type"] = "boolean", ["default"] = false, ["description"] = "Add paths, command lines and start details to each row" };
+        if (filter) properties["filter"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 256, ["description"] = "Only rows whose name contains this text (case-insensitive)" };
+        return new JsonObject { ["type"] = "object", ["properties"] = properties, ["additionalProperties"] = false };
+    }
 
     private static JsonObject EventSchema() => new()
     {

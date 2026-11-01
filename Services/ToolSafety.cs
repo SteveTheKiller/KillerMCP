@@ -34,7 +34,7 @@ internal static class ToolSafety
         "killershell_search_files", "killershell_list_directory", "killershell_file_info",
         "killershell_read_text_file", "killershell_list_processes", "killershell_list_services",
         "killershell_read_event_log", "killershell_read_registry_key", "killershell_list_drives",
-        "killershell_hash_file",
+        "killershell_hash_file", "killershell_storage_report",
     };
 
     private static readonly HashSet<string> ReadOnlyShotTools = new(StringComparer.Ordinal)
