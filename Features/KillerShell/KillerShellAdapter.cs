@@ -53,7 +53,7 @@ public static class KillerShellAdapter
         // Older KillerShell builds do not know these options, so the inputs exist only when the help names them.
         bool detail = help.StandardOutput.Contains("--detail", StringComparison.Ordinal);
         bool filter = help.StandardOutput.Contains("--filter", StringComparison.Ordinal);
-        string maskNote = " Values after --password, --token and --api-key, Authorization headers and Password= in connection strings are masked as ***, but other private text can remain, so leave detail off unless it is needed.";
+        string maskNote = " Masking is best effort: values after password, token, secret and key switches, URL passwords, Authorization headers and Password= style connection string keys are replaced with ***, but detail can still expose secrets in unusual forms, so leave detail off unless it is needed.";
         Add(help, "processes [", adapters,
             new RuntimeTool("killershell_list_processes",
                 "List running processes with their process IDs and memory use."
@@ -115,32 +115,72 @@ public static class KillerShellAdapter
     private const int DetailTextLimit = 1024;
 
     private static readonly TimeSpan MaskTimeout = TimeSpan.FromSeconds(1);
+    private const RegexOptions MaskOptions = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
     private static readonly Regex[] SecretShapes =
     [
-        // --password x, --password=x, --token x, --api-key "x y", also with - or / in front.
-        new(@"(?<![\w-])((?:--?|/)(?:password|passwd|pwd|token|api[-_]?key|apikey|secret)(?:\s*[=:]\s*|\s+))(""[^""]*""|'[^']*'|[^\s""']+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, MaskTimeout),
-        // Authorization: Bearer x (the scheme is kept, the credential is not).
-        new(@"(Authorization[""']?\s*[:=]\s*(?:(?:Bearer|Basic|Digest|Negotiate|NTLM|Token)\s+)?)([^\s""']+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, MaskTimeout),
-        // Password=x; or Pwd=x in a connection string; the value runs to the next semicolon or quote.
-        new(@"(\b(?:Password|Pwd)\s*=\s*)(""[^""]*""|'[^']*'|[^;""']*)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, MaskTimeout),
+        // Any switch whose name holds a secret word (--password x, --db-password=x, --client-secret x,
+        // /token x, --api-key "x y", --password "a\"b c"), with - -- or / in front. The value is a quoted
+        // string with backslash escapes, a single-quoted string, or text up to the next space.
+        new(@"(?<![\w-])((?:--?|/)[\w-]*?(?:password|passwd|pwd|token|secret|api-?key|api_key|credential)[\w-]*(?:\s*[=:]\s*|\s+))(""(?:\\.|[^""\\])*""|'[^']*'|[^\s""]+|""[^\r\n]*)", MaskOptions, MaskTimeout),
+        // https://user:pass@host: only the password part goes.
+        new(@"(\b[A-Za-z][A-Za-z0-9+.-]*://[^\s/:@""']*:)[^\s/""']*(?=@)", MaskOptions, MaskTimeout),
+        // Password=x; Pwd=x; AccountKey=x; SharedAccessKey=x; SharedAccessSignature=x; client_secret=x and similar
+        // keys in a connection string. A value is {braces} (}} is a brace), a quoted string, or text up to the next semicolon or quote.
+        new(@"(?<![\w-])([A-Za-z0-9_]*(?:Password|Passwd|Pwd|AccountKey|SharedAccessKey|SharedAccessSignature|client[-_]?secret|api[-_]?key|secret|token)\s*=\s*)(\{(?:[^}]|\}\})*\}|""(?:\\.|[^""\\])*""|'[^']*'|[^;""]*)", MaskOptions, MaskTimeout),
     ];
+
+    private static readonly Regex AuthorizationStart = new(@"(?<q>[""'])?Authorization(?<k>[""'])?\s*[:=]\s*(?<v>[""'])?", MaskOptions, MaskTimeout);
+    private static readonly Regex AuthorizationScheme = new(@"^(?:Bearer|Basic|Digest|Negotiate|NTLM|Token|AWS4-[\w-]+)\s+(?=\S)", MaskOptions, MaskTimeout);
+
+    // Authorization: everything after the colon up to the end of the header value or of the quoted argument it sits in
+    // is masked. A known scheme word stays, since it is not secret and says what kind of credential was there.
+    private static string MaskAuthorization(string value)
+    {
+        var result = new System.Text.StringBuilder();
+        int position = 0;
+        foreach (Match match in AuthorizationStart.Matches(value))
+        {
+            if (match.Index < position) continue;
+            char quote = match.Groups["v"].Success ? match.Groups["v"].Value[0] : match.Groups["q"].Success ? match.Groups["q"].Value[0] : '\0';
+            int start = match.Index + match.Length;
+            int end = start;
+            while (end < value.Length)
+            {
+                char c = value[end];
+                if (quote == '\0' ? c is '\r' or '\n' : c == quote) break;
+                if (quote == '"' && c == '\\' && end + 1 < value.Length) end++;
+                end++;
+            }
+            end = Math.Min(end, value.Length);
+            if (end == start) continue;
+            var scheme = AuthorizationScheme.Match(value.Substring(start, end - start));
+            int keep = scheme.Success ? scheme.Length : 0;
+            result.Append(value, position, start + keep - position).Append("***");
+            position = end;
+        }
+        return position == 0 ? value : result.Append(value, position, value.Length - position).ToString();
+    }
 
     /// <summary>Replaces the value of a secret-looking argument with ***. It matches the common shapes
     /// only, so it is a safety net and not a promise that a command line holds nothing private.</summary>
     internal static string MaskSecrets(string value)
     {
-        foreach (var shape in SecretShapes)
+        try
         {
-            try { value = shape.Replace(value, "$1***"); }
-            catch (RegexMatchTimeoutException) { return "*** (command line withheld)"; }
+            value = MaskAuthorization(value);
+            foreach (var shape in SecretShapes) value = shape.Replace(value, "$1***");
         }
+        catch (RegexMatchTimeoutException) { return "*** (command line withheld)"; }
         return value;
     }
 
     private static string ProtectText(string value)
     {
         value = MaskSecrets(value);
-        return value.Length <= DetailTextLimit ? value : value[..DetailTextLimit] + "...";
+        if (value.Length <= DetailTextLimit) return value;
+        // Never cut between the halves of a surrogate pair, which would make the row impossible to write as JSON.
+        int cut = char.IsHighSurrogate(value[DetailTextLimit - 1]) ? DetailTextLimit - 1 : DetailTextLimit;
+        return value[..cut] + "...";
     }
 
     /// <summary>Masks and shortens the command line of each process row and the path (the command line)
