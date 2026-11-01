@@ -48,7 +48,8 @@ public static partial class KillerPdfAdapter
             (input, output) => Options(["--set-metadata", String(input, "path"), output], input, ("title", "--title"), ("author", "--author"), ("subject", "--subject"), ("keywords", "--keywords"), ("creator", "--creator")));
         yield return FileOperation("killerpdf_set_bookmarks", "--set-bookmarks <in.pdf>", "Import bookmarks from a bookmark data file into a new PDF, adding to or replacing the existing ones. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["bookmarks"] = Text(1024, null, "Absolute path to a bookmark data JSON file"), ["replace"] = Boolean(false) }, "path", "output", "bookmarks"),
-            (input, output) => Options(["--set-bookmarks", String(input, "path"), output, String(input, "bookmarks")], input, ("replace", "--replace")));
+            (input, output) => Options(["--set-bookmarks", String(input, "path"), output, String(input, "bookmarks")], input, ("replace", "--replace")))
+            with { ExtraFiles = ["bookmarks"] };
         yield return FileOperation("killerpdf_add_comment", "--add-comment <in.pdf>", "Add a note comment to one page of a local PDF, into a new PDF. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["page"] = Integer(1, 100000), ["text"] = Text(4096, null, "Comment text"), ["x"] = new JsonObject { ["type"] = "number" }, ["y"] = new JsonObject { ["type"] = "number" }, ["author"] = Text(256, null, "Comment author") }, "path", "output", "page", "text"),
             (input, output) => Options(["--add-comment", String(input, "path"), output], input, ("page", "--page"), ("text", "--text"), ("x", "--x"), ("y", "--y"), ("author", "--author")));
