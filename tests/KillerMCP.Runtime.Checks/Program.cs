@@ -1,6 +1,10 @@
 using KillerMCP;
 using System.Text.Json;
 
+if (BenchReadOnlyChecks.Serve(args)) return;
+if (args.SequenceEqual(["--bench-readonly"])) { await BenchReadOnlyChecks.RunAsync(); return; }
+if (args.SequenceEqual(["--bench-readonly-real"])) { await BenchReadOnlyChecks.RunRealAsync(); return; }
+
 if (Environment.GetEnvironmentVariable("KILLERMCP_REAL_SHOT") is { Length: > 0 } realShot)
 {
     string isolated = Environment.GetEnvironmentVariable("KILLERMCP_REAL_SHOT_ROOT") ?? throw new InvalidOperationException("Missing owned Shot test directory");
@@ -19,6 +23,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_BENCH") == "1")
     var bench = Environment.GetCommandLineArgs().Skip(1).ToArray();
     var execute = bench.Contains("--execute");
     if (bench.SequenceEqual(["help"])) { Console.WriteLine("killerbench-cli full-scan [--recipes ID[,ID]] [--json]"); return; }
+    if (bench.SequenceEqual(["capabilities"])) { Environment.ExitCode = 2; return; }
     if (bench.SequenceEqual(["vitals-check"])) { Console.Write(JsonSerializer.Serialize(new { name = "Vitals", state = "Clear" })); return; }
     if (bench.Length == 2 && bench[0] == "update-code") { Console.Write(JsonSerializer.Serialize(new { code = bench[1], meaning = "Fixture" })); return; }
     if (bench.SequenceEqual(["recipes"]))

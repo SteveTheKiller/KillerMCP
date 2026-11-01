@@ -74,7 +74,8 @@ public static partial class KillerBenchAdapter
         {
             return [];
         }
-        return new Session(path!, IsFile(notes) ? notes : null, options ?? new KillerBenchOptions()).Adapters();
+        var commands = await ReadCapabilities(path!, cancellationToken).ConfigureAwait(false);
+        return new Session(path!, IsFile(notes) ? notes : null, options ?? new KillerBenchOptions(), commands).Adapters();
     }
 
     private sealed class Job
@@ -89,7 +90,7 @@ public static partial class KillerBenchAdapter
 
     private sealed record Ticket(KillerBenchRepairPlan Plan, DateTimeOffset Issued);
 
-    private sealed class Session(string path, string? notes, KillerBenchOptions options)
+    private sealed partial class Session(string path, string? notes, KillerBenchOptions options, HashSet<string> commands)
     {
         private readonly ConcurrentDictionary<string, Job> jobs = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, Ticket> tickets = new(StringComparer.Ordinal);
@@ -107,9 +108,9 @@ public static partial class KillerBenchAdapter
         {
             var list = new List<AppAdapter>
             {
-                Tool("killerbench_code_lookup", "Look up a Windows result code offline with KillerBench: a Device Manager problem code, a Win32 error, a Windows Update result or a Windows Setup result. Accepts decimal or 0x hexadecimal.", Schema(new JsonObject { ["kind"] = Enum("device", "win32", "update", "setup"), ["code"] = Text(24) }, "kind", "code"), CodeLookup),
+                Tool("killerbench_code_lookup", "Look up a Windows result code offline. Accepts decimal or 0x hexadecimal. MSI lookup requires a CLI that advertises msi-code.", Schema(new JsonObject { ["kind"] = commands.Contains("msi-code") ? Enum("device", "win32", "update", "setup", "msi") : Enum("device", "win32", "update", "setup"), ["code"] = Text(24) }, "kind", "code"), CodeLookup),
                 Tool("killerbench_diagnostic_scopes", "List KillerBench diagnostic scopes for killerbench_scan. Set all to list every read-only diagnostic area instead of the recommended outcome groups.", Schema(new JsonObject { ["all"] = Boolean(false) }), Scopes),
-                Tool("killerbench_check", "Run one read-only KillerBench check on this PC and return its JSON evidence. Nothing is changed. dns needs host, tcp needs host and port, volume_capacity and storage need drive, printer_queue needs queues. Long checks return a jobId to poll with killerbench_job.", CheckSchema(), Check),
+                Tool("killerbench_check", "Run one read-only KillerBench check on this PC and return its JSON evidence. Nothing is changed. dns needs host, tcp needs host and port, volume_capacity and storage need drive, printer_queue needs queues. Long checks return a jobId to poll with killerbench_job.", CheckSchema([.. Checks, .. DiagnosticChecks.Where(pair => commands.Contains(pair.Value)).Select(pair => pair.Key)]), Check),
                 Tool("killerbench_scan", "Run a read-only KillerBench diagnosis of this PC, either every area or the selected scopes from killerbench_diagnostic_scopes. Nothing is repaired. A full scan takes minutes, so this usually returns a jobId to poll with killerbench_job.", Schema(new JsonObject { ["scopes"] = new JsonObject { ["type"] = "array", ["items"] = Text(64), ["maxItems"] = 16 } }), Scan),
                 Tool("killerbench_job", "Get the status or finished result of a KillerBench job started by another killerbench tool.", Schema(new JsonObject { ["jobId"] = Text(32) }, "jobId"), JobStatus),
                 Tool("killerbench_repair_actions", "List the KillerBench repairs KillerMCP can request, their safety tier and options, the repair level the user chose in the KillerMCP section of the KillerBench About window, and any repair lock. Repairs are off until the user turns them on there.", Schema(new JsonObject()), Actions),
@@ -117,6 +118,7 @@ public static partial class KillerBenchAdapter
                 Tool("killerbench_repair_execute", "Execute one previewed KillerBench repair by its token. Changes this PC. Only one repair runs at a time, Windows asks for administrator approval, and disruptive repairs also need a person to approve them in a KillerMCP window on the desktop. An uncertain outcome locks further repairs until the user clears the lock.", Schema(new JsonObject { ["token"] = Text(64) }, "token"), Execute),
                 Tool("killerbench_repair_recover", "Reconcile an interrupted or uncertain KillerBench repair without repeating it. Read-only. Use the same action and options as the original preview.", Schema(new JsonObject { ["action"] = Text(40), ["options"] = new JsonObject { ["type"] = "object" } }, "action"), Recover),
             };
+            list.AddRange(ReadOnlyAdapters());
             if (notes is not null)
             {
                 list.Add(Tool("killerbench_save_scan_note", "Save the finished result of a KillerBench scan or check job as a new KillerNotes note.", Schema(new JsonObject { ["jobId"] = Text(32), ["title"] = Text(120), ["group"] = Text(240) }, "jobId"), SaveNote));
@@ -129,7 +131,8 @@ public static partial class KillerBenchAdapter
             if (!KillerBenchRepairs.Allowed(input, "kind", "code")) return Error("Expected kind and code");
             var kind = KillerBenchRepairs.Optional(input, "kind");
             var code = KillerBenchRepairs.Optional(input, "code")?.Trim();
-            if (kind is not ("device" or "win32" or "update" or "setup")) return Error("kind must be device, win32, update or setup");
+            if (kind is not ("device" or "win32" or "update" or "setup" or "msi")) return Error("kind must be device, win32, update, setup or msi");
+            if (kind == "msi" && !commands.Contains("msi-code")) return Error("The installed KillerBench CLI does not advertise MSI lookup. Update KillerBench.");
             if (code is null || !Code().IsMatch(code)) return Error("code must be decimal or 0x hexadecimal");
             var result = await Run([kind + "-code", code], 30, token).ConfigureAwait(false);
             return Ok(result);
@@ -146,7 +149,14 @@ public static partial class KillerBenchAdapter
         {
             if (!KillerBenchRepairs.Allowed(input, "check", "host", "port", "drive", "queues")) return Error("Unknown option. Allowed: check, host, port, drive, queues");
             var check = KillerBenchRepairs.Optional(input, "check");
+            if (check is not null && DiagnosticChecks.TryGetValue(check, out var diagnostic))
+            {
+                if (!KillerBenchRepairs.Allowed(input, "check")) return Error("This check accepts only check.");
+                return await ReadJob(diagnostic, [diagnostic], token).ConfigureAwait(false);
+            }
             if (check is null || !Checks.Contains(check)) return Error("check must be one of: " + string.Join(", ", Checks));
+            string[] used = check switch { "dns" => ["check", "host"], "tcp" => ["check", "host", "port"], "volume_capacity" or "storage" => ["check", "drive"], "printer_queue" => ["check", "queues"], _ => ["check"] };
+            if (!KillerBenchRepairs.Allowed(input, used)) return Error("Unused option for this check.");
             string[]? args = check switch
             {
                 "vitals" => ["vitals-check"],
@@ -764,9 +774,9 @@ public static partial class KillerBenchAdapter
     private static string Limit(string text, int maximum = 4096) => text.Length <= maximum ? text : text[..maximum];
     private static bool IsFile(string? path) { try { return !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path) && File.Exists(path); } catch { return false; } }
 
-    private static JsonObject CheckSchema() => Schema(new JsonObject
+    private static JsonObject CheckSchema(string[] checks) => Schema(new JsonObject
     {
-        ["check"] = Enum(Checks),
+        ["check"] = Enum(checks),
         ["host"] = Text(253),
         ["port"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 65535 },
         ["drive"] = Text(2),

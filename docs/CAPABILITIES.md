@@ -246,11 +246,21 @@ Agenda lookup cannot currently unlock a password-protected calendar. Appointment
 
 Read-only tools:
 
-- Look up Device Manager problem codes, Win32 errors, Windows Update results and Windows Setup results offline.
+- Look up Device Manager problem codes, Win32 errors, Windows Update results, Windows Setup results and MSI results offline.
 - List the diagnostic scopes and recipes that KillerBench supports.
 - Run one read-only check: vitals, pending restart, DHCP leases, printers, print jobs, selected printer queues, DNS resolution, a TCP connection, volume capacity, an NTFS volume check, crash review, update history, update search, servicing logs, Microsoft Defender, firewall alignment, hardware security, services, Windows Time or background transfers.
 - Run a full diagnostic scan or a scan limited to selected scopes. Nothing is repaired.
 - Return long checks and scans as a job ID. Poll it with `killerbench_job` and save the finished result as a note.
+
+Newer KillerBench versions advertise their commands through a versioned capability list. KillerMCP uses that list to offer four additional read-only tools and more focused checks. Older versions keep the original tools; unavailable operations are hidden or rejected before they run.
+
+- `killerbench_evidence` investigates one evidence file or up to 12 files, opens a saved capture, or reviews saved workflow and task journals. A task journal can include an explicitly selected completion record. Historical results do not describe the PC's current health.
+- `killerbench_knowledge` reads pack information, performs contextual lookups and bounded text searches, compares packs, analyzes a selected log against a pack, and looks up MAC, PCI, USB, UEFI, Bluetooth and driver references. It can inspect a signed active local pack without downloading or activating anything. References do not authorize a diagnosis or repair.
+- `killerbench_review` reviews duplicate or large files under a selected folder, application registrations and saved inventory comparisons, browser extensions, profile age and dependencies, saved task drafts, stored task definitions, named services, one MSI product, or the current Windows Time plan. File review accepts explicit count and size bounds. Task drafts are read without opening their embedded executable or resolving their account.
+- `killerbench_catalog` lists workflows, shared workflow options, recipes and packs, validates a selected recipe pack, and reads native validation plans or coverage records. Coverage checks local retained artifact references; missing or incomplete evidence remains unverified. No native acceptance scenario runs.
+- Additional `killerbench_check` choices cover focused task, service, installer, update, Defender, network, SMB, storage, backup, time and crash evidence when the installed CLI supports them. Device review uses a selected category through `killerbench_review`.
+
+Each operation accepts only its documented typed fields. Paths must be fully qualified and pass KillerMCP's network and device-path checks. Referenced knowledge and validation files are also checked, and redirected nested evidence is refused. These tools cannot export files, collect a new capture, activate packs, create backups, register tasks, execute repairs or pass arbitrary commands. Explicitly opened evidence can contain private identities, paths or raw contents; share it only as intended. Long reads use the existing job and output limits, including explicit partial and truncated results.
 
 Repairs are off by default. The user turns them on in the KillerMCP section of the KillerBench About window, which saves the choice immediately. An MCP client cannot change it.
 

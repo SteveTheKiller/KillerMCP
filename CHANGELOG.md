@@ -10,6 +10,7 @@ KillerMCP 0.9.1 reaches KillerScan 1.9.0's Locations, scan settings and adapter 
 
 ### Added
 
+- KillerBench exposes capability-gated evidence, knowledge, review and catalog tools, MSI code lookup, and more focused diagnostics. File inputs respect agent path restrictions; existing repair consent and exclusions remain in place.
 - `killershell_storage_report` reports the largest folders and files under one directory and appears with KillerShell 1.5.1 or later. It only reads folder sizes.
 - `killershell_list_processes` and `killershell_list_services` take `detail` and `filter` when the installed KillerShell offers them. Older KillerShell versions keep the plain listings.
 - `killerpdf_set_metadata`, `killerpdf_set_bookmarks`, `killerpdf_add_comment`, `killerpdf_delete_comments` and `killerpdf_crop` appear with KillerPDF 1.9.2 or later.
