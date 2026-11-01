@@ -73,6 +73,13 @@ public static partial class KillerPdfAdapter
         ["killerpdf_flatten"] = ["colorMode", "threshold", "compression", "jpegQuality", "scannedLook"],
     };
 
+    // Commands an older KillerPDF does not have, so their tools stay hidden until 1.9.2.
+    private static readonly HashSet<string> Release192Tools = new(StringComparer.Ordinal)
+    {
+        "killerpdf_set_metadata", "killerpdf_set_bookmarks", "killerpdf_add_comment",
+        "killerpdf_delete_comments", "killerpdf_crop",
+    };
+
     private static async Task<Version?> VersionAsync(string path, CancellationToken token)
     {
         try
@@ -89,7 +96,20 @@ public static partial class KillerPdfAdapter
 
     private static Operation? ForVersion(Operation operation, Version? version)
     {
+        bool hasRelease192 = version is not null && version >= new Version(1, 9, 2);
+        if (!hasRelease192 && Release192Tools.Contains(operation.Tool.Name)) return null;
         var definition = version is not null && version >= CurrentVersion ? operation : ForOlderVersion(operation);
+        if (definition is not null && !hasRelease192 && operation.Tool.Name == "killerpdf_print")
+        {
+            var printSchema = definition.Tool.InputSchema.DeepClone().AsObject();
+            printSchema["properties"]!.AsObject().Remove("duplex");
+            printSchema["properties"]!.AsObject().Remove("reverse");
+            return definition with { Tool = definition.Tool with
+            {
+                InputSchema = printSchema,
+                Description = definition.Tool.Description + " Duplex and reverse printing require KillerPDF 1.9.2 or later."
+            } };
+        }
         if (definition is null || operation.Tool.Name != "killerpdf_optimize" || version is not null && version >= new Version(1, 9, 1))
             return definition;
         var schema = definition.Tool.InputSchema.DeepClone().AsObject();
