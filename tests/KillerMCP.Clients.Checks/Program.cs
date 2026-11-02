@@ -16,7 +16,16 @@ if (!string.IsNullOrWhiteSpace(fakeCodexState))
     }
     if (command.Length >= 5 && command[..4].SequenceEqual(["mcp", "add", "killermcp", "--"]))
     {
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_CODEX_FAIL_ADD") == "1") { Console.Error.Write("Fixture add failure"); return 1; }
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_CODEX_FAIL_ADD") == "1")
+        {
+            if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_CODEX_CONCURRENT_SAVE") is { } path)
+            {
+                var settings = Read(path);
+                settings["concurrentSetting"] = "keep new save";
+                File.WriteAllText(path, settings.ToJsonString());
+            }
+            Console.Error.Write("Fixture add failure"); return 1;
+        }
         File.WriteAllText(fakeCodexState, new JsonObject { ["transport"] = new JsonObject { ["type"] = "stdio", ["command"] = command[4], ["args"] = new JsonArray(command.Skip(5).Select(value => JsonValue.Create(value)).ToArray()) } }.ToJsonString());
         return 0;
     }
@@ -127,9 +136,8 @@ try
     Equal(false, File.Exists(codexState));
     foreach (var name in clientNames) Equal(false, Read(environment[$"KILLERMCP_TEST_{name}_CONFIG"]!)["mcpServers"]!.AsObject().ContainsKey(name == "CLAUDE_DESKTOP" ? "KillerMCP" : "killermcp"));
 
-    // Registration is all or nothing. A conflict in any client leaves every client untouched, and a
-    // write that fails partway puts back the clients already changed, so no client is left pointing
-    // at a KillerMCP that setup then removes.
+    // Conflicts are found before writes. A later failure preserves completed settings writes and
+    // names them for review instead of racing another app's save during rollback.
     string ConfigPath(string name) => environment[$"KILLERMCP_TEST_{name}_CONFIG"]!;
     foreach (var name in clientNames) File.WriteAllText(ConfigPath(name), new JsonObject { ["preservedSetting"] = "keep" }.ToJsonString());
     File.WriteAllText(ConfigPath("CURSOR"), new JsonObject { ["mcpServers"] = new JsonObject { ["killermcp"] = new JsonObject { ["command"] = Path.Combine(root, "different-host"), ["args"] = new JsonArray() } } }.ToJsonString());
@@ -142,11 +150,32 @@ try
     File.Delete(windsurf);
     Directory.CreateDirectory(windsurf);
     untouched = clientNames.Where(name => name != "WINDSURF").ToDictionary(name => name, name => File.ReadAllText(ConfigPath(name)));
-    Throws<Exception>(() => ClientConfiguration.RegisterAll(executable, environment));
-    foreach (var name in untouched.Keys) Equal(untouched[name], File.ReadAllText(ConfigPath(name)));
+    var partialFailure = Caught<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, environment));
+    Equal(true, partialFailure.Message.Contains(ConfigPath("CLAUDE"), StringComparison.Ordinal));
+    Equal(executable, Read(ConfigPath("CLAUDE"))["mcpServers"]!["killermcp"]!["command"]!.GetValue<string>());
+    foreach (var name in untouched.Keys) Equal("keep", Read(ConfigPath(name))["preservedSetting"]!.GetValue<string>());
     Equal(false, File.Exists(codexState));
     Directory.Delete(windsurf);
     File.WriteAllText(windsurf, "{}");
+
+    // A later external client failure must not roll back another app's intervening save.
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_CODEX_FAIL_ADD", "1");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_CODEX_CONCURRENT_SAVE", ConfigPath("CLAUDE"));
+    try
+    {
+        var failure = Caught<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, environment));
+        Equal("keep new save", Read(ConfigPath("CLAUDE"))["concurrentSetting"]?.GetValue<string>());
+        Equal(true, failure.Message.Contains("rollback", StringComparison.OrdinalIgnoreCase));
+        File.Delete(ConfigPath("CLAUDE"));
+        failure = Caught<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, environment));
+        Equal("keep new save", Read(ConfigPath("CLAUDE"))["concurrentSetting"]?.GetValue<string>());
+        Equal(true, failure.Message.Contains("rollback", StringComparison.OrdinalIgnoreCase));
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_CODEX_FAIL_ADD", null);
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_CODEX_CONCURRENT_SAVE", null);
+    }
 
     // Uninstall removes KillerMCP from every client it can and reports the ones it could not change.
     ClientConfiguration.RegisterAll(executable, environment);
@@ -200,6 +229,29 @@ try
     Equal("light", Read(busy)["theme"]!.GetValue<string>());
     Equal(1, Read(busy)["recent"]!.AsArray().Count);
     Equal(executable, Read(busy)["mcpServers"]!["killermcp"]!["command"]!.GetValue<string>());
+
+    File.WriteAllText(busy, "{\"theme\":\"dark\"}");
+    bool concurrentSaveSucceeded = false;
+    ClientRegistration.BeforePublish = path =>
+    {
+        string save = path + ".client-save";
+        File.WriteAllText(save, "{\"theme\":\"new save\"}");
+        try { File.Move(save, path, true); concurrentSaveSucceeded = true; }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException) { }
+        finally { if (File.Exists(save)) File.Delete(save); }
+    };
+    try { ClientRegistration.RegisterJsonClient(busy, "Cursor", executable); }
+    finally { ClientRegistration.BeforePublish = null; }
+    if (concurrentSaveSucceeded) Equal("new save", Read(busy)["theme"]!.GetValue<string>());
+
+    var recoveryCopy = busy + ".killermcp-recovery";
+    File.WriteAllText(recoveryCopy, "{\"theme\":\"recover me\"}");
+    File.WriteAllText(busy, "{partial");
+    var interrupted = Caught<IOException>(() => ClientRegistration.RegisterJsonClient(busy, "Cursor", executable));
+    Equal(true, interrupted.Message.Contains(recoveryCopy, StringComparison.Ordinal));
+    Equal("{\"theme\":\"recover me\"}", File.ReadAllText(recoveryCopy));
+    interrupted = Caught<IOException>(() => ClientRegistration.RemoveJsonClient(busy, "Cursor", executable));
+    Equal(true, interrupted.Message.Contains(recoveryCopy, StringComparison.Ordinal));
 
     // A settings file that is a link is changed where it points, and stays a link.
     var linkedTarget = Path.Combine(root, "dotfiles", "mcp.json");

@@ -10,6 +10,7 @@ public sealed class CommentedSettingsException(string message) : IOException(mes
 
 public static class ClientRegistration
 {
+    internal sealed record Change(string Path);
     private const string ServerName = "killermcp";
     private const int Attempts = 3;
     // The settings belong to other apps, so text in their entries is written back as it was instead of escaped.
@@ -17,13 +18,18 @@ public static class ClientRegistration
 
     // Tests use this to change a settings file between KillerMCP reading it and replacing it.
     internal static Action<string>? BeforeReplace;
+    internal static Action<string>? BeforePublish;
 
     public static string RegisterJsonClient(string configurationPath, string clientName, string executablePath, bool includeStdioType = false, string serverName = ServerName)
+        => RegisterTracked(configurationPath, clientName, executablePath, includeStdioType, serverName).Message;
+
+    internal static (string Message, Change? Change) RegisterTracked(string configurationPath, string clientName, string executablePath, bool includeStdioType, string serverName)
     {
         for (var attempt = 1; ; attempt++)
         {
             var (root, message, original) = Plan(configurationPath, clientName, executablePath, includeStdioType, serverName);
-            if (root is null || Write(configurationPath, root, original)) return message;
+            if (root is null) return (message, null);
+            if (Write(configurationPath, root, original, out var change)) return (message, change);
             if (attempt == Attempts) throw new IOException(KeptChanging(clientName, configurationPath));
         }
     }
@@ -80,6 +86,7 @@ public static class ClientRegistration
     public static bool RemoveJsonClient(string configurationPath, string clientName, string executablePath, bool includeStdioType = false, string serverName = ServerName)
     {
         ValidateArguments(configurationPath, clientName, executablePath);
+        RefuseInterruptedUpdate(configurationPath);
         for (var attempt = 1; ; attempt++)
         {
             if (!File.Exists(configurationPath))
@@ -150,6 +157,7 @@ public static class ClientRegistration
     // comments are skipped is reported as commented, so callers never write it back without them.
     private static JsonObject ReadRoot(string path, string clientName, out bool commented, out string? original)
     {
+        RefuseInterruptedUpdate(path);
         commented = false;
         original = null;
         if (!File.Exists(path)) return new JsonObject();
@@ -177,6 +185,12 @@ public static class ClientRegistration
         }
     }
 
+    private static void RefuseInterruptedUpdate(string path)
+    {
+        var recovery = TargetPath(path) + ".killermcp-recovery";
+        if (File.Exists(recovery)) throw new IOException("An interrupted settings update needs review. Recovery copy: " + recovery);
+    }
+
     private static JsonObject ReadServers(JsonObject root, string clientName)
     {
         if (!root.TryGetPropertyValue("mcpServers", out var value) || value is null)
@@ -190,23 +204,56 @@ public static class ClientRegistration
             ?? throw new InvalidDataException($"{clientName} MCP server configuration is invalid.");
     }
 
-    // A settings file that is a link is written where it points, so the link stays. The file is read again
-    // just before it is replaced: when its app saved it in between, nothing is written and false comes back,
-    // so the caller plans again from the app's version instead of overwriting it.
+    // Hold the settings file exclusively from comparison through publication. A durable recovery copy
+    // protects an existing file if the process or machine stops during the write.
     private static bool Write(string path, JsonObject root, string? original)
+        => Write(path, root, original, out _);
+
+    private static bool Write(string path, JsonObject root, string? original, out Change? change)
     {
+        change = null;
         var target = TargetPath(path);
         var directory = Path.GetDirectoryName(target)
             ?? throw new InvalidOperationException("The MCP configuration directory is unavailable.");
         Directory.CreateDirectory(directory);
         var temporary = target + ".tmp-" + Guid.NewGuid().ToString("N");
+        var recovery = target + ".killermcp-recovery";
+        if (File.Exists(recovery)) throw new IOException("An interrupted settings update needs review. Recovery copy: " + recovery);
         try
         {
             File.WriteAllText(temporary, root.ToJsonString(Json) + Environment.NewLine, new UTF8Encoding(false));
             BeforeReplace?.Invoke(target);
-            var current = File.Exists(target) ? File.ReadAllText(target) : null;
+            using var held = new FileStream(target, original is null ? FileMode.CreateNew : FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            byte[] previous = new byte[held.Length];
+            held.ReadExactly(previous);
+            string? current = null;
+            if (original is not null)
+            {
+                using var reader = new StreamReader(new MemoryStream(previous), Encoding.UTF8, true);
+                current = reader.ReadToEnd();
+            }
             if (!string.Equals(current, original, StringComparison.Ordinal)) return false;
-            File.Move(temporary, target, true);
+            if (original is not null)
+            {
+                using var backup = new FileStream(recovery, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                backup.Write(previous);
+                backup.Flush(true);
+            }
+            BeforePublish?.Invoke(target);
+            try
+            {
+                held.Position = 0;
+                var written = File.ReadAllBytes(temporary);
+                held.Write(written);
+                held.SetLength(written.Length);
+                held.Flush(true);
+            }
+            catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+            {
+                throw new IOException("Settings update failed. Review " + target + (original is null ? "." : "; recovery copy: " + recovery), failure);
+            }
+            if (original is not null) File.Delete(recovery);
+            change = new Change(path);
             return true;
         }
         finally

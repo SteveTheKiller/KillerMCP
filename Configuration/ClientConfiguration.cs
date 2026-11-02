@@ -28,9 +28,8 @@ public static class ClientConfiguration
 
     private static string ServerName(JsonClient client) => client.Name == "Claude Desktop" ? "KillerMCP" : "killermcp";
 
-    // Every client is checked before any is changed, and a change that fails puts the clients already
-    // changed back, so setup never leaves a client pointing at a KillerMCP it then removes. Codex goes
-    // last because its command line cannot be put back as exactly as a settings file.
+    // Every client is checked before any is changed. After a later failure, completed settings
+    // writes are preserved and reported for review, so rollback cannot overwrite another app's save.
     private static IReadOnlyList<string> RegisterEverywhere(string? codex, IReadOnlyList<JsonClient> clients, string executablePath)
     {
         var messages = new List<string>();
@@ -49,21 +48,21 @@ public static class ClientConfiguration
             }
         }
         if (codex is not null) CheckCodex(codex, executablePath);
-        var changed = new List<(string Path, byte[]? Original)>();
+        var changed = new List<ClientRegistration.Change>();
         try
         {
             foreach (var client in writable)
             {
-                var original = File.Exists(client.Path) ? File.ReadAllBytes(client.Path) : null;
-                messages.Add(ClientRegistration.RegisterJsonClient(client.Path, client.Name, executablePath, client.IncludeStdioType, ServerName(client)));
-                var current = File.Exists(client.Path) ? File.ReadAllBytes(client.Path) : null;
-                if (original is null ? current is not null : current is null || !original.AsSpan().SequenceEqual(current)) changed.Add((client.Path, original));
+                var registered = ClientRegistration.RegisterTracked(client.Path, client.Name, executablePath, client.IncludeStdioType, ServerName(client));
+                messages.Add(registered.Message);
+                if (registered.Change is { } change) changed.Add(change);
             }
             if (codex is not null) messages.Add(RegisterCodex(codex, executablePath));
         }
-        catch
+        catch (Exception failure)
         {
-            for (var index = changed.Count - 1; index >= 0; index--) Restore(changed[index].Path, changed[index].Original);
+            if (changed.Count > 0)
+                throw new InvalidOperationException(failure.Message + " Registration rollback was not attempted because it could overwrite another app's settings. These settings files were updated before the failure: " + string.Join(", ", changed.Select(change => change.Path)) + ". Review their KillerMCP entries before connecting; setup may have restored or removed the installation.", failure);
             throw;
         }
         return messages;
@@ -94,26 +93,6 @@ public static class ClientConfiguration
             }
         }
         return messages;
-    }
-
-    private static void Restore(string path, byte[]? original)
-    {
-        try
-        {
-            if (original is null)
-            {
-                if (File.Exists(path)) File.Delete(path);
-                return;
-            }
-            var target = ClientRegistration.TargetPath(path);
-            var temporary = target + ".restore-" + Guid.NewGuid().ToString("N");
-            File.WriteAllBytes(temporary, original);
-            File.Move(temporary, target, true);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            // The failure that started the rollback is the one reported.
-        }
     }
 
     private static void CheckCodex(string codex, string executablePath)
