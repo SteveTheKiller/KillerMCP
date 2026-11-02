@@ -212,8 +212,9 @@ Network tools send probes from the local computer. Only test networks that the u
 - Read file or folder size, timestamps, type, and attributes.
 - Read up to 32,768 characters from one text file.
 - Calculate the SHA-256 hash of one local file.
-- List up to 100 running processes with process IDs and memory use.
-- List up to 100 Windows services with their current status.
+- List up to 100 running processes with process IDs and memory use. KillerShell 1.5.1 or newer also accepts `detail` (paths, command lines, start times) and `filter` (name text).
+- List up to 100 Windows services with their current status, and with KillerShell 1.5.1 or newer, `detail` (start mode, path, account, description) and `filter`.
+- With KillerShell 1.5.1 or newer, report the largest folders and files under one absolute directory (`killershell_storage_report`). It only reads folder sizes.
 - Read up to 100 recent Application, System, or Security event log entries.
 - List bounded subkeys and values from one registry key.
 - Report local drive type, readiness, capacity, and free space.

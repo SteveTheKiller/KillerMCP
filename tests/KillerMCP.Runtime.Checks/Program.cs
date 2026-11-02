@@ -177,7 +177,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS") != "0") Console.WriteLine("  --secrets-stdin    read passwords from standard input as one JSON object");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>\ncreate --title title (--content markdown | --content-file absolute.md)");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>\ncreate <json>");
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>\nlist <folder>\ninfo <path>\nread <file>\nprocesses [--limit]\nservices [--limit]\nevents <log>\nregistry <key>\ndrives\nhash <file>");
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>\nlist <folder>\ninfo <path>\nread <file>\nprocesses [--limit] [--detail] [--filter <text>]\nservices [--limit] [--detail] [--filter <text>]\nstorage <folder> [--limit]\nevents <log>\nregistry <key>\ndrives\nhash <file>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1")
         {
             Console.WriteLine("KillerShot command line\n  capture [options]\n  record --seconds <n> [options]\n  recent [options]\n  open <image>\n  monitors\n  windows [--limit <n>]\n  settings");
@@ -336,6 +336,12 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     if (arguments.Length == 4 && arguments[0] == "read" && Path.IsPathFullyQualified(arguments[1]))
     {
         Console.Write(JsonSerializer.Serialize(new { path = arguments[1], text = "fixture text", truncated = false }));
+        return;
+    }
+    if (arguments.Length > 3 && arguments[0] == "processes")
+    {
+        int filterAt = Array.IndexOf(arguments, "--filter");
+        Console.Write(JsonSerializer.Serialize(new { processes = new[] { new { name = "fixture", pid = 42, commandLine = arguments.Contains("--detail") ? "fixture.exe /detail" : null, filter = filterAt >= 0 ? arguments[filterAt + 1] : null } } }));
         return;
     }
     if (arguments.Length == 3 && arguments[0] == "processes") { Console.Write(JsonSerializer.Serialize(new { processes = new[] { new { name = "fixture", pid = 42 } } })); return; }
@@ -1229,6 +1235,93 @@ try
     Equal("Fixture", JsonDocument.Parse((await shellByName["killershell_read_registry_key"].CallAsync(registryArgs.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("values")[0].GetProperty("name").GetString());
     Equal("C:\\", JsonDocument.Parse((await shellByName["killershell_list_drives"].CallAsync(emptyShell.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("drives")[0].GetProperty("name").GetString());
     Equal(64, JsonDocument.Parse((await shellByName["killershell_hash_file"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("hash").GetString()!.Length);
+    // detail and filter exist because the fake help names them; storage is offered only from KillerShell 1.5.1, which this fake executable is not.
+    Equal(false, shellByName.ContainsKey("killershell_storage_report"));
+    Equal(true, shellByName["killershell_list_processes"].Tool.InputSchema["properties"]!.AsObject().ContainsKey("detail"));
+    using var detailArgs = JsonDocument.Parse("{\"limit\":5,\"detail\":true,\"filter\":\"fix\"}");
+    var detailRow = JsonDocument.Parse((await shellByName["killershell_list_processes"].CallAsync(detailArgs.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("processes")[0];
+    Equal("fixture.exe /detail", detailRow.GetProperty("commandLine").GetString());
+    Equal("fix", detailRow.GetProperty("filter").GetString());
+    using var badDetail = JsonDocument.Parse("{\"detail\":\"yes\"}");
+    Equal(true, (await shellByName["killershell_list_services"].CallAsync(badDetail.RootElement, CancellationToken.None)).IsError);
+    // Detail rows stay opt-in, and secret-looking values are masked before a row leaves the host.
+    Equal(false, shellByName["killershell_list_processes"].Tool.InputSchema["properties"]!["detail"]!["default"]!.GetValue<bool>());
+    Equal("app.exe --password *** --verbose", KillerShellAdapter.MaskSecrets("app.exe --password hunter2 --verbose"));
+    Equal("app.exe --password=***", KillerShellAdapter.MaskSecrets("app.exe --password=hunter2"));
+    Equal("svc.exe --token *** --api-key *** run", KillerShellAdapter.MaskSecrets("svc.exe --token abc123 --api-key \"k e y\" run"));
+    Equal("curl -H \"Authorization: Bearer ***\" url", KillerShellAdapter.MaskSecrets("curl -H \"Authorization: Bearer abc.def\" url"));
+    Equal("x.exe /c \"Server=db;User Id=sa;Password=***;Database=x\"", KillerShellAdapter.MaskSecrets("x.exe /c \"Server=db;User Id=sa;Password=p@ss w0rd;Database=x\""));
+    Equal("plain.exe --verbose", KillerShellAdapter.MaskSecrets("plain.exe --verbose"));
+    // KS-P mask table: each row is input then the expected masked text.
+    string[][] maskTable =
+    [
+        ["app.exe --client-secret s3 --x", "app.exe --client-secret *** --x"],
+        ["app.exe --access-token t1 --x", "app.exe --access-token *** --x"],
+        ["app.exe --auth-token t1 --x", "app.exe --auth-token *** --x"],
+        ["app.exe --refresh-token t1 --x", "app.exe --refresh-token *** --x"],
+        ["app.exe --db-password p1 --x", "app.exe --db-password *** --x"],
+        ["app.exe --db-pwd=p1 --x", "app.exe --db-pwd=*** --x"],
+        ["app.exe --old-passwd p1 --x", "app.exe --old-passwd *** --x"],
+        ["app.exe --service-credential c1 --x", "app.exe --service-credential *** --x"],
+        ["app.exe --api_key=k1 --x", "app.exe --api_key=*** --x"],
+        ["app.exe --apikey k1 --x", "app.exe --apikey *** --x"],
+        ["app.exe /my-secret s1 /x", "app.exe /my-secret *** /x"],
+        ["git clone https://user:pass@host/repo.git", "git clone https://user:***@host/repo.git"],
+        ["git clone https://user:p@ss@host/repo.git", "git clone https://user:***@host/repo.git"],
+        ["x.exe \"Server=a;AccountKey=abc==;EndpointSuffix=core\"", "x.exe \"Server=a;AccountKey=***;EndpointSuffix=core\""],
+        ["Endpoint=sb://x;SharedAccessKey=k/y+z=;EntityPath=q", "Endpoint=sb://x;SharedAccessKey=***;EntityPath=q"],
+        ["BlobEndpoint=b;SharedAccessSignature=sv=2020&sig=abc%3D;Other=1", "BlobEndpoint=b;SharedAccessSignature=***;Other=1"],
+        ["x.exe client_secret=abc123;scope=read", "x.exe client_secret=***;scope=read"],
+        ["curl -H \"Authorization: Bearer abc.def\" url", "curl -H \"Authorization: Bearer ***\" url"],
+        ["curl -H \"Authorization: Digest username=\\\"u\\\", realm=\\\"r\\\", response=\\\"x\\\"\" url", "curl -H \"Authorization: Digest ***\" url"],
+        ["curl -H 'Authorization: Digest username=\"u\", response=\"x\"' url", "curl -H 'Authorization: Digest ***' url"],
+        ["curl -H 'Authorization: AWS4-HMAC-SHA256 Credential=AKIA/20200101/us/s3/aws4_request, SignedHeaders=host, Signature=ab' url", "curl -H 'Authorization: AWS4-HMAC-SHA256 ***' url"],
+        ["curl -H \"Authorization: Mystery abc def\" url", "curl -H \"Authorization: ***\" url"],
+        ["Authorization: Basic dXNlcjpwYXNz and more", "Authorization: Basic ***"],
+        ["x.exe \"Server=a;Pwd={a;b};Database=x\"", "x.exe \"Server=a;Pwd=***;Database=x\""],
+        ["Server=a;Pwd={a}}b;c};Database=x", "Server=a;Pwd=***;Database=x"],
+        ["Server=a;Password=a'b;Database=x", "Server=a;Password=***;Database=x"],
+        ["Server=a;Password='a;b';Database=x", "Server=a;Password=***;Database=x"],
+        ["app.exe --password \"a\\\"b c\" --verbose", "app.exe --password *** --verbose"],
+        ["app.exe --password=a'b --verbose", "app.exe --password=*** --verbose"],
+        ["app.exe --password=x --port 5 --verbose", "app.exe --password=*** --port 5 --verbose"],
+        ["app.exe --port 5 --verbose --pass-through", "app.exe --port 5 --verbose --pass-through"],
+    ];
+    foreach (var row in maskTable) Equal(row[1], KillerShellAdapter.MaskSecrets(row[0]));
+    // Masked text, quotes, backslashes and a cut inside a surrogate pair all leave valid JSON rows.
+    string awkwardLine = "app.exe --password \"a\\\"b c\" \\ \"q\\" + new string('x', 1019) + "\U0001F600tail";
+    var awkward = JsonDocument.Parse(KillerShellAdapter.ProtectDetailRows(
+        JsonSerializer.Serialize(new { processes = new[] { new { name = "a", pid = 1, commandLine = awkwardLine } } }), "processes")).RootElement;
+    Equal(true, awkward.GetProperty("processes")[0].GetProperty("commandLine").GetString()!.StartsWith("app.exe --password *** ", StringComparison.Ordinal));
+    foreach (var toolName in new[] { "killershell_list_processes", "killershell_list_services" })
+    {
+        string toolText = shellByName[toolName].Tool.Description;
+        Equal(true, toolText.Contains("best effort", StringComparison.OrdinalIgnoreCase) && toolText.Contains("unusual forms", StringComparison.OrdinalIgnoreCase));
+    }
+    string longLine = "tool.exe " + new string('a', 3000);
+    var protectedProcesses = JsonDocument.Parse(KillerShellAdapter.ProtectDetailRows(
+        JsonSerializer.Serialize(new { processes = new[] { new { name = "tool", pid = 1, path = "C:\\tool.exe", commandLine = "tool.exe --token abc" }, new { name = "long", pid = 2, path = "C:\\long.exe", commandLine = longLine } }, limitReached = false }), "processes")).RootElement;
+    Equal("tool.exe --token ***", protectedProcesses.GetProperty("processes")[0].GetProperty("commandLine").GetString());
+    Equal("C:\\tool.exe", protectedProcesses.GetProperty("processes")[0].GetProperty("path").GetString());
+    Equal(true, protectedProcesses.GetProperty("processes")[1].GetProperty("commandLine").GetString()!.Length <= 1100);
+    Equal(false, protectedProcesses.GetProperty("limitReached").GetBoolean());
+    var protectedServices = JsonDocument.Parse(KillerShellAdapter.ProtectDetailRows(
+        JsonSerializer.Serialize(new { services = new[] { new { name = "svc", path = "\"C:\\svc.exe\" --password hunter2", startMode = "Auto" } } }), "services")).RootElement;
+    Equal("\"C:\\svc.exe\" --password ***", protectedServices.GetProperty("services")[0].GetProperty("path").GetString());
+    Equal("Auto", protectedServices.GetProperty("services")[0].GetProperty("startMode").GetString());
+    // 100 detail rows can carry command lines of up to 32,767 characters each, so detail raises the output cap.
+    Equal(262144, KillerShellAdapter.OutputLimit(false));
+    Equal(true, KillerShellAdapter.OutputLimit(true) >= 100 * 33000);
+    Equal(true, shellByName["killershell_list_processes"].Tool.Description.Contains("command line", StringComparison.OrdinalIgnoreCase));
+    Equal(true, shellByName["killershell_list_services"].Tool.Description.Contains("command line", StringComparison.OrdinalIgnoreCase));
+    string processFilterText = shellByName["killershell_list_processes"].Tool.InputSchema["properties"]!["filter"]!["description"]!.GetValue<string>();
+    string serviceFilterText = shellByName["killershell_list_services"].Tool.InputSchema["properties"]!["filter"]!["description"]!.GetValue<string>();
+    Equal(true, processFilterText.Contains("PID", StringComparison.Ordinal) && processFilterText.Contains("command line", StringComparison.OrdinalIgnoreCase));
+    Equal(true, serviceFilterText.Contains("display name", StringComparison.OrdinalIgnoreCase) && !serviceFilterText.Contains("PID", StringComparison.Ordinal));
+    // Storage asks KillerShell to stop on its own before the host gives up on the process.
+    Equal("storage|C:\\data|--limit|7|--max-seconds|25", string.Join("|", KillerShellAdapter.StorageArguments("C:\\data", 7, true)));
+    Equal("storage|C:\\data|--limit|7", string.Join("|", KillerShellAdapter.StorageArguments("C:\\data", 7, false)));
+    Equal(TimeSpan.FromSeconds(35), KillerShellAdapter.StorageTimeout);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHELL", null);
     Console.WriteLine("PASS native KillerShell adapter");
 
