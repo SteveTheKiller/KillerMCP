@@ -401,6 +401,7 @@ public static partial class KillerPdfAdapter
             foreach (var path in paths)
             {
                 if (path.ValueKind != JsonValueKind.String || path.GetString() is not { Length: > 0 and <= 1024 } text || !Path.IsPathFullyQualified(text)) return $"{property} must be absolute file paths";
+                if (AgentPaths.AccessRefusal(text) is { } refusal) return refusal;
                 try
                 {
                     var info = new FileInfo(text);

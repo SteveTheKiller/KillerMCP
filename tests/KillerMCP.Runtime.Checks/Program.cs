@@ -1,6 +1,8 @@
 using KillerMCP;
 using System.Text.Json;
 
+if (NetworkPathReviewChecks.Serve(args)) return;
+if (args.SequenceEqual(["--review-network-path"])) { await NetworkPathReviewChecks.RunAsync(); return; }
 if (BenchReadOnlyChecks.Serve(args)) return;
 if (args.SequenceEqual(["--bench-readonly"])) { await BenchReadOnlyChecks.RunAsync(); return; }
 if (args.SequenceEqual(["--bench-readonly-real"])) { await BenchReadOnlyChecks.RunRealAsync(); return; }

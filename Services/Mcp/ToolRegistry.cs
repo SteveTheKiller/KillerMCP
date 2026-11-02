@@ -28,7 +28,7 @@ internal static class ToolRegistry
     // than the local file tools take text, so their arguments are never read as paths.
     private static readonly HashSet<string> PathArguments = new(StringComparer.Ordinal)
     {
-        "path", "inputs", "images", "files", "data", "pfx", "recipients", "changed", "macroFile", "root", "folder",
+        "path", "inputs", "images", "files", "data", "pfx", "recipients", "changed", "macroFile", "bookmarks", "root", "folder",
         "output", "outputFolder", "reviewFolder",
     };
 
