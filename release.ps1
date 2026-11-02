@@ -2,6 +2,7 @@
 # Builds, signs with Certum SimplySign, verifies, and publishes to GitHub and Microsoft Store.
 # Run scripts/Test-All.ps1 separately for the full regression and installer suites.
 # Use -DryRun to stop before tagging and publishing, or -SkipSign for an unsigned local test build.
+# Use -SkipStore to publish without contacting Microsoft Store; submit its package separately later.
 
 [CmdletBinding()]
 param(
@@ -9,6 +10,7 @@ param(
     [string]$CertThumbprint = '',
     [string]$CertName = 'Open Source Developer Stephen Riley',
     [switch]$SkipSign,
+    [switch]$SkipStore,
     [string]$ArtifactRoot = ''
 )
 
@@ -94,7 +96,7 @@ if (-not $DryRun) {
     if (git ls-remote --tags origin $Tag) { Fail "Tag $Tag already exists on origin." }
 }
 
-if (-not $SkipSign) {
+if (-not $SkipSign -and -not $SkipStore) {
     Step 'Checking Microsoft Store submission access'
     try { & $storeScript @storeArgs -PreflightOnly }
     catch { Fail "Microsoft Store preflight failed: $($_.Exception.Message)" }
@@ -175,9 +177,13 @@ if (-not $DryRun) {
     try { & (Join-Path $PSScriptRoot 'scripts\Publish-Release.ps1') -Repository $PSScriptRoot -Tag $Tag -Assets @($installer, $sumsFile) -NotesFile $notesFile }
     catch { Fail $_.Exception.Message }
     gh release view $Tag --json url --jq '.url'
-    Step 'Submitting to Microsoft Store'
-    try { & $storeScript @storeArgs }
-    catch { Fail "GitHub release is published, but Microsoft Store submission failed: $($_.Exception.Message). Retry with: & '$storeScript' -ProductId $($storeArgs.ProductId) -PackageUrl $($storeArgs.PackageUrl)" }
+    if ($SkipStore) {
+        Write-Host 'Microsoft Store submission skipped. Add the published installer package manually when ready.' -ForegroundColor Yellow
+    } else {
+        Step 'Submitting to Microsoft Store'
+        try { & $storeScript @storeArgs }
+        catch { Fail "GitHub release is published, but Microsoft Store submission failed: $($_.Exception.Message). Retry with: & '$storeScript' -ProductId $($storeArgs.ProductId) -PackageUrl $($storeArgs.PackageUrl)" }
+    }
 } else {
     Write-Host ''
     Write-Host 'DryRun: release artifacts are verified. Nothing was published.' -ForegroundColor Green

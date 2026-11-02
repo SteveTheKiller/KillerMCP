@@ -101,6 +101,12 @@ function Invoke-Release([string]$Command) {
 }
 
 # The dash check stops the release when git grep cannot run, instead of passing because it found nothing.
+$result = Invoke-Release "function global:dotnet { Write-Output 'BUILD_STARTED'; `$global:LASTEXITCODE = 17 }; & '$matched\release.ps1' -DryRun -SkipStore"
+if ($result.Exit -ne 1 -or $result.Text -notlike '*BUILD_STARTED*' -or $result.Text -like '*STORE_PREFLIGHT*' -or $result.Text -like '*STORE_SUBMISSION_MUST_NOT_RUN*') {
+    throw "Skipping Store did not bypass Store preflight while retaining the build:`n$($result.Text)"
+}
+Write-Output 'PASS: SkipStore bypasses Store access and still reaches the build.'
+
 $result = Invoke-Release "function global:git { if (`$args[0] -eq 'grep') { [Console]::Error.WriteLine('fatal: fixture grep failure'); `$global:LASTEXITCODE = 128; return }; & git.exe @args }; function global:dotnet { Write-Output 'BUILD_STARTED'; `$global:LASTEXITCODE = 17 }; & '$matched\release.ps1' -DryRun"
 $text = $result.Text
 if ($result.Exit -ne 1 -or $text -like '*BUILD_STARTED*' -or $text -notlike '*dash check could not run*') {
