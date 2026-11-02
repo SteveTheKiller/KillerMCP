@@ -49,6 +49,10 @@ try
     Equal(true, folders.Contains(Path.Combine(installed, "sub")));
     Equal(false, folders.Contains(Path.Combine(installed, "joined")));
 
+    // A leftover installation name can itself be a junction to another folder.
+    Equal<string?>(null, ManifestPaths.Resolve(Path.Combine(installed, "joined"), "secret.txt"));
+    Throws<IOException>(() => ManifestPaths.Files(Path.Combine(installed, "joined")).ToArray());
+
     // A junction that points back at its own folder does not make the walk loop.
     Junction(Path.Combine(installed, "sub", "loop"), installed);
     Equal(2, ManifestPaths.Links(installed).Count());
@@ -81,4 +85,11 @@ static bool FileLink(string link, string target)
 static void Equal<T>(T expected, T actual)
 {
     if (!EqualityComparer<T>.Default.Equals(expected, actual)) throw new InvalidOperationException($"Expected {expected}, received {actual}.");
+}
+
+static void Throws<T>(Action action) where T : Exception
+{
+    try { action(); }
+    catch (T) { return; }
+    throw new InvalidOperationException("Expected " + typeof(T).Name);
 }

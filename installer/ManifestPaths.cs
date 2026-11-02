@@ -30,6 +30,7 @@ namespace KillerMCP.Setup
             }
 
             string root = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar);
+            if (HasLinkedRoot(root)) return null;
             string path = Path.GetFullPath(Path.Combine(root, string.Join(Path.DirectorySeparatorChar.ToString(), steps)));
             if (!path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return null;
 
@@ -56,6 +57,7 @@ namespace KillerMCP.Setup
 
         private static IEnumerable<(string Path, Kind Kind)> Walk(string folder)
         {
+            EnsureSafeRoot(folder);
             var pending = new Stack<string>();
             pending.Push(folder);
             while (pending.Count > 0)
@@ -76,5 +78,22 @@ namespace KillerMCP.Setup
         }
 
         private static bool IsLink(string path) => (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+
+        internal static void EnsureSafeRoot(string folder)
+        {
+            if (HasLinkedRoot(folder)) throw new IOException("The installation path contains a link or junction.");
+        }
+
+        private static bool HasLinkedRoot(string folder)
+        {
+            string full = Path.GetFullPath(folder);
+            string current = Path.GetPathRoot(full)!;
+            foreach (string step in full.Substring(current.Length).Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                current = Path.Combine(current, step);
+                if (Directory.Exists(current) && IsLink(current)) return true;
+            }
+            return false;
+        }
     }
 }

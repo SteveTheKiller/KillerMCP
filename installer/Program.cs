@@ -107,6 +107,7 @@ namespace KillerMCP.Setup
 
         internal static void Install(string destination)
         {
+            ManifestPaths.EnsureSafeRoot(destination);
             using var installLease = KillerFamily.Deployment.InstallerExitCodes.Acquire("KillerMCP");
             ValidateSetupRegistration(destination);
             string parent = Path.GetDirectoryName(destination) ?? throw new InvalidOperationException("The installation directory is unavailable.");
@@ -167,6 +168,7 @@ namespace KillerMCP.Setup
         // Returns the agent clients that still list KillerMCP because they could not be changed.
         internal static IReadOnlyList<string> Uninstall(string destination, bool removeRegistration)
         {
+            ManifestPaths.EnsureSafeRoot(destination);
             var warnings = new List<string>();
             RemoveInterruptedRemovals(destination);
             if (!Directory.Exists(destination)) return warnings;
@@ -323,6 +325,7 @@ namespace KillerMCP.Setup
         // Every file still present has to be listed and match its hash either way.
         private static Manifest ValidateInstalled(string destination, bool allowLegacy = false, bool allowMissing = false)
         {
+            ManifestPaths.EnsureSafeRoot(destination);
             string manifestPath = Path.Combine(destination, "manifest.json");
             var serializer = new JavaScriptSerializer { MaxJsonLength = 4 * 1024 * 1024 };
             Manifest manifest = serializer.Deserialize<Manifest>(File.ReadAllText(manifestPath)) ?? throw new InvalidDataException("The installation manifest is invalid.");
@@ -363,6 +366,7 @@ namespace KillerMCP.Setup
 
         private static void DeleteListedFiles(string folder, Manifest manifest)
         {
+            ManifestPaths.EnsureSafeRoot(folder);
             foreach (string name in manifest.files!.Keys)
             {
                 string path = ManifestPaths.Resolve(folder, name) ?? throw new InvalidDataException("The installation manifest lists a file outside the KillerMCP folder: " + name);
