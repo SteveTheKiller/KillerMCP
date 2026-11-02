@@ -1,4 +1,4 @@
-param([string]$Installer = '', [string]$PreviousSignedSetup = '', [string]$PreviousSignedInstall = '', [string]$ArtifactRoot = '')
+param([string]$Installer = '', [string]$PreviousSignedSetup = '', [string]$PreviousSignedInstall = '', [string]$ArtifactRoot = '', [string]$FakeCodex = '')
 
 $ErrorActionPreference = 'Stop'
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) { throw 'The KillerMCP Windows installer test requires Windows.' }
@@ -16,9 +16,11 @@ if (-not $Installer) {
     & (Join-Path $PSScriptRoot 'Build-WindowsInstaller.ps1') -ArtifactRoot $ArtifactRoot
 }
 $setup = if ($Installer) { [IO.Path]::GetFullPath($Installer) } else { Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe' }
-dotnet build (Join-Path $root 'tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj') -c Release -v:q
-if ($LASTEXITCODE -ne 0) { throw 'The fake Codex client build failed.' }
-$fakeCodex = Join-Path $root 'tests\KillerMCP.Clients.Checks\bin\Release\net10.0\KillerMCP.Clients.Checks.exe'
+if (-not $FakeCodex) {
+    dotnet build (Join-Path $root 'tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj') -c Release -v:q
+    if ($LASTEXITCODE -ne 0) { throw 'The fake Codex client build failed.' }
+    $FakeCodex = Join-Path $root 'tests\KillerMCP.Clients.Checks\bin\Release\net10.0\KillerMCP.Clients.Checks.exe'
+}
 if (-not (Test-Path -LiteralPath $setup -PathType Leaf) -or -not (Test-Path -LiteralPath $fakeCodex -PathType Leaf)) { throw 'Installer test prerequisites are missing.' }
 
 $scratch = Join-Path ([IO.Path]::GetFullPath($env:TEMP)) ('KillerMCP-native-installer-' + [guid]::NewGuid().ToString('N'))

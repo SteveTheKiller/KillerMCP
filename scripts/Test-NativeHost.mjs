@@ -15,9 +15,10 @@ process.chdir(fileURLToPath(new URL('..', import.meta.url)));
 const live = process.env.KILLERMCP_LIVE_TESTS === '1';
 
 const releaseVersion = (await readFile(resolve('KillerMCP.csproj'), 'utf8')).match(/<Version>(\d+\.\d+\.\d+)<\/Version>/)[1];
+const hostExecutable = resolve('bin/Release/net10.0', process.platform === 'win32' ? 'KillerMCP.exe' : 'KillerMCP');
 const updateDirectory = await mkdtemp(join(tmpdir(), 'killermcp-update-'));
-// However the checks end, the hosts they started stop and the fixture folder is removed. dotnet run
-// starts the host as its own child, so the whole process tree is ended.
+// Run the built host directly so startup checks measure the server without SDK launcher overhead.
+// However the checks end, owned hosts and their child processes stop and the fixture folder is removed.
 const hosts = [];
 process.on('exit', () => {
   for (const host of hosts) {
@@ -65,7 +66,7 @@ const environment = {
   KILLERMCP_STATE_DIR: join(updateDirectory, 'state'),
   KILLERBENCH_STATE_DIR: join(updateDirectory, 'bench-state'),
 };
-const child = spawn('dotnet', ['run', '--project', 'KillerMCP.csproj', '-c', 'Release', '--no-build'], { stdio: ['pipe', 'pipe', 'inherit'], env: environment });
+const child = spawn(hostExecutable, [], { stdio: ['pipe', 'pipe', 'inherit'], env: environment });
 hosts.push(child);
 let closing = false;
 child.on('exit', code => {
@@ -562,7 +563,7 @@ if (process.platform === 'win32') {
   const denied = spawnSync('icacls', [brokenApp, '/deny', '*S-1-1-0:(X)'], { stdio: 'ignore' });
   assert.equal(denied.status, 0, 'Could not deny execute on the broken app fixture.');
 }
-const stalled = spawn('dotnet', ['run', '--project', 'KillerMCP.csproj', '-c', 'Release', '--no-build'], {
+const stalled = spawn(hostExecutable, [], {
   stdio: ['pipe', 'pipe', 'ignore'],
   env: { ...environment, KILLERMCP_FAKE_HANG: '1', KILLERNOTES_CLI: fakeApp, KILLERPDF_CLI: brokenApp, KILLENDAR_CLI: missingApp, KILLERSHELL_CLI: missingApp, KILLERSCAN_CLI: missingApp, KILLERBENCH_CLI: missingApp, KILLERSHOT_CLI: missingApp },
 });
@@ -605,7 +606,7 @@ if (process.platform === 'win32') {
     `@(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*${fakeApp}*' }).Count`],
     { encoding: 'utf8' }).stdout.trim();
   assert.equal(hungApps(), '0', 'An app was already running before the host that leaves early started.');
-  const early = spawn('dotnet', ['run', '--project', 'KillerMCP.csproj', '-c', 'Release', '--no-build'], {
+  const early = spawn(hostExecutable, [], {
     stdio: ['pipe', 'pipe', 'ignore'],
     env: { ...environment, KILLERMCP_FAKE_HANG: '1', KILLERNOTES_CLI: fakeApp, KILLERPDF_CLI: missingApp, KILLENDAR_CLI: missingApp, KILLERSHELL_CLI: missingApp, KILLERSCAN_CLI: missingApp, KILLERBENCH_CLI: missingApp, KILLERSHOT_CLI: missingApp },
   });
@@ -644,7 +645,7 @@ if (process.platform === 'win32') {
 }
 
 // A release fetched while the update cache cannot be written is still reported.
-const uncached = spawn('dotnet', ['run', '--project', 'KillerMCP.csproj', '-c', 'Release', '--no-build'], {
+const uncached = spawn(hostExecutable, [], {
   stdio: ['pipe', 'pipe', 'ignore'],
   env: { ...environment, KILLERMCP_UPDATE_CACHE: join(pdfSourceOne, 'status.json') },
 });

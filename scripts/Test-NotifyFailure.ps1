@@ -1,4 +1,4 @@
-param([string]$Installer = '', [string]$ArtifactRoot = '')
+param([string]$Installer = '', [string]$ArtifactRoot = '', [string]$FakeCodex = '')
 
 # Updates started by the update window or the update check run setup with /silent /notify, so
 # nobody watches its console. When such an update cannot install, setup must show why.
@@ -10,9 +10,11 @@ if (-not $Installer) {
     & (Join-Path $PSScriptRoot 'Build-WindowsInstaller.ps1') -ArtifactRoot $ArtifactRoot | Out-Null
 }
 $setup = if ($Installer) { [IO.Path]::GetFullPath($Installer) } else { Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe' }
-dotnet build (Join-Path $root 'tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj') -c Release -v:q | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'The fake Codex client build failed.' }
-$fakeCodex = Join-Path $root 'tests\KillerMCP.Clients.Checks\bin\Release\net10.0\KillerMCP.Clients.Checks.exe'
+if (-not $FakeCodex) {
+    dotnet build (Join-Path $root 'tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj') -c Release -v:q | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'The fake Codex client build failed.' }
+    $FakeCodex = Join-Path $root 'tests\KillerMCP.Clients.Checks\bin\Release\net10.0\KillerMCP.Clients.Checks.exe'
+}
 
 $utf8NoBom = New-Object Text.UTF8Encoding($false)
 $scratch = Join-Path ([IO.Path]::GetFullPath($env:TEMP)) ('KillerMCP-notify-failure-' + [guid]::NewGuid().ToString('N'))

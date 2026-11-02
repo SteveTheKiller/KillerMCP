@@ -8,6 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 KillerMCP 0.9.1 reaches KillerScan 1.9.0's Locations, scan settings and adapter choice.
 
+### Fixed
+
+- Bookmark input files follow the network path restrictions before they are opened.
+- Setup refuses installation and leftover cleanup paths redirected through links or junctions.
+- Failed client registration preserves settings and names any completed registrations that need review.
+- Client settings stay locked while an update is written, with a recovery copy for interrupted updates.
+
 ### Changed
 
 - `killershell_list_processes` and `killershell_list_services` with `detail` now mask more secret shapes: any switch named for a password, token, secret, API key or credential, URL passwords, `AccountKey`, `SharedAccessKey`, `SharedAccessSignature` and `client_secret` values, whole Authorization header values for every scheme, and brace or quoted connection string values. Masking is best effort, and the tool descriptions say that detail can still expose secrets in unusual forms.

@@ -1,4 +1,4 @@
-param([string]$Installer = '', [string]$ArtifactRoot = '')
+param([string]$Installer = '', [string]$ArtifactRoot = '', [string]$FakeCodex = '')
 
 # Agent clients such as Codex run each KillerMCP host inside a job object that kills every
 # process in it when the client tears the job down. An update started from the host's update
@@ -15,9 +15,11 @@ if (-not $Installer) {
 $setup = if ($Installer) { [IO.Path]::GetFullPath($Installer) } else { Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe' }
 $setupVersion = [version](Get-Item -LiteralPath $setup).VersionInfo.FileVersion
 $version = "$($setupVersion.Major).$($setupVersion.Minor).$($setupVersion.Build)"
-dotnet build (Join-Path $root 'tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj') -c Release -v:q | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'The fake Codex client build failed.' }
-$fakeCodex = Join-Path $root 'tests\KillerMCP.Clients.Checks\bin\Release\net10.0\KillerMCP.Clients.Checks.exe'
+if (-not $FakeCodex) {
+    dotnet build (Join-Path $root 'tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj') -c Release -v:q | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'The fake Codex client build failed.' }
+    $FakeCodex = Join-Path $root 'tests\KillerMCP.Clients.Checks\bin\Release\net10.0\KillerMCP.Clients.Checks.exe'
+}
 if (-not (Test-Path -LiteralPath $setup -PathType Leaf) -or -not (Test-Path -LiteralPath $fakeCodex -PathType Leaf)) { throw 'Client job update test prerequisites are missing.' }
 
 . (Join-Path $PSScriptRoot 'ClientJob.ps1')
