@@ -9,7 +9,7 @@
     <AssemblyName>KillerMCP.Notify</AssemblyName>
     <RootNamespace>KillerMCP.Notify</RootNamespace>
     <ApplicationIcon>..\assets\KillerMCP.ico</ApplicationIcon>
-    <Version>0.9.2</Version>
+    <Version>0.9.3</Version>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System.Net.Http" />

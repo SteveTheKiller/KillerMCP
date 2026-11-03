@@ -20,15 +20,18 @@ internal static class UpdateInstaller
     /// between cannot pair one release's installer with another's checksum, then checks the hash and the
     /// KillerMCP publisher's signature.
     /// </summary>
-    internal static async Task<VerifiedInstaller> DownloadAndVerifyAsync(string version)
+    internal static Task<VerifiedInstaller> DownloadAndVerifyAsync(string version)
+        => DownloadAndVerifyAsync(version, KillerMCP.Updates.SetupAsset.For(AppDomain.CurrentDomain.BaseDirectory));
+
+    internal static async Task<VerifiedInstaller> DownloadAndVerifyAsync(string version, string asset)
     {
         using var client = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("KillerMCP", version));
         // HttpClient.Timeout stops covering a response once its headers arrive, so one limit covers the whole download.
         using var limit = new CancellationTokenSource(TimeSpan.FromMinutes(3));
-        byte[] installer = await DownloadAsync(client, ReleaseFile(version, "KillerMCP-Setup.exe"), MaximumInstallerBytes, limit.Token).ConfigureAwait(false);
+        byte[] installer = await DownloadAsync(client, ReleaseFile(version, asset), MaximumInstallerBytes, limit.Token).ConfigureAwait(false);
         string sums = System.Text.Encoding.UTF8.GetString(await DownloadAsync(client, ReleaseFile(version, "SHA256SUMS.txt"), MaximumChecksumBytes, limit.Token).ConfigureAwait(false));
-        string expected = ReadExpectedHash(sums);
+        string expected = KillerMCP.Updates.SetupAsset.ExpectedHash(sums, asset) ?? throw new InvalidDataException("The release checksum is missing.");
         string actual = Sha256Hex(installer);
         if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The update checksum does not match the published release.");
 
@@ -135,16 +138,6 @@ internal static class UpdateInstaller
         {
             throw new TimeoutException("The update download took longer than three minutes.");
         }
-    }
-
-    private static string ReadExpectedHash(string sums)
-    {
-        foreach (string line in sums.Replace("\r", "").Split('\n'))
-        {
-            string[] parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 2 && parts.Any(part => part.EndsWith("KillerMCP-Setup.exe", StringComparison.OrdinalIgnoreCase))) return parts[0];
-        }
-        throw new InvalidDataException("The release checksum is missing.");
     }
 
 }

@@ -4,6 +4,16 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3] - 2026-11-03
+
+KillerMCP 0.9.3 brings the small setup back for GitHub, WinGet and Chocolatey, and gives the Microsoft Store its own setup with the .NET runtime inside.
+
+### Fixed
+
+- `KillerMCP-Setup.exe` is about 12 MB again and uses the installed .NET 10 Desktop Runtime. WinGet and Chocolatey install the runtime as a dependency, and a silent install without it returns exit code 10.
+- The Microsoft Store installs `KillerMCP-Store.exe`, which carries its own .NET runtime, so Store installs still succeed on computers without .NET 10.
+- An installation that carries its own runtime updates with `KillerMCP-Store.exe`, so an update never leaves it needing .NET 10.
+
 ## [0.9.2] - 2026-11-03
 
 KillerMCP 0.9.2 installs on computers that do not have .NET 10, including Microsoft Store installs.

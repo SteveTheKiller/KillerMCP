@@ -3,7 +3,7 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>KillerMCP.Configure</AssemblyName>
     <RootNamespace>KillerMCP.Configuration</RootNamespace>
-    <Version>0.9.2</Version>
+    <Version>0.9.3</Version>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="KillerMCP.Clients.Checks" />

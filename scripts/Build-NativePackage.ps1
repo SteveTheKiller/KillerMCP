@@ -2,6 +2,8 @@ param(
     [ValidateSet('win-x64', 'win-arm64', 'linux-x64', 'linux-arm64', 'osx-x64', 'osx-arm64')]
     [string]$RuntimeIdentifier = 'win-x64',
     [switch]$SkipTest,
+    # The Microsoft Store package carries its own .NET runtime; every other package uses the installed one.
+    [switch]$SelfContained,
     [string]$ArtifactRoot = ''
 )
 
@@ -9,8 +11,9 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 & (Join-Path $PSScriptRoot 'Test-PluginVersion.ps1')
 $ArtifactRoot = & (Join-Path $PSScriptRoot 'Get-ArtifactRoot.ps1') -ArtifactRoot $ArtifactRoot
-$output = Join-Path $ArtifactRoot "packages\$RuntimeIdentifier"
-$staging = Join-Path $ArtifactRoot "staging\$RuntimeIdentifier"
+$flavor = if ($SelfContained) { "$RuntimeIdentifier-store" } else { $RuntimeIdentifier }
+$output = Join-Path $ArtifactRoot "packages\$flavor"
+$staging = Join-Path $ArtifactRoot "staging\$flavor"
 
 if (Test-Path -LiteralPath $staging) {
     if (-not ([IO.Path]::GetFullPath($staging)).StartsWith($ArtifactRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
@@ -20,14 +23,15 @@ if (Test-Path -LiteralPath $staging) {
 }
 New-Item -ItemType Directory -Path $staging -Force | Out-Null
 
-# Every program carries its own .NET runtime. The Microsoft Store installs silently on machines
-# without .NET 10 and accepts no installer that downloads or chains a prerequisite.
-# The host and configurator share one runtime folder; their shared files are identical.
-# The Windows update notifier is the exception, below.
-dotnet publish (Join-Path $root 'KillerMCP.csproj') -c Release -r $RuntimeIdentifier --self-contained true `
+# The regular package is two single-file programs on the installed .NET 10 runtime. The Microsoft Store
+# installs silently on machines without .NET 10 and accepts no installer that downloads or chains a
+# prerequisite, so its host and configurator carry the runtime in one shared folder, whose shared files
+# are identical. The Windows update notifier runs on .NET Framework 4.8 in both, below.
+$runtimeArguments = if ($SelfContained) { @('--self-contained', 'true') } else { @('--self-contained', 'false', '-p:PublishSingleFile=true') }
+dotnet publish (Join-Path $root 'KillerMCP.csproj') -c Release -r $RuntimeIdentifier @runtimeArguments `
     -p:DebugType=None -p:DebugSymbols=false -o $staging
 if ($LASTEXITCODE -ne 0) { throw 'Native KillerMCP publish failed.' }
-dotnet publish (Join-Path $root 'Configuration\KillerMCP.Configure.csproj') -c Release -r $RuntimeIdentifier --self-contained true `
+dotnet publish (Join-Path $root 'Configuration\KillerMCP.Configure.csproj') -c Release -r $RuntimeIdentifier @runtimeArguments `
     -p:DebugType=None -p:DebugSymbols=false -o $staging
 if ($LASTEXITCODE -ne 0) { throw 'Native KillerMCP configurator publish failed.' }
 if ($RuntimeIdentifier.StartsWith('win-', [StringComparison]::Ordinal)) {
@@ -58,7 +62,7 @@ $manifest = [ordered]@{
     formatVersion = 1
     runtimeIdentifier = $RuntimeIdentifier
     framework = 'net10.0'
-    selfContained = $true
+    selfContained = [bool]$SelfContained
     files = $files
 }
 $manifestJson = $manifest | ConvertTo-Json -Depth 5

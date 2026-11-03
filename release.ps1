@@ -48,6 +48,9 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') { Fail 'KillerMCP.csproj does not cont
 $Tag = "v$Version"
 $ArtifactRoot = & (Join-Path $PSScriptRoot 'scripts\Get-ArtifactRoot.ps1') -ArtifactRoot $ArtifactRoot
 $installer = Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe'
+# The Microsoft Store setup carries its own .NET runtime; GitHub, WinGet and Chocolatey use the regular one.
+$storeInstaller = Join-Path $ArtifactRoot 'installer\KillerMCP-Store.exe'
+$setups = @($installer, $storeInstaller)
 $sumsFile = Join-Path $ArtifactRoot 'installer\SHA256SUMS.txt'
 $changelogFile = Join-Path $PSScriptRoot 'CHANGELOG.md'
 $engineProject = Join-Path $PSScriptRoot 'dependencies\KillerTools\src\KillerTools.Engine\KillerTools.Engine.csproj'
@@ -63,7 +66,7 @@ if (-not (Test-Path -LiteralPath $engineProject -PathType Leaf)) {
     Fail 'The pinned KillerTools submodule is missing. Run git submodule update --init.'
 }
 $storeScript = Join-Path $PSScriptRoot 'store\Submit-StoreRelease.ps1'
-$storeArgs = @{ ProductId = 'XP8M0LV7XTWKG5'; PackageUrl = "https://killertools.net/store/killermcp/$Version/KillerMCP-Setup.exe" }
+$storeArgs = @{ ProductId = 'XP8M0LV7XTWKG5'; PackageUrl = "https://killertools.net/store/killermcp/$Version/KillerMCP-Store.exe" }
 $submoduleState = @(git submodule status --recursive)
 if ($LASTEXITCODE -ne 0 -or $submoduleState.Count -eq 0 -or @($submoduleState | Where-Object { $_ -match '^[+-]' }).Count) {
     Fail 'The KillerTools submodule is missing or differs from the pinned commit.'
@@ -120,7 +123,8 @@ if ($vulnerablePackages.Count) { Fail "Vulnerable dependencies were found:`n$($v
 
 Step 'Building KillerMCP Setup'
 Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Build-WindowsInstaller.ps1 -ArtifactRoot $ArtifactRoot } 'KillerMCP installer build failed.'
-if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { Fail "Installer was not produced: $installer" }
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Build-WindowsInstaller.ps1 -ArtifactRoot $ArtifactRoot -Store } 'KillerMCP Store installer build failed.'
+foreach ($setup in $setups) { if (-not (Test-Path -LiteralPath $setup -PathType Leaf)) { Fail "Installer was not produced: $setup" } }
 
 if ($SkipSign) {
     Write-Host 'WARNING: The installer is unsigned and cannot be published.' -ForegroundColor Red
@@ -141,25 +145,26 @@ if ($SkipSign) {
     }
     if (-not $signtool) { Fail 'signtool.exe was not found. Install the Windows SDK.' }
     $certArgs = if ($CertThumbprint) { @('/sha1', $CertThumbprint) } else { @('/n', $CertName) }
-    $signed = $false
-    foreach ($timestampServer in @('http://timestamp.digicert.com', 'http://timestamp.sectigo.com', 'http://ts.ssl.com')) {
-        & $signtool sign /fd sha256 /tr $timestampServer /td sha256 @certArgs /d 'KillerMCP' /du 'https://github.com/SteveTheKiller/KillerMCP' /v $installer
-        if ($LASTEXITCODE -eq 0) { $signed = $true; break }
-        Start-Sleep -Seconds 3
-    }
-    if (-not $signed) { Fail 'Signing failed with every timestamp server.' }
-    & $signtool verify /pa /v $installer
-    if ($LASTEXITCODE -ne 0) { Fail 'The signed installer failed Authenticode verification.' }
-    $signature = Get-AuthenticodeSignature -LiteralPath $installer
-    if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate) {
-        Fail 'The installer does not have a valid timestamped signature.'
+    foreach ($setup in $setups) {
+        $signed = $false
+        foreach ($timestampServer in @('http://timestamp.digicert.com', 'http://timestamp.sectigo.com', 'http://ts.ssl.com')) {
+            & $signtool sign /fd sha256 /tr $timestampServer /td sha256 @certArgs /d 'KillerMCP' /du 'https://github.com/SteveTheKiller/KillerMCP' /v $setup
+            if ($LASTEXITCODE -eq 0) { $signed = $true; break }
+            Start-Sleep -Seconds 3
+        }
+        if (-not $signed) { Fail "Signing $(Split-Path -Leaf $setup) failed with every timestamp server." }
+        & $signtool verify /pa /v $setup
+        if ($LASTEXITCODE -ne 0) { Fail "The signed $(Split-Path -Leaf $setup) failed Authenticode verification." }
+        $signature = Get-AuthenticodeSignature -LiteralPath $setup
+        if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate) {
+            Fail "$(Split-Path -Leaf $setup) does not have a valid timestamped signature."
+        }
     }
 }
 
 Step 'Writing release artifacts'
-$hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-$checksumLine = "${hash}  KillerMCP-Setup.exe"
-[IO.File]::WriteAllLines($sumsFile, @($checksumLine), [Text.Encoding]::ASCII)
+$checksumLines = foreach ($setup in $setups) { "$((Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant())  $(Split-Path -Leaf $setup)" }
+[IO.File]::WriteAllLines($sumsFile, @($checksumLines), [Text.Encoding]::ASCII)
 $changelogLines = Get-Content -LiteralPath $changelogFile
 $notes = New-Object System.Collections.Generic.List[string]
 $inSection = $false
@@ -174,7 +179,7 @@ $notesFile = Join-Path $ArtifactRoot "installer\KillerMCP-$Version-notes.md"
 
 if (-not $DryRun) {
     Step "Publishing KillerMCP $Tag"
-    try { & (Join-Path $PSScriptRoot 'scripts\Publish-Release.ps1') -Repository $PSScriptRoot -Tag $Tag -Assets @($installer, $sumsFile) -NotesFile $notesFile }
+    try { & (Join-Path $PSScriptRoot 'scripts\Publish-Release.ps1') -Repository $PSScriptRoot -Tag $Tag -Assets @($installer, $storeInstaller, $sumsFile) -NotesFile $notesFile }
     catch { Fail $_.Exception.Message }
     gh release view $Tag --json url --jq '.url'
     if ($SkipStore) {

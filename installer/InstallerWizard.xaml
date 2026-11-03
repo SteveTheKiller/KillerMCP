@@ -121,7 +121,9 @@
                         <Border Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource InputBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource SmallCornerRadius}" Padding="11,9">
                             <StackPanel><TextBlock Text="Install location" FontSize="10" Foreground="{DynamicResource DimTextBrush}"/><TextBlock x:Name="InstallLocation" FontFamily="{StaticResource UiFont}" FontSize="10.5" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel>
                         </Border>
-                        <TextBlock Margin="1,13,0,0" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Text="Setup installs the verified runtime, detects supported Killer apps, and registers one shared MCP connection."/>
+                        <TextBlock x:Name="RuntimeStatus" Margin="1,13,0,0" FontFamily="{StaticResource UiFont}" FontSize="10.5" TextWrapping="Wrap"/>
+                        <TextBlock Margin="1,10,0,0" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Text="Setup installs the verified runtime, detects supported Killer apps, and registers one shared MCP connection."/>
+                        <TextBlock x:Name="RuntimeLink" Margin="1,12,0,0"><Hyperlink Foreground="{DynamicResource OutlineBtnBrush}" Click="RuntimeLink_Click">Download .NET 10 runtime</Hyperlink></TextBlock>
                         <TextBlock Margin="1,12,0,4" Foreground="{DynamicResource DimTextBrush}" FontSize="10" Text="Update behavior"/>
                         <ComboBox x:Name="UpdateBehaviorBox" Width="210" Height="28" HorizontalAlignment="Left" AutomationProperties.Name="Update behavior">
                             <ComboBoxItem Tag="off">Do not check</ComboBoxItem>

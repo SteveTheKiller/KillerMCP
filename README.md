@@ -9,9 +9,9 @@ KillerMCP is a native .NET 10 host. It detects supported Killer apps, exposes th
 
 ## Install
 
-[Download the signed KillerMCP installer](https://github.com/SteveTheKiller/KillerMCP/releases/latest/download/KillerMCP-Setup.exe), run setup, then open a new agent chat. Setup carries its own .NET runtime and registers KillerMCP with Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when those clients are found.
+[Download the signed KillerMCP installer](https://github.com/SteveTheKiller/KillerMCP/releases/latest/download/KillerMCP-Setup.exe), run setup, then open a new agent chat. Setup checks for the .NET 10 runtime and registers KillerMCP with Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when those clients are found.
 
-You can also install it with WinGet or Chocolatey. Nothing else needs to be installed first.
+You can also install it with WinGet or Chocolatey. Both install the .NET 10 Desktop Runtime for you when it is missing. The Microsoft Store version carries its own .NET runtime, so it needs nothing installed first.
 
 ```powershell
 winget install killermcp
@@ -93,7 +93,7 @@ Build and test the Windows installer:
 powershell -NoProfile -File scripts\Test-WindowsInstaller.ps1
 ```
 
-The native host and its tools carry their own .NET 10 runtime, so no separate .NET installation is needed.
+The native host requires the .NET 10 runtime. The Windows installer checks for it before installation and links to the official Microsoft download when it is missing.
 
 For development builds or custom app locations, set `KILLERPDF_CLI`, `KILLERSCAN_CLI`, `KILLERNOTES_CLI`, `KILLENDAR_CLI`, `KILLERSHELL_CLI`, `KILLERBENCH_CLI`, or `KILLERSHOT_CLI` to an absolute executable path. An invalid override leaves that app unavailable instead of silently selecting another copy.
 

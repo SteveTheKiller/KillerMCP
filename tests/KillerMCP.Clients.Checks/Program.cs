@@ -405,6 +405,23 @@ try
     Equal("https://github.com/SteveTheKiller/KillerMCP/releases/download/v1.2.3/KillerMCP-Setup.exe", KillerMCP.Notify.UpdateInstaller.ReleaseFile("1.2.3", "KillerMCP-Setup.exe"));
     foreach (var badVersion in new[] { "latest", "1.2", "1.2.3/../../x", "1.2.3?x", " 1.2.3" })
         Caught<InvalidDataException>(() => KillerMCP.Notify.UpdateInstaller.ReleaseFile(badVersion, "KillerMCP-Setup.exe"));
+    // An installation carrying its own runtime came from the Store setup and updates with it.
+    string assetFolder = Path.Combine(Path.GetTempPath(), "KillerMCP-asset-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(assetFolder);
+    try
+    {
+        Equal("KillerMCP-Setup.exe", KillerMCP.Updates.SetupAsset.For(assetFolder));
+        File.WriteAllText(Path.Combine(assetFolder, "coreclr.dll"), "");
+        Equal("KillerMCP-Setup.exe", KillerMCP.Updates.SetupAsset.For(assetFolder));
+        File.WriteAllText(Path.Combine(assetFolder, "System.Private.CoreLib.dll"), "");
+        Equal("KillerMCP-Store.exe", KillerMCP.Updates.SetupAsset.For(assetFolder));
+    }
+    finally { Directory.Delete(assetFolder, true); }
+    string releaseSums = "aaa  KillerMCP-Setup.exe\r\nbbb  KillerMCP-Store.exe\n";
+    Equal("aaa", KillerMCP.Updates.SetupAsset.ExpectedHash(releaseSums, "KillerMCP-Setup.exe"));
+    Equal("bbb", KillerMCP.Updates.SetupAsset.ExpectedHash(releaseSums, "KillerMCP-Store.exe"));
+    Equal("aaa", KillerMCP.Updates.SetupAsset.ExpectedHash("aaa *KillerMCP-Setup.exe", "KillerMCP-Setup.exe"));
+    Equal<string?>(null, KillerMCP.Updates.SetupAsset.ExpectedHash("ccc  Old-KillerMCP-Setup.exe", "KillerMCP-Setup.exe"));
     using (var small = new MemoryStream(new byte[100]))
         Equal(100, (await KillerMCP.Notify.UpdateInstaller.ReadLimitedAsync(small, 100)).Length);
     using (var large = new MemoryStream(new byte[101]))

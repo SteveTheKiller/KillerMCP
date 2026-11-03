@@ -66,19 +66,20 @@ namespace KillerMCP.Setup
             if (!Version.TryParse(latestText, out Version? latest) || latest <= current) return 0;
             try
             {
+                string asset = KillerMCP.Updates.SetupAsset.For(destination);
                 string notifier = Path.Combine(destination, "KillerMCP.Notify.exe");
                 if (File.Exists(notifier))
                 {
                     string arguments = "--installed " + Program.Quote(currentText!) +
                         " --latest " + Program.Quote(latestText!) +
-                        " --installer " + Program.Quote(ReleaseBase + "v" + latestText + "/KillerMCP-Setup.exe") +
+                        " --installer " + Program.Quote(ReleaseBase + "v" + latestText + "/" + asset) +
                         " --release " + Program.Quote("https://github.com/SteveTheKiller/KillerMCP/releases/tag/v" + latestText) +
                         " --behavior " + Program.Quote(behavior);
                     Process.Start(new ProcessStartInfo(notifier, arguments) { UseShellExecute = true });
                     return 0;
                 }
                 if (behavior == "check" && !SetupDialog.ConfirmUpdate(latestText!)) return 0;
-                string installer = DownloadAndVerify(latestText!, out string verifiedHash);
+                string installer = DownloadAndVerify(latestText!, asset, out string verifiedHash);
                 if (behavior == "download" && !SetupDialog.ConfirmUpdate(latestText!)) return 0;
                 // The confirmation can wait, so the download is checked again right before it starts, through a
                 // handle that keeps anyone from changing or replacing it until it has started.
@@ -118,7 +119,7 @@ namespace KillerMCP.Setup
             }
         }
 
-        private static string DownloadAndVerify(string version, out string verifiedHash)
+        private static string DownloadAndVerify(string version, string asset, out string verifiedHash)
         {
             string baseUrl = ReleaseBase + "v" + version + "/";
             byte[] installer;
@@ -127,12 +128,10 @@ namespace KillerMCP.Setup
             {
                 // The installer is far smaller than this; a larger download is refused instead of filling memory.
                 client.MaxResponseContentBufferSize = 512L * 1024 * 1024;
-                installer = client.GetByteArrayAsync(baseUrl + "KillerMCP-Setup.exe").GetAwaiter().GetResult();
+                installer = client.GetByteArrayAsync(baseUrl + asset).GetAwaiter().GetResult();
                 sums = client.GetStringAsync(baseUrl + "SHA256SUMS.txt").GetAwaiter().GetResult();
             }
-            string? line = sums.Replace("\r", "").Split('\n').FirstOrDefault(value => value.EndsWith("  KillerMCP-Setup.exe", StringComparison.OrdinalIgnoreCase));
-            if (line == null) throw new InvalidDataException("The release checksum is missing.");
-            string expected = line.Split(' ')[0];
+            string expected = KillerMCP.Updates.SetupAsset.ExpectedHash(sums, asset) ?? throw new InvalidDataException("The release checksum is missing.");
             string actual;
             using (var sha = SHA256.Create()) actual = BitConverter.ToString(sha.ComputeHash(installer)).Replace("-", "");
             if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The release checksum does not match.");

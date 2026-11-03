@@ -1,4 +1,4 @@
-param([string]$Installer = '', [string]$PreviousSignedSetup = '', [string]$PreviousSignedInstall = '', [string]$ArtifactRoot = '', [string]$FakeCodex = '')
+param([string]$Installer = '', [string]$StoreInstaller = '', [string]$PreviousSignedSetup = '', [string]$PreviousSignedInstall = '', [string]$ArtifactRoot = '', [string]$FakeCodex = '')
 
 $ErrorActionPreference = 'Stop'
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) { throw 'The KillerMCP Windows installer test requires Windows.' }
@@ -16,12 +16,18 @@ if (-not $Installer) {
     & (Join-Path $PSScriptRoot 'Build-WindowsInstaller.ps1') -ArtifactRoot $ArtifactRoot
 }
 $setup = if ($Installer) { [IO.Path]::GetFullPath($Installer) } else { Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe' }
+if (-not $StoreInstaller) {
+    $ArtifactRoot = & (Join-Path $PSScriptRoot 'Get-ArtifactRoot.ps1') -ArtifactRoot $ArtifactRoot
+    $StoreInstaller = Join-Path $ArtifactRoot 'installer\KillerMCP-Store.exe'
+    if (-not (Test-Path -LiteralPath $StoreInstaller -PathType Leaf)) { & (Join-Path $PSScriptRoot 'Build-WindowsInstaller.ps1') -ArtifactRoot $ArtifactRoot -Store | Out-Null }
+}
+$storeSetup = [IO.Path]::GetFullPath($StoreInstaller)
 if (-not $FakeCodex) {
     dotnet build (Join-Path $root 'tests\KillerMCP.Clients.Checks\KillerMCP.Clients.Checks.csproj') -c Release -v:q
     if ($LASTEXITCODE -ne 0) { throw 'The fake Codex client build failed.' }
     $FakeCodex = Join-Path $root 'tests\KillerMCP.Clients.Checks\bin\Release\net10.0\KillerMCP.Clients.Checks.exe'
 }
-if (-not (Test-Path -LiteralPath $setup -PathType Leaf) -or -not (Test-Path -LiteralPath $fakeCodex -PathType Leaf)) { throw 'Installer test prerequisites are missing.' }
+if (-not (Test-Path -LiteralPath $setup -PathType Leaf) -or -not (Test-Path -LiteralPath $storeSetup -PathType Leaf) -or -not (Test-Path -LiteralPath $fakeCodex -PathType Leaf)) { throw 'Installer test prerequisites are missing.' }
 
 $scratch = Join-Path ([IO.Path]::GetFullPath($env:TEMP)) ('KillerMCP-native-installer-' + [guid]::NewGuid().ToString('N'))
 $installed = Join-Path $scratch 'Installed'
@@ -49,15 +55,18 @@ try {
         [Environment]::SetEnvironmentVariable("KILLERMCP_TEST_${name}_CONFIG", $path)
     }
 
-    # The Microsoft Store installs silently on machines without .NET 10, so the payload carries its own runtime.
-    # This check uses its own root so its uninstall entry never meets the migration fixtures below.
+    # The regular setup uses the installed .NET 10 runtime and refuses a silent install without it.
+    # The Microsoft Store installs silently on machines without .NET 10, so its setup carries its own runtime.
+    # These checks use their own root so their uninstall entry never meets the migration fixtures below.
     $freshRoot = Join-Path $scratch ('fresh-' + [guid]::NewGuid().ToString('N'))
     $freshInstalled = Join-Path $freshRoot 'Installed'
     $freshKey = 'HKCU:\Software\KillerMCP\InstallerTests\' + (Split-Path $freshRoot -Leaf)
     $env:KILLERMCP_TEST_INSTALL_ROOT = $freshInstalled
     $env:KILLERMCP_TEST_RUNTIME = '0'
-    $noRuntime = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
-    if ($noRuntime.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $freshKey)) { throw "Silent setup failed with exit code $($noRuntime.ExitCode) when .NET 10 was unavailable." }
+    $refused = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+    if ($refused.ExitCode -ne 10 -or (Test-Path -LiteralPath $freshInstalled)) { throw "The regular setup returned $($refused.ExitCode) instead of 10 without .NET 10, or installed anyway." }
+    $noRuntime = Start-Process -FilePath $storeSetup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+    if ($noRuntime.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $freshKey)) { throw "Silent Store setup failed with exit code $($noRuntime.ExitCode) when .NET 10 was unavailable." }
     $hostConfig = Get-Content -LiteralPath (Join-Path $freshInstalled 'KillerMCP.runtimeconfig.json') -Raw | ConvertFrom-Json
     if ($hostConfig.runtimeOptions.framework -or $hostConfig.runtimeOptions.frameworks -or -not $hostConfig.runtimeOptions.includedFrameworks) { throw 'The installed host still depends on a shared .NET runtime.' }
     foreach ($runtimeFile in @('hostfxr.dll', 'coreclr.dll')) {
@@ -67,7 +76,7 @@ try {
     node (Join-Path $PSScriptRoot 'Test-NativePackage.mjs') $freshInstalled
     if ($LASTEXITCODE -ne 0) { throw 'The installed host did not run on its bundled runtime.' }
     Remove-Item Env:DOTNET_ROOT
-    $uninstallFresh = Start-Process -FilePath $setup -ArgumentList '/uninstall', '/silent' -Wait -PassThru -WindowStyle Hidden
+    $uninstallFresh = Start-Process -FilePath $storeSetup -ArgumentList '/uninstall', '/silent' -Wait -PassThru -WindowStyle Hidden
     if ($uninstallFresh.ExitCode -ne 0 -or (Test-Path -LiteralPath $freshInstalled) -or (Test-Path -LiteralPath "$freshInstalled-Setup.exe") -or (Test-Path -LiteralPath $freshKey)) { throw 'Silent uninstall did not remove the self-contained installation.' }
     foreach ($name in $names) { Write-Utf8NoBom ([Environment]::GetEnvironmentVariable("KILLERMCP_TEST_${name}_CONFIG")) '{"preservedSetting":"keep"}' }
     $env:KILLERMCP_TEST_INSTALL_ROOT = $installed
@@ -308,7 +317,7 @@ try {
         Write-Output 'Signed previous setup and stale uninstall entry upgrade passed.'
     }
     $success = $true
-    Write-Output 'KillerMCP bundled runtime, legacy migration, install, reinstall, seven client registrations, MCP calls, and uninstall passed.'
+    Write-Output 'KillerMCP runtime check, Store bundled runtime, legacy migration, install, reinstall, seven client registrations, MCP calls, and uninstall passed.'
 }
 finally {
     foreach ($name in $variables) { [Environment]::SetEnvironmentVariable($name, $previous[$name]) }
