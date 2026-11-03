@@ -26,13 +26,10 @@
 - Registers itself with Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when they are found
 - Labeled tool effects and a local tool call log that never records arguments or results
 - Signed updates that must match the published SHA256 and pass Windows signature verification
-- Installs for the current user and requires the .NET 10 Desktop Runtime
+- Installs for the current user and carries its own .NET runtime
 - GPLv3, local-only, no account, no telemetry
     </description>
     <releaseNotes>https://github.com/SteveTheKiller/KillerMCP/releases/tag/vREPLACE_VERSION</releaseNotes>
-    <dependencies>
-      <dependency id="dotnet-10.0-desktopruntime" version="[10.0.0,11.0.0)" />
-    </dependencies>
   </metadata>
   <files>
     <file src="tools\**" target="tools" />

@@ -49,9 +49,28 @@ try {
         [Environment]::SetEnvironmentVariable("KILLERMCP_TEST_${name}_CONFIG", $path)
     }
 
+    # The Microsoft Store installs silently on machines without .NET 10, so the payload carries its own runtime.
+    # This check uses its own root so its uninstall entry never meets the migration fixtures below.
+    $freshRoot = Join-Path $scratch ('fresh-' + [guid]::NewGuid().ToString('N'))
+    $freshInstalled = Join-Path $freshRoot 'Installed'
+    $freshKey = 'HKCU:\Software\KillerMCP\InstallerTests\' + (Split-Path $freshRoot -Leaf)
+    $env:KILLERMCP_TEST_INSTALL_ROOT = $freshInstalled
     $env:KILLERMCP_TEST_RUNTIME = '0'
-    $missingRuntime = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
-    if ($missingRuntime.ExitCode -ne 10 -or (Test-Path -LiteralPath $installed)) { throw 'Silent setup did not refuse installation when .NET 10 was unavailable.' }
+    $noRuntime = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+    if ($noRuntime.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $freshKey)) { throw "Silent setup failed with exit code $($noRuntime.ExitCode) when .NET 10 was unavailable." }
+    $hostConfig = Get-Content -LiteralPath (Join-Path $freshInstalled 'KillerMCP.runtimeconfig.json') -Raw | ConvertFrom-Json
+    if ($hostConfig.runtimeOptions.framework -or $hostConfig.runtimeOptions.frameworks -or -not $hostConfig.runtimeOptions.includedFrameworks) { throw 'The installed host still depends on a shared .NET runtime.' }
+    foreach ($runtimeFile in @('hostfxr.dll', 'coreclr.dll')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $freshInstalled $runtimeFile) -PathType Leaf)) { throw "The installed host is missing its bundled $runtimeFile." }
+    }
+    $env:DOTNET_ROOT = Join-Path $scratch 'no-dotnet'
+    node (Join-Path $PSScriptRoot 'Test-NativePackage.mjs') $freshInstalled
+    if ($LASTEXITCODE -ne 0) { throw 'The installed host did not run on its bundled runtime.' }
+    Remove-Item Env:DOTNET_ROOT
+    $uninstallFresh = Start-Process -FilePath $setup -ArgumentList '/uninstall', '/silent' -Wait -PassThru -WindowStyle Hidden
+    if ($uninstallFresh.ExitCode -ne 0 -or (Test-Path -LiteralPath $freshInstalled) -or (Test-Path -LiteralPath "$freshInstalled-Setup.exe") -or (Test-Path -LiteralPath $freshKey)) { throw 'Silent uninstall did not remove the self-contained installation.' }
+    foreach ($name in $names) { Write-Utf8NoBom ([Environment]::GetEnvironmentVariable("KILLERMCP_TEST_${name}_CONFIG")) '{"preservedSetting":"keep"}' }
+    $env:KILLERMCP_TEST_INSTALL_ROOT = $installed
 
     $env:KILLERMCP_TEST_RUNTIME = '1'
     New-Item -ItemType Directory -Path $installed -Force | Out-Null
@@ -289,7 +308,7 @@ try {
         Write-Output 'Signed previous setup and stale uninstall entry upgrade passed.'
     }
     $success = $true
-    Write-Output 'KillerMCP runtime prerequisite, legacy migration, install, reinstall, seven client registrations, MCP calls, and uninstall passed.'
+    Write-Output 'KillerMCP bundled runtime, legacy migration, install, reinstall, seven client registrations, MCP calls, and uninstall passed.'
 }
 finally {
     foreach ($name in $variables) { [Environment]::SetEnvironmentVariable($name, $previous[$name]) }

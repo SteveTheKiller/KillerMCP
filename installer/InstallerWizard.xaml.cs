@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Linq;
 using System.Windows.Controls;
 using System.Threading.Tasks;
@@ -35,7 +34,6 @@ namespace KillerMCP.Setup
             GrainLayer.Background = grain;
             SidebarGrain.Background = grain;
             FrameGrain.Background = grain;
-            SetRuntimeStatus();
             SetInstallState();
         }
 
@@ -46,15 +44,6 @@ namespace KillerMCP.Setup
             bool? result = wizard.ShowDialog();
             application.Shutdown();
             return result == true ? KillerFamily.Deployment.InstallerExitCodes.Success : KillerFamily.Deployment.InstallerExitCodes.Cancelled;
-        }
-
-        private void SetRuntimeStatus()
-        {
-            bool ready = Program.HasRuntime10(_isolated);
-            RuntimeStatus.Text = ready ? ".NET 10 runtime detected" : ".NET 10 runtime required before installation";
-            RuntimeStatus.Foreground = ready ? (Brush)FindResource("PrimaryBrush") : new SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 190, 80));
-            RuntimeLink.Visibility = ready ? Visibility.Collapsed : Visibility.Visible;
-            InstallButton.IsEnabled = ready;
         }
 
         private void SetInstallState()
@@ -73,7 +62,6 @@ namespace KillerMCP.Setup
         private async void Install_Click(object sender, RoutedEventArgs e)
         {
             if (_installed) { DialogResult = true; return; }
-            if (!Program.HasRuntime10(_isolated)) { SetRuntimeStatus(); return; }
             try
             {
                 string behavior = (string)((ComboBoxItem)UpdateBehaviorBox.SelectedItem).Tag;
@@ -129,7 +117,6 @@ namespace KillerMCP.Setup
             }
         }
 
-        private void RuntimeLink_Click(object sender, RoutedEventArgs e) => Process.Start(new ProcessStartInfo("https://dotnet.microsoft.com/en-us/download/dotnet/10.0") { UseShellExecute = true });
         private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (e.LeftButton == MouseButtonState.Pressed) DragMove(); }
 

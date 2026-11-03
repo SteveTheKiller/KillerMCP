@@ -19,7 +19,6 @@ namespace KillerMCP.Setup
         private const string PayloadName = "KillerMCP.payload.zip";
         private const string TestRootVariable = "KILLERMCP_TEST_INSTALL_ROOT";
         private const string UninstallRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\KillerMCP";
-        internal const int MissingRuntimeExitCode = 10;
 
         internal static string CurrentVersion
         {
@@ -71,7 +70,6 @@ namespace KillerMCP.Setup
                         Console.Error.WriteLine("Silent install refused: setup has no valid Authenticode signature.");
                         return KillerFamily.Deployment.InstallerExitCodes.SecurityRejected;
                     }
-                    if (!HasRuntime10(isolated)) return MissingRuntimeExitCode;
                     int? detached = ClientJobEscape.RunOutsideClientJob(args);
                     if (detached.HasValue) return detached.Value;
                     Install(destination);
@@ -90,19 +88,6 @@ namespace KillerMCP.Setup
                 if (!silent || notify) SetupDialog.ShowFailure(exception.Message);
                 return KillerFamily.Deployment.InstallerExitCodes.FromException(exception);
             }
-        }
-
-        internal static bool HasRuntime10(bool isolated)
-        {
-            if (isolated)
-            {
-                string? test = Environment.GetEnvironmentVariable("KILLERMCP_TEST_RUNTIME");
-                if (test == "0") return false;
-                if (test == "1") return true;
-            }
-            string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "shared", "Microsoft.NETCore.App");
-            try { return Directory.Exists(root) && Directory.GetDirectories(root, "10.*").Length > 0; }
-            catch { return false; }
         }
 
         internal static void Install(string destination)

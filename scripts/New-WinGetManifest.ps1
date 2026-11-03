@@ -56,14 +56,7 @@ InstallModes:
 InstallerSwitches:
   Silent: /silent
   SilentWithProgress: /silent
-ExpectedReturnCodes:
-- InstallerReturnCode: 10
-  ReturnResponse: missingDependency
 UpgradeBehavior: install
-Dependencies:
-  PackageDependencies:
-  - PackageIdentifier: Microsoft.DotNet.DesktopRuntime.10
-    MinimumVersion: 10.0.0
 AppsAndFeaturesEntries:
 - DisplayName: KillerMCP
   Publisher: Steve the Killer
