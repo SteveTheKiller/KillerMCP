@@ -23,20 +23,22 @@ New-Item -ItemType Directory -Path $staging -Force | Out-Null
 # Every program carries its own .NET runtime. The Microsoft Store installs silently on machines
 # without .NET 10 and accepts no installer that downloads or chains a prerequisite.
 # The host and configurator share one runtime folder; their shared files are identical.
-dotnet publish (Join-Path $root 'KillerMCP.csproj') -c Release -r $RuntimeIdentifier --self-contained true -p:SatelliteResourceLanguages=en `
+dotnet publish (Join-Path $root 'KillerMCP.csproj') -c Release -r $RuntimeIdentifier --self-contained true `
     -p:DebugType=None -p:DebugSymbols=false -o $staging
 if ($LASTEXITCODE -ne 0) { throw 'Native KillerMCP publish failed.' }
-dotnet publish (Join-Path $root 'Configuration\KillerMCP.Configure.csproj') -c Release -r $RuntimeIdentifier --self-contained true -p:SatelliteResourceLanguages=en `
+dotnet publish (Join-Path $root 'Configuration\KillerMCP.Configure.csproj') -c Release -r $RuntimeIdentifier --self-contained true `
     -p:DebugType=None -p:DebugSymbols=false -o $staging
 if ($LASTEXITCODE -ne 0) { throw 'Native KillerMCP configurator publish failed.' }
 if ($RuntimeIdentifier.StartsWith('win-', [StringComparison]::Ordinal)) {
     # The notifier's WPF runtime ships different builds of some host libraries, so it stays a
-    # single file with its runtime and native libraries inside it.
+    # single file with its runtime inside it. Its native WPF libraries sit beside it, where the
+    # manifest covers them, instead of being unpacked into the temp folder at startup.
     $notifyStaging = Join-Path $ArtifactRoot "staging\$RuntimeIdentifier-notify"
     if (Test-Path -LiteralPath $notifyStaging) { Remove-Item -LiteralPath $notifyStaging -Recurse -Force }
     dotnet publish (Join-Path $root 'Shell\KillerMCP.Notify.csproj') -c Release -r $RuntimeIdentifier --self-contained true -p:SatelliteResourceLanguages=en `
-        -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o $notifyStaging
+        -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o $notifyStaging
     if ($LASTEXITCODE -ne 0) { throw 'KillerMCP update notifier publish failed.' }
+    if (Get-ChildItem -LiteralPath $notifyStaging -Directory) { throw 'The update notifier publish produced folders the package does not expect.' }
     foreach ($item in Get-ChildItem -LiteralPath $notifyStaging -File) {
         $target = Join-Path $staging $item.Name
         if ((Test-Path -LiteralPath $target) -and (Get-FileHash -LiteralPath $target).Hash -ne (Get-FileHash -LiteralPath $item.FullName).Hash) {
