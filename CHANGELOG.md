@@ -11,6 +11,11 @@ KillerMCP 0.9.2 installs on computers that do not have .NET 10, including Micros
 ### Fixed
 
 - Setup carries its own .NET runtime, so a silent install no longer stops with exit code 10 on a computer without the .NET 10 Desktop Runtime. WinGet and Chocolatey no longer install the runtime as a separate dependency.
+- A stalled update download ends at its three-minute limit even when the connection ignores the cancel request.
+
+### Changed
+
+- The update window runs on .NET Framework 4.8, which ships with Windows, so it carries no runtime and setup stays about 46 MB.
 
 ## [0.9.1] - 2026-11-01
 

@@ -1,5 +1,5 @@
 using System.IO;
-using System.Text.Json;
+using System.Web.Script.Serialization;
 using System.Windows;
 
 namespace KillerMCP.Notify;
@@ -128,7 +128,7 @@ public partial class App : Application
         {
             string path = HandoffPath();
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, JsonSerializer.Serialize(args) + Environment.NewLine);
+            File.WriteAllText(path, new JavaScriptSerializer().Serialize(args) + Environment.NewLine);
         }
         catch { }
     }
@@ -138,7 +138,7 @@ public partial class App : Application
         try
         {
             string path = HandoffPath();
-            string[]? args = JsonSerializer.Deserialize<string[]>(File.ReadAllText(path));
+            string[]? args = new JavaScriptSerializer().Deserialize<string[]>(File.ReadAllText(path));
             File.Delete(path);
             return args;
         }

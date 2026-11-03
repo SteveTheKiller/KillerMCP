@@ -362,21 +362,6 @@ try
     Equal(true, Path.GetFileName(nextDownload).StartsWith("KillerMCP-Setup-0.7.0-", StringComparison.Ordinal));
     Console.WriteLine("PASS downloaded update cleanup");
 
-    // The update window keeps the other keys in the preferences file it shares with setup and replaces the
-    // file whole; a file it cannot read is treated as the default choice.
-    var preferences = Path.Combine(root, "preferences", "update-preferences.json");
-    Directory.CreateDirectory(Path.GetDirectoryName(preferences)!);
-    File.WriteAllText(preferences, "{ \"Behavior\": \"check\", \"Other\": \"keep\" }");
-    KillerMCP.Notify.BehaviorPreference.Write(preferences, "download");
-    Equal("keep", Read(preferences)["Other"]!.GetValue<string>());
-    Equal("download", KillerMCP.Notify.BehaviorPreference.Read(preferences));
-    Equal(1, Directory.GetFiles(Path.GetDirectoryName(preferences)!).Length);
-    File.WriteAllText(preferences, "[]");
-    Equal("check", KillerMCP.Notify.BehaviorPreference.Read(preferences));
-    KillerMCP.Notify.BehaviorPreference.Write(preferences, "off");
-    Equal("off", KillerMCP.Notify.BehaviorPreference.Read(preferences));
-    Console.WriteLine("PASS update preference file");
-
     // A download that a newer notification replaced neither clears the busy state nor acts on its result.
     var runs = new KillerMCP.Notify.UpdateRuns();
     var firstRun = runs.Begin();
@@ -431,6 +416,14 @@ try
         var stalledAt = DateTime.UtcNow;
         Equal(true, await Cancelled(() => KillerMCP.Notify.UpdateInstaller.ReadLimitedAsync(stalled, 100, stalledLimit.Token)));
         Equal(true, DateTime.UtcNow - stalledAt < TimeSpan.FromSeconds(10));
+    }
+    // A .NET Framework network stream can ignore the token; closing the stream still ends the read.
+    using (var deafLimit = new CancellationTokenSource(TimeSpan.FromMilliseconds(300)))
+    using (var deaf = new TokenDeafStream())
+    {
+        var deafAt = DateTime.UtcNow;
+        Equal(true, await Cancelled(() => KillerMCP.Notify.UpdateInstaller.ReadLimitedAsync(deaf, 100, deafLimit.Token)));
+        Equal(true, DateTime.UtcNow - deafAt < TimeSpan.FromSeconds(10));
     }
     // The hash is checked through the same open file that is then started, and that file cannot be replaced meanwhile.
     var downloaded = Path.Combine(root, "downloaded-setup.exe");
@@ -516,6 +509,25 @@ static void Throws<T>(Action action) where T : Exception
     throw new InvalidOperationException($"Expected {typeof(T).Name}.");
 }
 
+// Stands in for a stalled download whose stream ignores cancellation: a read ends only when the stream is closed.
+sealed class TokenDeafStream : Stream
+{
+    private readonly TaskCompletionSource<int> _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public override bool CanRead => true;
+    public override bool CanSeek => false;
+    public override bool CanWrite => false;
+    public override long Length => throw new NotSupportedException();
+    public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+    public override void Flush() { }
+    public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => await _closed.Task;
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => await _closed.Task;
+    protected override void Dispose(bool disposing) { _closed.TrySetException(new ObjectDisposedException(nameof(TokenDeafStream))); base.Dispose(disposing); }
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+}
+
 // Stands in for a download whose body stops arriving: every read waits until it is cancelled.
 sealed class StalledStream : Stream
 {
@@ -527,6 +539,12 @@ sealed class StalledStream : Stream
     public override void Flush() { }
     public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        await Task.Delay(Timeout.Infinite, cancellationToken);
+        return 0;
+    }
+    // The update window runs on .NET Framework, which reads through this overload.
+    public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
         await Task.Delay(Timeout.Infinite, cancellationToken);
         return 0;

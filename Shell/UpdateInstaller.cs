@@ -29,11 +29,12 @@ internal static class UpdateInstaller
         byte[] installer = await DownloadAsync(client, ReleaseFile(version, "KillerMCP-Setup.exe"), MaximumInstallerBytes, limit.Token).ConfigureAwait(false);
         string sums = System.Text.Encoding.UTF8.GetString(await DownloadAsync(client, ReleaseFile(version, "SHA256SUMS.txt"), MaximumChecksumBytes, limit.Token).ConfigureAwait(false));
         string expected = ReadExpectedHash(sums);
-        string actual = Convert.ToHexString(SHA256.HashData(installer));
+        string actual = Sha256Hex(installer);
         if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The update checksum does not match the published release.");
 
         string path = KillerMCP.Updates.DownloadedSetups.NewPath(Path.GetTempPath(), version);
-        await File.WriteAllBytesAsync(path, installer).ConfigureAwait(false);
+        using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+            await output.WriteAsync(installer, 0, installer.Length).ConfigureAwait(false);
         if (!KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(path) || !IsRelease(path, version))
         {
             File.Delete(path);
@@ -68,8 +69,17 @@ internal static class UpdateInstaller
     internal static bool HashMatches(FileStream held, string sha256)
     {
         held.Position = 0;
-        return Convert.ToHexString(SHA256.HashData(held)).Equals(sha256, StringComparison.OrdinalIgnoreCase);
+        using var hash = SHA256.Create();
+        return Hex(hash.ComputeHash(held)).Equals(sha256, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string Sha256Hex(byte[] data)
+    {
+        using var hash = SHA256.Create();
+        return Hex(hash.ComputeHash(data));
+    }
+
+    private static string Hex(byte[] digest) => BitConverter.ToString(digest).Replace("-", string.Empty);
 
     /// <summary>True when the file is KillerMCP setup for exactly this version, so an older signed setup put in its
     /// place cannot start a downgrade.</summary>
@@ -92,10 +102,21 @@ internal static class UpdateInstaller
         using var buffer = new MemoryStream();
         var chunk = new byte[81920];
         int read;
-        while ((read = await source.ReadAsync(chunk, token).ConfigureAwait(false)) > 0)
+        // .NET Framework network streams can ignore the token, so the time limit also closes the stream.
+        using (token.Register(source.Dispose))
         {
-            if (buffer.Length + read > limit) throw new InvalidDataException("The update download is larger than expected.");
-            buffer.Write(chunk, 0, read);
+            try
+            {
+                while ((read = await source.ReadAsync(chunk, 0, chunk.Length, token).ConfigureAwait(false)) > 0)
+                {
+                    if (buffer.Length + read > limit) throw new InvalidDataException("The update download is larger than expected.");
+                    buffer.Write(chunk, 0, read);
+                }
+            }
+            catch (Exception exception) when (token.IsCancellationRequested && exception is not OperationCanceledException and not InvalidDataException)
+            {
+                throw new OperationCanceledException(token);
+            }
         }
         return buffer.ToArray();
     }
@@ -107,7 +128,7 @@ internal static class UpdateInstaller
             using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength > limit) throw new InvalidDataException("The update download is larger than expected.");
-            using var body = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+            using var body = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
             return await ReadLimitedAsync(body, limit, token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
@@ -118,7 +139,7 @@ internal static class UpdateInstaller
 
     private static string ReadExpectedHash(string sums)
     {
-        foreach (string line in sums.Replace("\r", "", StringComparison.Ordinal).Split('\n'))
+        foreach (string line in sums.Replace("\r", "").Split('\n'))
         {
             string[] parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length >= 2 && parts.Any(part => part.EndsWith("KillerMCP-Setup.exe", StringComparison.OrdinalIgnoreCase))) return parts[0];

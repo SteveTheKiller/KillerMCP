@@ -229,7 +229,7 @@ public partial class UpdateWindow : Window
     private void SetHeading(string text)
     {
         HeadingText.Inlines.Clear();
-        string[] parts = text.Split("KillerMCP");
+        string[] parts = text.Split(new[] { "KillerMCP" }, StringSplitOptions.None);
         for (int i = 0; i < parts.Length; i++)
         {
             if (i > 0)
@@ -255,7 +255,7 @@ public partial class UpdateWindow : Window
     private void BehaviorBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loadingPreferences || BehaviorBox.SelectedItem is not ComboBoxItem item || item.Tag is not string behavior) return;
-        try { BehaviorPreference.Write(PreferencesPath(), behavior); }
+        try { KillerMCP.Setup.UpdatePreferences.Write(PreferencesPath(), behavior); }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             SetStatus("Your update choice could not be saved: " + exception.Message);
@@ -275,7 +275,7 @@ public partial class UpdateWindow : Window
         BehaviorBox.SelectedIndex = 1;
     }
 
-    private static string ReadBehavior() => BehaviorPreference.Read(PreferencesPath());
+    private static string ReadBehavior() => KillerMCP.Setup.UpdatePreferences.Read(PreferencesPath());
 
     private static string PreferencesPath() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerMCP", "update-preferences.json");
@@ -335,7 +335,7 @@ public partial class UpdateWindow : Window
         foreach (ReleaseNotes.Section section in notes.Sections)
         {
             if (!string.IsNullOrWhiteSpace(section.Heading))
-                NotesList.Children.Add(new TextBlock { Text = section.Heading.ToUpperInvariant(), FontSize = 9.5, Foreground = muted, Margin = new Thickness(0, 4, 0, 2) });
+                NotesList.Children.Add(new TextBlock { Text = section.Heading!.ToUpperInvariant(), FontSize = 9.5, Foreground = muted, Margin = new Thickness(0, 4, 0, 2) });
             foreach (string item in section.Items)
             {
                 var row = new Grid { Margin = new Thickness(0, 0, 0, 3) };
@@ -360,7 +360,7 @@ public partial class UpdateWindow : Window
     private static string InstalledVersion()
     {
         string hostPath = Path.Combine(AppContext.BaseDirectory, "KillerMCP.exe");
-        string path = File.Exists(hostPath) ? hostPath : Environment.ProcessPath!;
+        string path = File.Exists(hostPath) ? hostPath : System.Reflection.Assembly.GetExecutingAssembly().Location;
         return FileVersionInfo.GetVersionInfo(path).ProductVersion?.Split('+')[0] ?? "0.0.0";
     }
 

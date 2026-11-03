@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Web.Script.Serialization;
 using KillerMCP.Setup;
 
 // Setup reads, hashes and deletes only what is inside the installation folder, whatever the manifest lists
@@ -58,6 +59,21 @@ try
     Equal(2, ManifestPaths.Links(installed).Count());
     Equal(true, Directory.Exists(Path.Combine(outside, "empty")));
     Console.WriteLine("PASS setup stays inside the installation folder on .NET Framework");
+
+    // Setup and the update window share this preferences file. A change keeps the other keys in it and
+    // replaces the file whole; a file that cannot be read is treated as the default choice.
+    var preferences = Path.Combine(root, "preferences", "update-preferences.json");
+    Directory.CreateDirectory(Path.GetDirectoryName(preferences)!);
+    File.WriteAllText(preferences, "{ \"Behavior\": \"check\", \"Other\": \"keep\" }");
+    UpdatePreferences.Write(preferences, "download");
+    Equal("keep", new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(preferences))["Other"] as string);
+    Equal("download", UpdatePreferences.Read(preferences));
+    Equal(1, Directory.GetFiles(Path.GetDirectoryName(preferences)!).Length);
+    File.WriteAllText(preferences, "[]");
+    Equal("check", UpdatePreferences.Read(preferences));
+    UpdatePreferences.Write(preferences, "off");
+    Equal("off", UpdatePreferences.Read(preferences));
+    Console.WriteLine("PASS update preference file");
     return 0;
 }
 finally

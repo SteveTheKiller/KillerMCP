@@ -22,10 +22,17 @@ namespace KillerMCP.Setup
         internal static void Save(string path, string selected, string initial)
         {
             if (!IsValid(selected)) throw new ArgumentException("Unknown update behavior.", nameof(selected));
-            var values = ReadValues(path);
             // An untouched dropdown must preserve changes made by the running notifier.
-            if (selected == initial && Behavior(values) != null) return;
-            values["Behavior"] = selected;
+            if (selected == initial && Behavior(ReadValues(path)) != null) return;
+            Write(path, selected);
+        }
+
+        // Keeps every other key in the file and replaces the file whole, so a reader never sees it half written.
+        internal static void Write(string path, string behavior)
+        {
+            if (!IsValid(behavior)) throw new ArgumentException("Unknown update behavior.", nameof(behavior));
+            var values = ReadValues(path);
+            values["Behavior"] = behavior;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try

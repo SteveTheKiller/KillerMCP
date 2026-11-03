@@ -45,7 +45,7 @@ internal sealed class TrayIcon : IDisposable
 
     public void Show(string tip)
     {
-        _tip = tip.Length > 127 ? tip[..127] : tip;
+        _tip = tip.Length > 127 ? tip.Substring(0, 127) : tip;
         if (_added)
         {
             var data = NewData(NifTip);

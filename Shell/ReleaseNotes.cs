@@ -1,6 +1,6 @@
 using System.IO;
 using System.Text;
-using System.Text.Json;
+using System.Web.Script.Serialization;
 using System.Text.RegularExpressions;
 
 namespace KillerMCP.Notify;
@@ -32,13 +32,13 @@ internal sealed record ReleaseNotes(string Summary, IReadOnlyList<ReleaseNotes.S
     {
         try
         {
-            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(statusPath));
-            JsonElement root = document.RootElement;
-            if (!root.TryGetProperty("LatestVersion", out JsonElement latest)
-                || !string.Equals(latest.GetString()?.TrimStart('v', 'V'), version.TrimStart('v', 'V'), StringComparison.OrdinalIgnoreCase)
-                || !root.TryGetProperty("Notes", out JsonElement notes) || notes.ValueKind != JsonValueKind.String)
+            var root = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(statusPath));
+            if (root is null
+                || !root.TryGetValue("LatestVersion", out object? latest) || latest is not string latestText
+                || !string.Equals(latestText.TrimStart('v', 'V'), version.TrimStart('v', 'V'), StringComparison.OrdinalIgnoreCase)
+                || !root.TryGetValue("Notes", out object? notes) || notes is not string notesText)
                 return null;
-            ReleaseNotes parsed = Parse(notes.GetString() ?? string.Empty);
+            ReleaseNotes parsed = Parse(notesText);
             return parsed.IsEmpty ? null : parsed;
         }
         catch
@@ -55,11 +55,11 @@ internal sealed record ReleaseNotes(string Summary, IReadOnlyList<ReleaseNotes.S
         var sections = new List<Section>();
         string? heading = null;
         List<string>? items = null;
-        foreach (string raw in markdown.Replace("\r", string.Empty, StringComparison.Ordinal).Split('\n'))
+        foreach (string raw in markdown.Replace("\r", string.Empty).Split('\n'))
         {
             string line = raw.Trim();
             if (line.Length == 0) continue;
-            if (line.StartsWith('#'))
+            if (line.StartsWith("#", StringComparison.Ordinal))
             {
                 if (items is not null) sections.Add(new Section(heading, items));
                 heading = Clean(line.TrimStart('#'));
@@ -68,11 +68,11 @@ internal sealed record ReleaseNotes(string Summary, IReadOnlyList<ReleaseNotes.S
             else if (line.StartsWith("- ", StringComparison.Ordinal) || line.StartsWith("* ", StringComparison.Ordinal))
             {
                 items ??= new List<string>();
-                items.Add(Clean(line[2..]));
+                items.Add(Clean(line.Substring(2)));
             }
-            else if (items is { Count: > 0 } && raw.StartsWith(' '))
+            else if (items is { Count: > 0 } && raw.StartsWith(" ", StringComparison.Ordinal))
             {
-                items[^1] += " " + Clean(line);
+                items[items.Count - 1] += " " + Clean(line);
             }
             else if (items is null)
             {
