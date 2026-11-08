@@ -4,6 +4,12 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4] - Unreleased
+
+### Added
+
+- Expanded the port reference with 58 firewall and network appliance entries for common MSP platforms.
+
 ## [0.9.3] - 2026-11-03
 
 KillerMCP 0.9.3 brings the small setup back for GitHub, WinGet and Chocolatey, and gives the Microsoft Store its own setup with the .NET runtime inside.
