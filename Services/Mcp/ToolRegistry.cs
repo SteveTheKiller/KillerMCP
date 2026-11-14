@@ -9,6 +9,14 @@ internal static class ToolRegistry
     private static IReadOnlyDictionary<string, AppAdapter> Adapters = new Dictionary<string, AppAdapter>();
     private static readonly HashSet<string> CoreToolNames = new(BuiltInTools.Definitions.Select(tool =>
         (string)tool.GetType().GetProperty("name")!.GetValue(tool)!), StringComparer.Ordinal);
+    private static readonly HashSet<string> FastLocalTools = new(StringComparer.Ordinal)
+    {
+        "text_statistics", "encode_base64", "decode_base64", "convert_case", "parse_url", "calculate_percentage", "killermcp_update_status",
+    };
+
+    public static bool IsFastLocalCall(JsonElement parameters) => parameters.ValueKind == JsonValueKind.Object
+        && parameters.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String
+        && CoreToolNames.Contains(name.GetString()!) && FastLocalTools.Contains(name.GetString()!);
 
     public static object[] Tools => BuiltInTools.Definitions.Concat(Adapters.Values.Select(adapter => new
     {
@@ -34,7 +42,7 @@ internal static class ToolRegistry
 
     private static readonly HashSet<string> LocalFileTools = new(StringComparer.Ordinal)
     {
-        "encode_file_base64_local", "decode_file_base64_local", "check_pdf_signatures_local",
+        "encode_file_base64_local", "decode_file_base64_local", "write_text_file_local", "check_pdf_signatures_local",
     };
 
     private static string? PathRefusal(string name, JsonElement arguments)
@@ -42,6 +50,7 @@ internal static class ToolRegistry
         if (!Adapters.ContainsKey(name) && !LocalFileTools.Contains(name)) return null;
         foreach (var property in arguments.EnumerateObject())
         {
+            if (name == "killershell_read_registry_key" && property.Name == "path") continue;
             if (!PathArguments.Contains(property.Name)) continue;
             var values = property.Value.ValueKind == JsonValueKind.Array ? property.Value.EnumerateArray().ToArray() : [property.Value];
             foreach (var value in values)
@@ -49,8 +58,9 @@ internal static class ToolRegistry
                 if (value.ValueKind != JsonValueKind.String) continue;
                 var path = value.GetString()!;
                 if (AgentPaths.AccessRefusal(path) is { } network) return network;
-                var writes = OutputArguments.Contains(property.Name) || name == "decode_file_base64_local" && property.Name == "path";
+                var writes = OutputArguments.Contains(property.Name) || name is "decode_file_base64_local" or "write_text_file_local" && property.Name == "path";
                 if (writes && AgentPaths.WriteRefusal(path) is { } refusal) return refusal;
+                if (!writes && AgentPaths.ReadRefusal(path) is { } readRefusal) return readRefusal;
             }
         }
         return null;
@@ -79,13 +89,19 @@ internal static class ToolRegistry
     }
 
     public static object Call(JsonElement parameters, JsonSerializerOptions json, CancellationToken cancellationToken = default)
+        => CallAsync(parameters, json, cancellationToken).GetAwaiter().GetResult();
+
+    public static async Task<object> CallAsync(JsonElement parameters, JsonSerializerOptions json, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (parameters.ValueKind != JsonValueKind.Object
             || !parameters.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String)
         {
             throw new McpRequestException(-32602, "tools/call needs params with a tool name.");
         }
         var name = nameElement.GetString();
+        if (name is null || (!CoreToolNames.Contains(name) && !Adapters.ContainsKey(name)))
+            throw new McpRequestException(-32602, "Unknown tool: " + name);
         // MCP makes arguments optional; a tool without inputs is called with an empty object. Arguments
         // that are given must be an object.
         var hasArguments = parameters.TryGetProperty("arguments", out var given) && given.ValueKind != JsonValueKind.Null;
@@ -104,17 +120,18 @@ internal static class ToolRegistry
             }
             if (name is not null && Adapters.TryGetValue(name, out var adapter))
             {
-                var adapterResult = adapter.CallAsync(arguments, cancellationToken).GetAwaiter().GetResult();
+                var adapterResult = await adapter.CallAsync(arguments, cancellationToken).ConfigureAwait(false);
                 ToolCallLog.Record(loggedName, adapterResult.IsError ? "error" : "ok", stopwatch.ElapsedMilliseconds);
                 return adapterResult.IsError
                     ? new { content = new[] { new { type = "text", text = adapterResult.Text } }, isError = true }
                     : new { content = new[] { new { type = "text", text = adapterResult.Text } }, isError = false };
             }
 
-            object value = BuiltInTools.Call(name, arguments);
+            object value = await BuiltInTools.CallAsync(name, arguments, cancellationToken).ConfigureAwait(false);
             ToolCallLog.Record(loggedName, "ok", stopwatch.ElapsedMilliseconds);
             return new { content = new[] { new { type = "text", text = JsonSerializer.Serialize(value, json) } } };
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (ToolCallException exception)
         {
             ToolCallLog.Record(loggedName, "error", stopwatch.ElapsedMilliseconds);

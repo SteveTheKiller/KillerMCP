@@ -6,13 +6,55 @@ using System.Text.Json.Nodes;
 
 namespace KillerMCP;
 
+/// <summary>Replaceable browser and file system boundaries for PDF creation checks.</summary>
+public sealed class IntegrationPdfOptions
+{
+    public string? EdgePath { get; init; }
+    public string? TemporaryRoot { get; init; }
+    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(90);
+    public Func<Stream, Stream, CancellationToken, Task>? CopyPdf { get; init; }
+}
+
 public static partial class IntegrationAdapter
 {
-    public static IReadOnlyList<AppAdapter> Create(string? notes, string? calendar, string? shell, string? scan, string? pdf)
+    /// <summary>Removes abandoned PDF workflow folders from the temporary directory.</summary>
+    public static async Task SweepStaleTemporaryFoldersAsync(string? temporaryRoot = null)
+    {
+        try
+        {
+            var root = temporaryRoot ?? Path.GetTempPath();
+            if (!Directory.Exists(root) || (File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0) return;
+            var cutoff = DateTime.UtcNow.AddDays(-1);
+            foreach (var folder in Directory.EnumerateDirectories(root, "killermcp-integration-*", SearchOption.TopDirectoryOnly))
+            {
+                try
+                {
+                    var name = Path.GetFileName(folder);
+                    if (!Guid.TryParseExact(name["killermcp-integration-".Length..], "N", out _)
+                        || Directory.GetLastWriteTimeUtc(folder) >= cutoff || HasReparsePoint(folder)) continue;
+                    // A running workflow holds this file open, including work older than a day.
+                    using (new FileStream(Path.Combine(folder, ".killermcp-active"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) { }
+                    await DeleteAsync(folder).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, FileStream> TemporaryLeases = new(StringComparer.OrdinalIgnoreCase);
+
+    private static void CreateTemporaryFolder(string path)
+    {
+        Directory.CreateDirectory(path);
+        TemporaryLeases[path] = new FileStream(Path.Combine(path, ".killermcp-active"), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+    }
+
+    public static IReadOnlyList<AppAdapter> Create(string? notes, string? calendar, string? shell, string? scan, string? pdf, IntegrationPdfOptions? pdfOptions = null)
     {
         var tools = new List<AppAdapter>
         {
-            Tool("killer_create_pdf", "Create a new PDF from HTML or plain text. Use this to turn agent output or data from a Killer app into a PDF.", ContentPdfSchema(), CreatePdf),
+            Tool("killer_create_pdf", "Create a new PDF from HTML or plain text. Use this to turn agent output or data from a Killer app into a PDF.", ContentPdfSchema(), (input, token) => CreatePdf(input, token, pdfOptions)),
         };
         if (IsFile(notes)) tools.Add(Tool("killernotes_export_pdf", "Export one KillerNotes note directly to a new PDF.", IdOutputSchema(), (input, token) => NotePdf(notes!, input, token)));
         if (IsFile(notes) && IsFile(pdf)) tools.Add(Tool("killernotes_export_notes_pdf", "Export up to 50 KillerNotes notes, in the order given, into one new PDF combined by KillerPDF.", NotesPdfSchema(), (input, token) => NotesPdf(notes!, pdf!, input, token)));
@@ -24,20 +66,20 @@ public static partial class IntegrationAdapter
         if (IsFile(shell) && IsFile(notes)) tools.Add(Tool("killershell_save_directory_note", "Save a KillerShell directory listing as a new KillerNotes note.", DirectoryNoteSchema(), (input, token) => DirectoryNote(shell!, notes!, input, token)));
         if (IsFile(pdf) && IsFile(notes)) tools.Add(Tool("killerpdf_save_text_as_note", "Export the text of a local PDF as Markdown with KillerPDF and save it as one new KillerNotes note. Scanned pages need killerpdf_ocr or killerpdf_scan_to_text first.", PdfTextNoteSchema(), (input, token) => PdfTextToNote(pdf!, notes!, input, token)));
         if (IsFile(pdf) && IsFile(notes)) tools.Add(Tool("killerpdf_save_report_as_note", "Run a KillerPDF report on a local PDF, such as its signatures, comments, measurements or preflight findings, and save the report as a new KillerNotes note. Never changes the PDF.", PdfReportNoteSchema(), (input, token) => PdfReportToNote(pdf!, notes!, input, token)));
-        if (IsFile(pdf) && IsFile(notes)) tools.Add(Tool("killerpdf_save_pages_as_notes", "Render selected KillerPDF pages and save each page image as a new KillerNotes note.", PdfNotesSchema(), (input, token) => PdfPagesToNotes(pdf!, notes!, input, token)));
+        if (IsFile(pdf) && IsFile(notes)) tools.Add(Tool("killerpdf_save_pages_as_notes", "Render up to 100 selected KillerPDF pages and save each PNG of up to 32 MiB as a new KillerNotes note.", PdfNotesSchema(), (input, token) => PdfPagesToNotes(pdf!, notes!, input, token)));
         return tools;
     }
 
     private static AppAdapter Tool(string name, string description, JsonObject schema, Func<JsonElement, CancellationToken, Task<AppCallResult>> call) => new(new RuntimeTool(name, description, schema), call);
 
-    private static async Task<AppCallResult> CreatePdf(JsonElement input, CancellationToken token)
+    private static async Task<AppCallResult> CreatePdf(JsonElement input, CancellationToken token, IntegrationPdfOptions? options)
     {
         if (!Exact(input, "content", "format", "title", "output") || !Text(input, "content", 1_000_000, out var content) || !Text(input, "output", 1024, out var output) || !NewPdf(output!)) return Error("Provide content and a new absolute PDF output path");
         var format = input.TryGetProperty("format", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString() : "html";
         if (format is not ("html" or "text")) return Error("Format must be html or text");
         var title = input.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() ?? "Killer Tools Report" : "Killer Tools Report";
         var body = format == "html" ? content! : $"<pre>{WebUtility.HtmlEncode(content)}</pre>";
-        return await RenderPdf(Document(title, body), output!, token).ConfigureAwait(false);
+        return await RenderPdf(Document(title, body), output!, token, options).ConfigureAwait(false);
     }
 
     private static async Task<AppCallResult> NotePdf(string notes, JsonElement input, CancellationToken token)
@@ -46,13 +88,13 @@ public static partial class IntegrationAdapter
         var temp = TempFolder();
         try
         {
-            Directory.CreateDirectory(temp);
+            CreateTemporaryFolder(temp);
             var html = Path.Combine(temp, "note.html");
-            var response = await RunApp(notes, ["export", "--id", id.ToString(), "--output", html], 30, token).ConfigureAwait(false);
+            var response = await RunNotes(notes, ["export", "--id", id.ToString(), "--output", html], token).ConfigureAwait(false);
             if (response.ExitCode != 0 || !File.Exists(html)) return ProcessError("KillerNotes", response);
             return await RenderPdf(await File.ReadAllTextAsync(html, token).ConfigureAwait(false), output!, token).ConfigureAwait(false);
         }
-        finally { Delete(temp); }
+        finally { await DeleteAsync(temp).ConfigureAwait(false); }
     }
 
     private static async Task<AppCallResult> ScanPdf(string scan, JsonElement input, CancellationToken token)
@@ -110,23 +152,30 @@ public static partial class IntegrationAdapter
         if (!Exact(input, "path", "pages", "dpi", "group") || !ExistingFile(input, "path", ".pdf", out var path)) return Error(TooLarge(input, "path") ?? "Provide an existing absolute PDF path");
         string? pages = "1";
         if (input.TryGetProperty("pages", out var p) && (p.ValueKind != JsonValueKind.String || (pages = p.GetString())!.Length > 200 || !PageList().IsMatch(pages))) return Error("Pages must look like 1-3,5");
+        if (!BoundedPageSelection(pages!)) return Error("Select 1 to 100 distinct positive page numbers");
+        if (NotesContent.AvailabilityRefusal(notes) is { } unavailable) return Error(unavailable);
         var dpi = 150;
         if (!OptionalInt(input, "dpi", 72, 600, ref dpi)) return Error("DPI must be a whole number from 72 to 600");
         var group = input.TryGetProperty("group", out var g) && g.ValueKind == JsonValueKind.String ? g.GetString() : null;
         var temp = TempFolder();
         try
         {
-            Directory.CreateDirectory(temp);
+            CreateTemporaryFolder(temp);
             var rendered = await RunApp(pdf, ["--to-image", path!, temp, "--pages", pages!, "--dpi", dpi.ToString(), "--format", "png"], 300, token).ConfigureAwait(false);
             if (rendered.ExitCode != 0) return ProcessError("KillerPDF", rendered);
-            var images = Directory.EnumerateFiles(temp, "*.png").OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+            var images = Directory.EnumerateFiles(temp, "*.png").Take(101).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
             if (images.Length == 0) return Error("KillerPDF did not render any pages");
+            if (images.Length > 100) return Error("KillerPDF rendered more than 100 pages; no notes were imported");
+            if (images.Any(image => RenderedPageNumber(image) < 1)) return Error("KillerPDF returned an image without a source page number");
+            var oversized = images.FirstOrDefault(image => new FileInfo(image).Length > 32L * 1024 * 1024);
+            if (oversized is not null)
+                return Error(new JsonObject { ["error"] = "A rendered PNG is larger than the 32 MiB KillerNotes accepts. Reduce DPI.", ["failedAtPage"] = RenderedPageNumber(oversized), ["created"] = new JsonArray() }.ToJsonString());
             var created = new JsonArray();
             foreach (var image in images)
             {
                 var args = new List<string> { "import-image", "--path", image };
                 if (!string.IsNullOrWhiteSpace(group)) args.AddRange(["--group", group!]);
-                var result = await RunApp(notes, args, 30, token).ConfigureAwait(false);
+                var result = await RunNotes(notes, args, token).ConfigureAwait(false);
                 JsonNode? note = null;
                 if (result.ExitCode == 0)
                 {
@@ -137,13 +186,40 @@ public static partial class IntegrationAdapter
                 {
                     // Notes already made stay made, so the error names them.
                     var failure = result.ExitCode != 0 ? ProcessError("KillerNotes", result).Text : "KillerNotes returned an invalid response";
-                    return Error(new JsonObject { ["error"] = failure, ["failedAtPage"] = created.Count + 1, ["created"] = created }.ToJsonString());
+                    return Error(new JsonObject { ["error"] = failure, ["failedAtPage"] = RenderedPageNumber(image), ["created"] = created }.ToJsonString());
                 }
                 created.Add(note);
             }
             return Ok(new JsonObject { ["created"] = created }.ToJsonString());
         }
-        finally { Delete(temp); }
+        finally { await DeleteAsync(temp).ConfigureAwait(false); }
+    }
+
+    private static int RenderedPageNumber(string image)
+    {
+        string name = Path.GetFileNameWithoutExtension(image);
+        int marker = name.LastIndexOf("page-", StringComparison.OrdinalIgnoreCase);
+        return marker >= 0 && int.TryParse(name[(marker + 5)..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int page) && page > 0 ? page : 0;
+    }
+
+    private static bool BoundedPageSelection(string selection)
+    {
+        var selected = new HashSet<int>();
+        foreach (string part in selection.Split(','))
+        {
+            string[] bounds = part.Split('-');
+            if (!int.TryParse(bounds[0], out int first) || first < 1 ||
+                !int.TryParse(bounds[^1], out int last) || last < 1) return false;
+            if (first > last) (first, last) = (last, first);
+            if ((long)last - first + 1 > 100) return false;
+            for (int page = first; ; page++)
+            {
+                selected.Add(page);
+                if (selected.Count > 100) return false;
+                if (page == last) break;
+            }
+        }
+        return selected.Count > 0;
     }
 
     private static async Task<AppCallResult> PdfTextToNote(string pdf, string notes, JsonElement input, CancellationToken token)
@@ -159,7 +235,7 @@ public static partial class IntegrationAdapter
         var temp = TempFolder();
         try
         {
-            Directory.CreateDirectory(temp);
+            CreateTemporaryFolder(temp);
             var markdown = Path.Combine(temp, "text.md");
             var args = new List<string> { "--export", path!, markdown };
             if (pages is not null) args.AddRange(["--pages", pages]);
@@ -169,7 +245,7 @@ public static partial class IntegrationAdapter
             if (string.IsNullOrWhiteSpace(text)) return Error("The PDF has no text to save. Run killerpdf_ocr or killerpdf_scan_to_text on a scanned PDF first.");
             return await CreateNote(notes, title!, text, group, token).ConfigureAwait(false);
         }
-        finally { Delete(temp); }
+        finally { await DeleteAsync(temp).ConfigureAwait(false); }
     }
 
     private static readonly (string Name, string Command, string Label)[] PdfReports =
@@ -211,12 +287,12 @@ public static partial class IntegrationAdapter
         var temp = TempFolder();
         try
         {
-            Directory.CreateDirectory(temp);
+            CreateTemporaryFolder(temp);
             var parts = new List<string>();
             for (int i = 0; i < list.Count; i++)
             {
                 var html = Path.Combine(temp, $"note-{i + 1}.html");
-                var exported = await RunApp(notes, ["export", "--id", list[i].ToString(), "--output", html], 30, token).ConfigureAwait(false);
+                var exported = await RunNotes(notes, ["export", "--id", list[i].ToString(), "--output", html], token).ConfigureAwait(false);
                 if (exported.ExitCode != 0 || !File.Exists(html)) return ProcessError("KillerNotes", exported);
                 var part = Path.Combine(temp, $"note-{i + 1}.pdf");
                 var rendered = await RenderPdf(await File.ReadAllTextAsync(html, token).ConfigureAwait(false), part, token).ConfigureAwait(false);
@@ -230,11 +306,11 @@ public static partial class IntegrationAdapter
                 var merged = await RunApp(pdf, new[] { "--merge", combined }.Concat(parts), 120, token).ConfigureAwait(false);
                 if (merged.ExitCode != 0 || !File.Exists(combined)) return Error(Limit(string.IsNullOrWhiteSpace(merged.StandardOutput) ? "KillerPDF could not combine the notes" : merged.StandardOutput.Trim()));
             }
-            File.Copy(combined, output!, false);
+            await PublishPdf(combined, output!, token).ConfigureAwait(false);
             return Ok(JsonSerializer.Serialize(new { output, notes = parts.Count }));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return Error(Limit(ex.Message)); }
-        finally { Delete(temp); }
+        finally { await DeleteAsync(temp).ConfigureAwait(false); }
     }
 
     // A report scans exactly what a direct scan would: the same scope rule, settled before any probe.
@@ -261,6 +337,7 @@ public static partial class IntegrationAdapter
     // KillerNotes in a file when it accepts one.
     private static async Task<AppCallResult> CreateNote(string notes, string title, string content, string? group, CancellationToken token)
     {
+        if (NotesContent.AvailabilityRefusal(notes) is { } unavailable) return Error(unavailable);
         var args = new List<string> { "create", "--title", title };
         if (!string.IsNullOrWhiteSpace(group)) args.AddRange(["--group", group!]);
         var (contentArguments, folder, problem) = await NotesContent.ArgumentsAsync(notes, content, token, args).ConfigureAwait(false);
@@ -268,23 +345,27 @@ public static partial class IntegrationAdapter
         try
         {
             args.AddRange(contentArguments);
-            var result = await RunApp(notes, args, 30, token).ConfigureAwait(false);
+            var result = await RunNotes(notes, args, token).ConfigureAwait(false);
             return result.ExitCode == 0 && !result.OutputExceeded ? Ok(result.StandardOutput.Trim()) : ProcessError("KillerNotes", result);
         }
         finally { NotesContent.Delete(folder); }
     }
 
-    private static async Task<AppCallResult> RenderPdf(string html, string output, CancellationToken token)
+    private static async Task<AppCallResult> RenderPdf(string html, string output, CancellationToken token, IntegrationPdfOptions? options = null)
     {
         if (!NewPdf(output)) return Error("Output must be a new absolute PDF path in an existing folder");
-        var edge = FindEdge();
+        var edge = options?.EdgePath ?? FindEdge();
         if (edge is null) return Error("Microsoft Edge is required to create PDFs");
-        var temp = TempFolder();
+        var temp = Path.Combine(options?.TemporaryRoot ?? Path.GetTempPath(), "killermcp-integration-" + Guid.NewGuid().ToString("N"));
+        var timeout = options?.Timeout ?? TimeSpan.FromSeconds(90);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(timeout);
         try
         {
-            Directory.CreateDirectory(temp);
+            CreateTemporaryFolder(temp);
             var source = Path.Combine(temp, "report.html");
-            await File.WriteAllTextAsync(source, Harden(html), new UTF8Encoding(false), token).ConfigureAwait(false);
+            var rendered = Path.Combine(temp, "report.pdf");
+            await File.WriteAllTextAsync(source, Harden(html), new UTF8Encoding(false), deadline.Token).ConfigureAwait(false);
             // A private profile keeps browser data separate. The resolver rule fails every host name
             // lookup, and the dead proxy, with loopback taken out of its bypass list, fails every
             // request to an address, so nothing in the page can reach a server.
@@ -293,12 +374,69 @@ public static partial class IntegrationAdapter
                 "--headless", "--disable-gpu", "--no-pdf-header-footer", "--user-data-dir=" + Path.Combine(temp, "profile"),
                 "--host-resolver-rules=MAP * ~NOTFOUND", "--proxy-server=http://127.0.0.1:9", "--proxy-bypass-list=<-loopback>",
                 "--disable-background-networking", "--disable-component-update", "--disable-extensions", "--disable-sync", "--no-first-run",
-                "--print-to-pdf=" + output, new Uri(source).AbsoluteUri,
-            ], TimeSpan.FromSeconds(90), 32768, token).ConfigureAwait(false);
-            return result.ExitCode == 0 && File.Exists(output) ? Ok(JsonSerializer.Serialize(new { output })) : ProcessError("PDF creation", result);
+                "--print-to-pdf=" + rendered, new Uri(source).AbsoluteUri,
+            ], timeout, 32768, deadline.Token, environment: new Dictionary<string, string?> { ["__COMPAT_LAYER"] = null }).ConfigureAwait(false);
+            if (result.ExitCode != 0) return ProcessError("PDF creation", result);
+            await WaitForPdf(rendered, deadline.Token).ConfigureAwait(false);
+            await PublishPdf(rendered, output, deadline.Token, options?.CopyPdf).ConfigureAwait(false);
+            return Ok(JsonSerializer.Serialize(new { output }));
         }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested) { return Error("PDF creation timed out"); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or TimeoutException or InvalidOperationException) { return Error(Limit(ex.Message)); }
-        finally { Delete(temp); }
+        finally { await DeleteAsync(temp).ConfigureAwait(false); }
+    }
+
+    internal static async Task PublishPdf(string source, string output, CancellationToken token, Func<Stream, Stream, CancellationToken, Task>? copy = null)
+    {
+        var sibling = Path.Combine(Path.GetDirectoryName(output)!, ".killermcp-pdf-" + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            await using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous))
+            await using (var destination = new FileStream(sibling, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                if (copy is null) await input.CopyToAsync(destination, token).ConfigureAwait(false);
+                else await copy(input, destination, token).ConfigureAwait(false);
+                await destination.FlushAsync(token).ConfigureAwait(false);
+            }
+            token.ThrowIfCancellationRequested();
+            // Both paths share a directory, so this publishes a completed file in one move.
+            // A destination created during rendering is preserved by the non-overwriting move.
+            File.Move(sibling, output, false);
+        }
+        finally
+        {
+            try { File.Delete(sibling); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    private static async Task WaitForPdf(string path, CancellationToken token)
+    {
+        (long Length, DateTime Modified)? previous = null;
+        var stable = Stopwatch.StartNew();
+        while (true)
+        {
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                // The launcher can exit while another browser process is still writing the PDF.
+                // An exclusive read, a finished trailer and an unchanged file are all required.
+                using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+                var current = (file.Length, File.GetLastWriteTimeUtc(path));
+                if (previous != current) { previous = current; stable.Restart(); }
+                if (file.Length >= 12 && stable.Elapsed >= TimeSpan.FromMilliseconds(500))
+                {
+                    var header = new byte[5];
+                    file.ReadExactly(header);
+                    var tail = new byte[(int)Math.Min(file.Length, 1024)];
+                    file.Seek(-tail.Length, SeekOrigin.End);
+                    file.ReadExactly(tail);
+                    if (Encoding.ASCII.GetString(header) == "%PDF-" && Encoding.ASCII.GetString(tail).TrimEnd().EndsWith("%%EOF", StringComparison.Ordinal)) return;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { previous = null; stable.Restart(); }
+            await Task.Delay(100, token).ConfigureAwait(false);
+        }
     }
 
     // Notes and agent content are untrusted HTML. The policy comes first in the document, ahead of
@@ -422,6 +560,15 @@ public static partial class IntegrationAdapter
         return ProcessRunner.RunAsync(path, prefix.Concat(arguments), TimeSpan.FromSeconds(seconds), 1_048_576, token);
     }
 
+    private static async Task<ProcessResult> RunNotes(string notes, IEnumerable<string> arguments, CancellationToken token)
+    {
+        if (NotesContent.AvailabilityRefusal(notes) is { } unavailable) return new ProcessResult(1, "", unavailable, false);
+        token.ThrowIfCancellationRequested();
+        try { return await RunApp(notes, arguments, 40, token).ConfigureAwait(false); }
+        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
+        { return new ProcessResult(3, "", "KillerNotes outcome unknown. Check the requested note or output before retrying; the command may already have run.", false); }
+    }
+
     private static bool IdOutput(JsonElement input, out int id, out string? output) { id = 0; output = null; return Exact(input, "id", "output") && input.TryGetProperty("id", out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out id) && id > 0 && Text(input, "output", 1024, out output) && NewPdf(output!); }
     private static bool ScanInput(JsonElement input, bool needsOutput, out string? target, out bool full, out int limit, out string? output, out string? group) { target = output = group = null; full = false; limit = 100; if (!Exact(input, needsOutput ? ["target", "full", "limit", "output"] : ["target", "full", "limit", "group"])) return false; if (input.TryGetProperty("target", out var t) && (t.ValueKind != JsonValueKind.String || !ValidScanTarget(target = t.GetString()))) return false; if (input.TryGetProperty("full", out var f)) { if (f.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return false; full = f.GetBoolean(); } if (!OptionalInt(input, "limit", 1, 100, ref limit)) return false; if (needsOutput && (!Text(input, "output", 1024, out output) || !NewPdf(output!))) return false; if (!needsOutput && input.TryGetProperty("group", out var g) && (g.ValueKind != JsonValueKind.String || (group = g.GetString())!.Length > 240)) return false; return true; }
     private static bool AgendaInput(JsonElement input, bool needsOutput, out string? date, out int days, out int limit, out string? output, out string? group) { date = output = group = null; days = 7; limit = 50; if (!Exact(input, needsOutput ? ["date", "days", "limit", "output"] : ["date", "days", "limit", "group"]) || !Text(input, "date", 10, out date) || !DateOnly.TryParseExact(date, "yyyy-MM-dd", out _)) return false; if (!OptionalInt(input, "days", 1, 31, ref days) || !OptionalInt(input, "limit", 1, 100, ref limit)) return false; if (needsOutput && (!Text(input, "output", 1024, out output) || !NewPdf(output!))) return false; if (!needsOutput && input.TryGetProperty("group", out var g) && (g.ValueKind != JsonValueKind.String || (group = g.GetString())!.Length > 240)) return false; return true; }
@@ -429,16 +576,45 @@ public static partial class IntegrationAdapter
     private static bool OptionalInt(JsonElement input, string name, int min, int max, ref int value) => !input.TryGetProperty(name, out var item) || item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out value) && value >= min && value <= max;
     private static bool ValidScanTarget(string? value) { if (string.IsNullOrWhiteSpace(value) || value.Length > 43) return false; var parts = value.Split('/'); if (parts.Length is < 1 or > 2 || !IPAddress.TryParse(parts[0], out var address) || address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) return false; return parts.Length == 1 || int.TryParse(parts[1], out var prefix) && prefix is >= 22 and <= 32; }
     private static bool Text(JsonElement input, string name, int max, out string? value) { value = null; return input.TryGetProperty(name, out var item) && item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value = item.GetString()) && value.Length <= max; }
-    // The same 64 MiB the KillerPDF tools allow, so a cross-app tool cannot send KillerPDF a larger file.
-    private const long MaximumInputBytes = 64L * 1024 * 1024;
-    private static string? TooLarge(JsonElement input, string name) { try { return Text(input, name, 1024, out var path) && Path.IsPathFullyQualified(path!) && new FileInfo(path!) is { Exists: true } info && info.Length > MaximumInputBytes ? "The PDF is larger than the 64 MiB KillerPDF accepts" : null; } catch { return null; } }
+    // Match the KillerPDF adapter's input limit for files produced by larger workflows.
+    private const long MaximumInputBytes = 512L * 1024 * 1024;
+    private static string? TooLarge(JsonElement input, string name) { try { return Text(input, name, 1024, out var path) && Path.IsPathFullyQualified(path!) && new FileInfo(path!) is { Exists: true } info && info.Length > MaximumInputBytes ? "The PDF is larger than the 512 MiB KillerPDF accepts" : null; } catch { return null; } }
     private static bool ExistingFile(JsonElement input, string name, string extension, out string? path) { path = null; if (!Text(input, name, 1024, out path) || !Path.IsPathFullyQualified(path!) || !path!.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) return false; try { var info = new FileInfo(path); return info.Exists && info.Length <= MaximumInputBytes; } catch { return false; } }
     private static bool Exact(JsonElement input, params string[] allowed) => input.ValueKind == JsonValueKind.Object && input.EnumerateObject().All(property => allowed.Contains(property.Name, StringComparer.Ordinal));
     private static bool NewPdf(string path) { try { return Path.IsPathFullyQualified(path) && path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && Directory.Exists(Path.GetDirectoryName(path)) && !File.Exists(path) && !Directory.Exists(path); } catch { return false; } }
     private static bool IsFile(string? path) { try { return !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path) && File.Exists(path); } catch { return false; } }
     private static string TempFolder() => Path.Combine(Path.GetTempPath(), "killermcp-integration-" + Guid.NewGuid().ToString("N"));
     private static string? FindEdge() => new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) }.Select(root => Path.Combine(root, "Microsoft", "Edge", "Application", "msedge.exe")).FirstOrDefault(File.Exists);
-    private static void Delete(string path) { try { if (Directory.Exists(path)) Directory.Delete(path, true); } catch { } }
+    private static async Task DeleteAsync(string path)
+    {
+        if (TemporaryLeases.TryRemove(path, out var lease)) lease.Dispose();
+        var elapsed = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                if (!Directory.Exists(path)) return;
+                if (HasReparsePoint(path)) return;
+                Directory.Delete(path, true);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            if (elapsed.Elapsed >= TimeSpan.FromSeconds(3)) return;
+            await Task.Delay(100).ConfigureAwait(false);
+        }
+    }
+
+    private static bool HasReparsePoint(string path)
+    {
+        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) return true;
+        foreach (var entry in Directory.EnumerateFileSystemEntries(path))
+        {
+            var attributes = File.GetAttributes(entry);
+            if ((attributes & FileAttributes.ReparsePoint) != 0) return true;
+            if ((attributes & FileAttributes.Directory) != 0 && HasReparsePoint(entry)) return true;
+        }
+        return false;
+    }
     private static AppCallResult ProcessError(string app, ProcessResult result) => Error(Limit(string.IsNullOrWhiteSpace(result.StandardError) ? app + " command failed" : result.StandardError.Trim()));
     private static AppCallResult Ok(string text) => new(text);
     private static AppCallResult Error(string text) => new(text, true);

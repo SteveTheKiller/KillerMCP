@@ -16,6 +16,7 @@
     <None Remove="Features\Browser\browser-companion.html" />
     <EmbeddedResource Include="Features\Browser\browser-companion.html" LogicalName="KillerMCP.browser-companion.html" />
     <ProjectReference Include="dependencies\KillerTools\src\KillerTools.Engine\KillerTools.Engine.csproj" />
+    <Compile Include="installer\DownloadedSetups.cs" Link="Services\DownloadedSetups.cs" />
     <InternalsVisibleTo Include="KillerMCP.Runtime.Checks" />
   </ItemGroup>
 </Project>

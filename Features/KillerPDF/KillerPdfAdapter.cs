@@ -6,7 +6,7 @@ namespace KillerMCP;
 
 public static partial class KillerPdfAdapter
 {
-    private const long MaxPdfBytes = 64L * 1024 * 1024;
+    private const long MaxPdfBytes = 512L * 1024 * 1024;
     private const int MessageLimit = 65536;
 
     // Passwords on a command line can be read by any program running as the same user and are kept in
@@ -188,7 +188,7 @@ public static partial class KillerPdfAdapter
             Schema(new JsonObject { ["path"] = PdfPath() }, "path"), input => ["--document-info", String(input, "path")]);
         // Exit 3 is a search that left unreadable pages out: the hits are real and unreadablePages names the rest.
         yield return Action("killerpdf_search_text", "--search-text <in.pdf>", "Search text in a local PDF and return the matching page numbers without changing it. Pages it could not read are listed in unreadablePages.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["query"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 512 } }, "path", "query"),
+            Schema(new JsonObject { ["path"] = PdfPath(), ["query"] = Positional(512) }, "path", "query"),
             input => ["--search-text", String(input, "path"), String(input, "query")]) with { SuccessCodes = [0, 3] };
         foreach (var operation in DocumentOperations()) yield return operation;
     }
@@ -233,12 +233,34 @@ public static partial class KillerPdfAdapter
             Directory.CreateDirectory(temporary);
             var staged = Path.Combine(temporary, "merged.pdf");
             var inputs = input.GetProperty("inputs").EnumerateArray().Select(item => item.GetString()!).ToArray();
-            var response = await Run(path, new[] { "--merge", staged }.Concat(inputs), 120, 8192, token).ConfigureAwait(false);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+            deadline.CancelAfter(TimeSpan.FromMinutes(10));
+            var parts = inputs;
+            var pass = 0;
+            while (!ProcessRunner.FitsCommandLine(path, new[] { "--merge", staged }.Concat(parts)))
+            {
+                var next = new List<string>();
+                foreach (var chunk in parts.Chunk(8))
+                {
+                    if (chunk.Length == 1) { next.Add(chunk[0]); continue; }
+                    var intermediate = Path.Combine(temporary, $"part-{pass}-{next.Count}.pdf");
+                    var merged = await Run(path, new[] { "--merge", intermediate }.Concat(chunk), 120, 8192, deadline.Token).ConfigureAwait(false);
+                    if (merged.OutputExceeded) return Error("KillerPDF command output exceeded limit");
+                    if (merged.ExitCode != 0) return ProcessError(merged);
+                    if (!File.Exists(intermediate) || new FileInfo(intermediate).Length > MaxPdfBytes)
+                        return Error("KillerPDF did not create an intermediate PDF within the 512 MiB limit.");
+                    next.Add(intermediate);
+                }
+                parts = next.ToArray();
+                pass++;
+            }
+            var response = await Run(path, new[] { "--merge", staged }.Concat(parts), 120, 8192, deadline.Token).ConfigureAwait(false);
             if (response.OutputExceeded) return Error("KillerPDF command output exceeded limit");
             if (response.ExitCode != 0) return ProcessError(response);
             if (!File.Exists(staged)) return Error("KillerPDF did not create the merged PDF");
+            if (new FileInfo(staged).Length > MaxPdfBytes) return Error("The merged PDF exceeds the 512 MiB tool limit.");
             var output = String(input, "output");
-            File.Copy(staged, output, false);
+            await IntegrationAdapter.PublishPdf(staged, output, deadline.Token).ConfigureAwait(false);
             return Ok(JsonSerializer.Serialize(new { output, inputCount = inputs.Length }));
         }
         catch (IOException exception) { return Error(File.Exists(String(input, "output")) ? "Output already exists" : Limit(exception.Message)); }
@@ -303,7 +325,9 @@ public static partial class KillerPdfAdapter
             }
             if (definition.Kind == OutputKind.File ? !File.Exists(staged) : !Directory.Exists(staged)) return Error("KillerPDF did not create the requested output");
             var destination = definition.Kind == OutputKind.File ? String(input, "output") : String(input, "outputFolder");
-            if (definition.Kind == OutputKind.File) File.Copy(staged, destination, false); else Directory.Move(staged, destination);
+            if (definition.Kind == OutputKind.File && Path.GetExtension(staged).Equals(".pdf", StringComparison.OrdinalIgnoreCase) && new FileInfo(staged).Length > MaxPdfBytes)
+                return Error("The resulting PDF exceeds the 512 MiB tool limit. Use fewer pages or lower image resolution.");
+            if (definition.Kind == OutputKind.File) await IntegrationAdapter.PublishPdf(staged, destination, token).ConfigureAwait(false); else Directory.Move(staged, destination);
             var created = definition.Kind == OutputKind.File ? 1 : Directory.EnumerateFileSystemEntries(destination).Count();
             // Whatever KillerPDF printed while it worked, such as a warning that a fallback dropped bookmarks
             // or form fields, goes back with the result.
@@ -334,7 +358,7 @@ public static partial class KillerPdfAdapter
 
     private static string? ValidateMerge(JsonElement input)
     {
-        if (!ObjectWith(input, "inputs", "output") || !input.TryGetProperty("inputs", out var inputs) || inputs.ValueKind != JsonValueKind.Array || inputs.GetArrayLength() is < 2 or > 8) return "Provide two to eight input PDFs and a new output path";
+        if (!ObjectWith(input, "inputs", "output") || !input.TryGetProperty("inputs", out var inputs) || inputs.ValueKind != JsonValueKind.Array || inputs.GetArrayLength() is < 2 or > 1000) return "Provide two to 1,000 input PDFs and a new output path";
         if (!input.TryGetProperty("output", out var outputValue) || outputValue.ValueKind != JsonValueKind.String || !ValidAbsolutePdf(outputValue.GetString())) return "Output must be an absolute PDF path";
         var output = outputValue.GetString()!;
         if (!Directory.Exists(Path.GetDirectoryName(output))) return "Output folder does not exist";
@@ -346,12 +370,12 @@ public static partial class KillerPdfAdapter
             try
             {
                 var info = new FileInfo(item.GetString()!);
-                if (!info.Exists || info.Length > MaxPdfBytes) return "Each input must be a PDF no larger than 64 MiB";
+                if (!info.Exists || info.Length > MaxPdfBytes) return "Each input must be a PDF no larger than 512 MiB";
                 total += info.Length;
             }
             catch { return "Unable to read an input PDF"; }
         }
-        return total > 128L * 1024 * 1024 ? "Combined inputs must be no larger than 128 MiB" : null;
+        return total > MaxPdfBytes ? "Combined inputs must be no larger than 512 MiB" : null;
     }
 
     private static string? ValidateOperation(JsonElement input, Operation definition)
@@ -421,14 +445,14 @@ public static partial class KillerPdfAdapter
         if (!input.TryGetProperty("path", out var value) || value.ValueKind != JsonValueKind.String || value.GetString() is not { Length: > 0 and <= 1024 } path
             || !Path.IsPathFullyQualified(path) || !extensions.Any(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase)))
             return "Path must name an absolute " + string.Join(", ", extensions) + " file";
-        try { var info = new FileInfo(path); return !info.Exists || info.Length > MaxPdfBytes ? "Input must be a file no larger than 64 MiB" : null; }
+        try { var info = new FileInfo(path); return !info.Exists || info.Length > MaxPdfBytes ? "Input must be a file no larger than 512 MiB" : null; }
         catch { return "Unable to read input file"; }
     }
 
     private static string? ValidatePdf(JsonElement input)
     {
         if (!input.TryGetProperty("path", out var value) || value.ValueKind != JsonValueKind.String || !ValidAbsolutePdf(value.GetString())) return "Path must name an absolute PDF file";
-        try { var info = new FileInfo(value.GetString()!); return !info.Exists || info.Length > MaxPdfBytes ? "PDF must be a file no larger than 64 MiB" : null; }
+        try { var info = new FileInfo(value.GetString()!); return !info.Exists || info.Length > MaxPdfBytes ? "PDF must be a file no larger than 512 MiB" : null; }
         catch { return "Unable to read PDF file"; }
     }
 
@@ -466,12 +490,12 @@ public static partial class KillerPdfAdapter
     private static Operation FileOperation(string name, string marker, string description, JsonObject schema, Func<JsonElement, string, List<string>> args, int timeout = 180) => new(marker, OutputKind.File, new RuntimeTool(name, description, schema), args, timeout);
     private static Operation DirectoryOperation(string name, string marker, string description, JsonObject schema, Func<JsonElement, string, List<string>> args, int timeout = 180) => new(marker, OutputKind.Directory, new RuntimeTool(name, description, schema), args, timeout);
     private static Operation Action(string name, string marker, string description, JsonObject schema, Func<JsonElement, List<string>> args, int timeout = 180) => new(marker, OutputKind.Action, new RuntimeTool(name, description, schema), (input, _) => args(input), timeout);
-    private static RuntimeTool MergeTool() => new("killerpdf_merge", "Merge two to eight local PDFs with KillerPDF into one new PDF. Use for requests such as \"killer merge these PDFs\". Never replaces an existing output file.", Schema(new JsonObject { ["inputs"] = new JsonObject { ["type"] = "array", ["items"] = PdfPath(), ["minItems"] = 2, ["maxItems"] = 8 }, ["output"] = NewPdf() }, "inputs", "output"));
+    private static RuntimeTool MergeTool() => new("killerpdf_merge", "Merge two to 1,000 local PDFs with KillerPDF into one new PDF, with at most 512 MiB of input. Use for requests such as \"killer merge these PDFs\". Never replaces an existing output file.", Schema(new JsonObject { ["inputs"] = new JsonObject { ["type"] = "array", ["items"] = PdfPath(), ["minItems"] = 2, ["maxItems"] = 1000 }, ["output"] = NewPdf() }, "inputs", "output"));
     private static RuntimeTool VerifyTool() => new("killerpdf_verify_install", "Check every installed KillerPDF program file against the SHA-256 hashes in its payload manifest and report missing, changed, or extra files. Changes nothing.", Schema(new JsonObject()));
     private static JsonObject PreflightSchema() => Schema(new JsonObject { ["path"] = PdfPath(), ["profile"] = Enum("general", "attachments", "print", "general") }, "path");
     private static JsonObject PdfPath() => new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024, ["pattern"] = "\\.[Pp][Dd][Ff]$", ["description"] = "Absolute path to a local PDF" };
     private static JsonObject NewPdf() => new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024, ["description"] = "Absolute path for a new PDF that does not already exist" };
-    private static JsonObject NewFolder() => new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024, ["description"] = "Absolute path for a new output folder" };
+    private static JsonObject NewFolder() => new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024, ["description"] = "Absolute path for a new output folder that must not already exist" };
     private static JsonObject PageRange() => new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 256, ["pattern"] = "^[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*$", ["description"] = "One-based pages such as 1-3,5,9-12" };
     private static JsonObject Password() => new() { ["type"] = "string", ["maxLength"] = 1024, ["description"] = "PDF password when required" };
     private static JsonObject Integer(int min, int max, int? defaultValue = null) { var value = new JsonObject { ["type"] = "integer", ["minimum"] = min, ["maximum"] = max }; if (defaultValue.HasValue) value["default"] = defaultValue; return value; }

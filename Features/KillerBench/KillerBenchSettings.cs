@@ -20,11 +20,13 @@ public enum KillerBenchRepairLevel
 public static class KillerBenchSettings
 {
     private const int FileLimit = 16_384;
+    private static readonly AsyncLocal<(string Mcp, string Bench)?> TestFolders = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> ApprovedSettings = new(StringComparer.Ordinal);
 
-    public static string Folder => Environment.GetEnvironmentVariable("KILLERMCP_STATE_DIR")
+    public static string Folder => TestFolders.Value?.Mcp
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerMCP");
 
-    public static string BenchFolder => Environment.GetEnvironmentVariable("KILLERBENCH_STATE_DIR")
+    public static string BenchFolder => TestFolders.Value?.Bench
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerBench");
 
     public static string SettingsPath => Path.Combine(BenchFolder, "agent-repairs.json");
@@ -59,37 +61,22 @@ public static class KillerBenchSettings
         return (KillerBenchRepairLevel.Off, null);
     }
 
-    /// <summary>True when a person at the desktop approved a repair while the setting file had this hash.</summary>
-    public static bool IsApproved(string hash)
+    /// <summary>Approval belongs to this running host, never to an editable settings file.</summary>
+    public static bool IsApproved(string hash) => ApprovedSettings.ContainsKey(hash);
+
+    /// <summary>Records desktop consent for the current settings only for this host's lifetime.</summary>
+    public static void Approve(string hash) => ApprovedSettings.TryAdd(hash, 0);
+
+    internal static IDisposable UseTestFolders(string mcp, string bench)
     {
-        try
-        {
-            using var document = JsonDocument.Parse(File.ReadAllText(ApprovalPath));
-            return document.RootElement.ValueKind == JsonValueKind.Object
-                && document.RootElement.TryGetProperty("settingsSha256", out var value) && value.ValueKind == JsonValueKind.String
-                && string.Equals(value.GetString(), hash, StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return false;
-        }
+        var previous = TestFolders.Value;
+        TestFolders.Value = (mcp, bench);
+        return new TestFolderScope(previous);
     }
 
-    /// <summary>Remembers that a person approved the setting file with this hash. A failure only means
-    /// the next repair asks again.</summary>
-    public static void Approve(string hash)
+    private sealed class TestFolderScope((string Mcp, string Bench)? previous) : IDisposable
     {
-        try
-        {
-            Directory.CreateDirectory(Folder);
-            var temporary = ApprovalPath + ".tmp";
-            File.WriteAllText(temporary, JsonSerializer.Serialize(new { settingsSha256 = hash }) + Environment.NewLine);
-            File.Move(temporary, ApprovalPath, true);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            Console.Error.WriteLine("KillerMCP could not remember the approved KillerBench setting.");
-        }
+        public void Dispose() => TestFolders.Value = previous;
     }
 
     public static KillerBenchRepairLevel? Parse(string? value) => value?.Trim().ToLowerInvariant() switch

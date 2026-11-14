@@ -41,7 +41,7 @@ public static partial class KillerShotAdapter
             new RuntimeTool("killershot_capture_region", "Take a screenshot of one rectangle of the desktop with KillerShot and return the saved PNG or JPEG path. Coordinates are screen pixels, as reported by killershot_list_monitors.", CaptureSchema(["x", "y", "width", "height"], RectProperties())),
             (input, token) => CaptureAsync(path!, input, "region", token));
         Add(help, "record --seconds", adapters,
-            new RuntimeTool("killershot_record", "Record a monitor, every monitor, a window or a rectangle to MP4 or GIF with KillerShot for a set number of seconds and return the saved file path. Recordings have no sound unless sound is set; MP4 can include system sound or the microphone.", RecordSchema()),
+            new RuntimeTool("killershot_record", "Record a monitor, every monitor, a window or a rectangle to MP4 or GIF with KillerShot for a set number of seconds and return the saved file path. Recordings have no sound unless sound is set. In MP4, mic and both record room audio through the microphone; system records computer playback.", RecordSchema()),
             (input, token) => RecordAsync(path!, input, token));
         Add(help, "recent [options]", adapters,
             new RuntimeTool("killershot_recent", "List the newest captures in KillerShot's capture library with their ids, capture times, sizes, window titles and program names.", LimitSchema(20, 20)),
@@ -119,7 +119,7 @@ public static partial class KillerShotAdapter
         if (!OptionalBoolean(input, "keepInLibrary", out bool keep)) return Task.FromResult(Error("keepInLibrary must be true or false"));
         arguments.Add("--save");
         if (!keep) arguments.Add("--no-recent");
-        arguments.AddRange(["--no-shutter", "--json"]);
+        arguments.Add("--json");
         int delay = input.TryGetProperty("delay", out var d) && d.ValueKind == JsonValueKind.Number && d.TryGetInt32(out int seconds) ? seconds : 0;
         return RunJsonAsync(path, arguments, "path", 45 + delay, token);
     }
@@ -345,7 +345,7 @@ public static partial class KillerShotAdapter
         };
         foreach (var (name, schema) in RectProperties()) properties[name] = schema;
         properties["format"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("mp4", "gif"), ["description"] = "Omit to follow KillerShot's setting" };
-        properties["sound"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("none", "system", "mic", "both"), ["default"] = "none", ["description"] = "MP4 only. Omit for no sound; mic and both record the microphone" };
+        properties["sound"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("none", "system", "mic", "both"), ["default"] = "none", ["description"] = "MP4 only. Omit for no sound; mic and both record room audio through the microphone" };
         properties["fps"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 60 };
         properties["output"] = OutputProperty(".mp4 or .gif");
         properties["clipboard"] = new JsonObject { ["type"] = "boolean", ["default"] = false, ["description"] = "Also copy the finished file to the clipboard" };

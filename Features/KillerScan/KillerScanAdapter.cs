@@ -8,6 +8,7 @@ namespace KillerMCP;
 
 public static partial class KillerScanAdapter
 {
+    private static readonly IReadOnlySet<int> CompletedNetworkResults = new HashSet<int> { 0, 3 };
     public static async Task<IReadOnlyList<AppAdapter>> CreateAsync(string? path, CancellationToken cancellationToken = default)
     {
         if (!IsFile(path)) return [];
@@ -25,7 +26,7 @@ public static partial class KillerScanAdapter
         Add(help, ["/ping <target>", "killerscan ping <target>"], adapters, Tool("killerscan_ping", "Send a bounded set of ICMP checks to one IPv4 address or hostname with KillerScan and return latency and packet loss as JSON.", TargetIntegerSchema("count", 1, 20, 4)), (input, token) => Ping(path!, input, token));
         Add(help, ["/trace <target>", "killerscan trace <target>"], adapters, Tool("killerscan_trace_route", "Trace the network path to one IPv4 address or hostname with KillerScan and return up to 64 hops as JSON.", TargetIntegerSchema("maxHops", 1, 64, 30)), (input, token) => Trace(path!, input, token));
         Add(help, ["/diagnose <target>", "killerscan diagnose <target>"], adapters, Tool("killerscan_diagnose_host", "Check DNS, ping, route selection, and selected TCP ports for one IPv4 address or hostname with KillerScan.", DiagnoseSchema()), (input, token) => Diagnose(path!, input, token));
-        Add(help, ["/watch <targets>", "killerscan watch <targets>"], adapters, Tool("killerscan_watch_hosts", "Sample availability and latency for 1 to 16 IPv4 addresses with KillerScan. Sends repeated ICMP checks for the requested bounded interval.", WatchSchema()), (input, token) => Watch(path!, input, token));
+        Add(help, ["/watch <targets>", "killerscan watch <targets>"], adapters, Tool("killerscan_watch_hosts", "Sample availability and latency for 1 to 16 IPv4 addresses with KillerScan. Sends repeated ICMP checks for the requested bounded interval. The deadline includes every target and sample, up to ten minutes; versions advertising /max-seconds return collected samples with stoppedEarly if their deadline expires.", WatchSchema()), (input, token) => Watch(path!, input, help.StandardOutput.Contains("/max-seconds <n>", StringComparison.Ordinal), token));
         Add(help, ["/speedtest", "killerscan speedtest "], adapters, Tool("killerscan_speed_test", "Run KillerScan's native KillerSpeed test. This contacts speed.killerscan.net and can transfer up to 6 GiB of generated test data plus network overhead.", EmptySchema()), (input, token) => JsonCommand(path!, input, [], ["/speedtest", "/json"], 120, _ => null, token));
         return adapters;
     }
@@ -58,7 +59,7 @@ public static partial class KillerScanAdapter
         if (!OptionalInteger(input, "limit", 1, 100, 100, out var limit)) return Error("Limit must be between 1 and 100");
         var selected = new List<string>();
         if (OptionArguments(input, options, selected, out var location) is { } refused) return Error(refused);
-        var (scope, problem) = await ResolveScopeAsync(path, target, token).ConfigureAwait(false);
+        var (scope, problem) = await ResolveScopeAsync(path, target, token, location).ConfigureAwait(false);
         if (scope is null) return Error(problem!);
         var response = await Run(path, [.. ScanArguments(scope, full, limit), .. selected], 70, 1048576, token).ConfigureAwait(false);
         var devices = DeviceArray(response, 100, "scan");
@@ -85,8 +86,9 @@ public static partial class KillerScanAdapter
             SkipChecks().Match(help) is { Success: true } line ? line.Groups[1].Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : [],
             help.Contains("killerscan locations ", StringComparison.Ordinal));
 
-        public string ScanText => (Location ? " With location, the scan uses that saved KillerScan Location's device names and types and records the run and its devices there, and the result reports whether that saved plus any baseline or new-device notes. The Location must already exist in KillerScan and is given by its name or ID" + (Listed ? ", which killerscan_list_locations lists" : "") + ". Without location nothing is saved." : "") + SharedText;
-        public string ProbeText => (Location ? " With location, the probe uses that saved KillerScan Location's device names and types and does not record a run." : "") + SharedText;
+        public string ScanText => (Location ? " With location, the scan uses that saved KillerScan Location's device names and types and records the run and its devices there, and the result reports whether that saved plus any baseline or new-device notes. The Location must already exist in KillerScan and is given by its name or ID" + (Listed ? ", which killerscan_list_locations lists" : "") + ". Without location nothing is saved." : "") + SharedText + TargetText;
+        public string ProbeText => (Location ? " With location, the probe uses that saved KillerScan Location's device names and types and does not record a run." : "") + SharedText + TargetText;
+        private const string TargetText = " Targets must be private, link-local or CGNAT addresses. A public target is accepted only when it lies within the selected saved Location's last targets, verified from KillerScan.";
         private string SharedText => (Checks.Length > 0 ? " skip lists checks to turn off." : "") + (Adapter ? " adapter sends every probe from one connected adapter, given by its Windows name or address, so the target must be on that adapter's network or routed through it." : "");
     }
 
@@ -125,16 +127,77 @@ public static partial class KillerScanAdapter
     /// never picks a larger one itself. Either way a range above <see cref="MaximumScanAddresses"/> is refused.
     /// Direct scans and scan reports both use this.
     /// </summary>
-    public static async Task<(ScanScope? Scope, string? Error)> ResolveScopeAsync(string path, string? target, CancellationToken token)
+    public static async Task<(ScanScope? Scope, string? Error)> ResolveScopeAsync(string path, string? target, CancellationToken token, string? location = null)
     {
-        if (target is not null) return Scope(target, out var given) ? (given, null) : (null, "Target must be an IPv4 host or CIDR written as four dotted numbers, such as 192.168.1.0/24, covering at most 1024 addresses");
+        if (target is not null)
+        {
+            if (!Scope(target, out var given)) return (null, "Target must be an IPv4 host or CIDR written as four dotted numbers, such as 192.168.1.0/24, covering at most 1024 addresses");
+            return await AllowedScope(path, given!, location, token).ConfigureAwait(false) ? (given, null) : (null, ScanTargetRefusal);
+        }
         var response = await Run(path, ["/network"], 15, 8192, token).ConfigureAwait(false);
         var subnet = response.ExitCode != 0 ? null : response.StandardOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Select(line => NetworkLine().Match(line)).Where(match => match.Success && match.Groups[1].Value == "SUBNET").Select(match => match.Groups[2].Value.Trim()).FirstOrDefault();
         if (subnet is null) return (null, "KillerScan did not report an active local network. Give a target to scan.");
         if (!Scope(subnet, out var local))
             return (null, $"The local network {subnet} is larger than the 1,024 addresses KillerMCP scans at once. Give a target inside it, such as one /24.");
-        return (local, null);
+        return await AllowedScope(path, local!, location, token).ConfigureAwait(false) ? (local, null) : (null, ScanTargetRefusal);
+    }
+
+    private const string ScanTargetRefusal = "Scanning and probing require private, link-local or CGNAT addresses, or a target contained in the selected saved KillerScan Location's last targets.";
+
+    private static async Task<bool> AllowedScope(string path, ScanScope scope, string? location, CancellationToken token)
+    {
+        if (!AddressRange(scope.Target, out var start, out var end)) return false;
+        bool Private(uint address) => address >> 24 == 10 || address >> 20 == 0xac1 || address >> 16 == 0xc0a8
+            || address >> 16 == 0xa9fe || address >> 22 == 0x191;
+        if (Private(start) && Private(end)) return true;
+        if (string.IsNullOrWhiteSpace(location)) return false;
+        var response = await Run(path, ["/locations", "/json"], 15, 1048576, token).ConfigureAwait(false);
+        if (response.ExitCode != 0 || response.OutputExceeded) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(response.StandardOutput);
+            if (document.RootElement.ValueKind != JsonValueKind.Array) return false;
+            var rows = document.RootElement.EnumerateArray().Where(row => row.ValueKind == JsonValueKind.Object).ToArray();
+            bool Matches(JsonElement row, string field) => row.TryGetProperty(field, out var value) && value.ValueKind == JsonValueKind.String && value.GetString()!.Equals(location.Trim(), StringComparison.OrdinalIgnoreCase);
+            var selected = rows.Where(row => Matches(row, "id")).ToArray();
+            if (selected.Length == 0) selected = rows.Where(row => Matches(row, "name")).ToArray();
+            if (selected.Length != 1 || !selected[0].TryGetProperty("lastTargets", out var targets) || targets.ValueKind != JsonValueKind.String) return false;
+            var intervals = new List<(uint Start, uint End)>();
+            foreach (var value in targets.GetString()!.Split([',', ';', ' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (!AddressRange(value, out var first, out var last)) return false;
+                intervals.Add((first, last));
+            }
+            ulong cursor = start;
+            foreach (var interval in intervals.OrderBy(value => value.Start))
+            {
+                if (interval.End < cursor) continue;
+                if (interval.Start > cursor) return false;
+                cursor = (ulong)interval.End + 1;
+                if (cursor > end) return true;
+            }
+        }
+        catch (JsonException) { }
+        return false;
+    }
+
+    private static bool AddressRange(string text, out uint first, out uint last)
+    {
+        first = last = 0;
+        uint Number(string value) { var b = IPAddress.Parse(value).GetAddressBytes(); return (uint)b[0] << 24 | (uint)b[1] << 16 | (uint)b[2] << 8 | b[3]; }
+        var range = text.Split('-');
+        if (range.Length == 2 && IsIpv4(range[0]) && byte.TryParse(range[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var finalOctet))
+            range[1] = range[0][..(range[0].LastIndexOf('.') + 1)] + finalOctet;
+        if (range.Length == 2 && IsIpv4(range[0]) && IsIpv4(range[1])) { first = Number(range[0]); last = Number(range[1]); return first <= last; }
+        var parts = text.Split('/');
+        if (parts.Length > 2 || !IsIpv4(parts[0])) return false;
+        first = last = Number(parts[0]);
+        if (parts.Length == 1) return true;
+        if (!int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var prefix) || prefix > 32) return false;
+        var mask = prefix == 0 ? 0u : uint.MaxValue << (32 - prefix);
+        first &= mask; last = first | ~mask;
+        return true;
     }
 
     public static List<string> ScanArguments(ScanScope scope, bool full, int limit)
@@ -160,13 +223,14 @@ public static partial class KillerScanAdapter
         return true;
     }
 
-    private static Task<AppCallResult> Probe(string path, ScanOptions options, JsonElement input, CancellationToken token)
+    private static async Task<AppCallResult> Probe(string path, ScanOptions options, JsonElement input, CancellationToken token)
     {
-        if (!ObjectWith(input, "target", "timeout", "location", "skip", "adapter") || !RequiredString(input, "target", out var target) || !IsIpv4(target!)) return Task.FromResult(Error("Target must be one IPv4 address"));
-        if (!OptionalInteger(input, "timeout", 5, 300, 60, out var timeout)) return Task.FromResult(Error("Timeout must be between 5 and 300 seconds"));
+        if (!ObjectWith(input, "target", "timeout", "location", "skip", "adapter") || !RequiredString(input, "target", out var target) || !IsIpv4(target!)) return Error("Target must be one IPv4 address");
+        if (!OptionalInteger(input, "timeout", 5, 300, 60, out var timeout)) return Error("Timeout must be between 5 and 300 seconds");
         var arguments = new List<string> { "/probe", target!, "/json", "/timeout", timeout.ToString(), "/limit", "1" };
-        if (OptionArguments(input, options, arguments, out _) is { } refused) return Task.FromResult(Error(refused));
-        return JsonArray(path, arguments, timeout + 10, 1, "probe", token);
+        if (OptionArguments(input, options, arguments, out var location) is { } refused) return Error(refused);
+        if (!await AllowedScope(path, new ScanScope(target!, 1), location, token).ConfigureAwait(false)) return Error(ScanTargetRefusal);
+        return await JsonArray(path, arguments, timeout + 10, 1, "probe", token).ConfigureAwait(false);
     }
 
     private static async Task<AppCallResult> Vendor(string path, JsonElement input, CancellationToken token)
@@ -176,8 +240,7 @@ public static partial class KillerScanAdapter
         try { response = await Run(path, ["/vendor", mac!], 15, 8192, token).ConfigureAwait(false); }
         catch (Exception exception) when (exception is TimeoutException or InvalidOperationException) { return Error("KillerScan could not look up the vendor: " + exception.Message); }
         var value = response.StandardOutput.Trim();
-        // A failed lookup is an error even when KillerScan printed something first.
-        if (response.ExitCode != 0 || response.OutputExceeded) return ProcessError(response);
+        if (response.OutputExceeded || response.ExitCode != 0 && !(response.ExitCode == 3 && value.Equals("Unknown", StringComparison.OrdinalIgnoreCase))) return ProcessError(response);
         return Ok(JsonSerializer.Serialize(new { mac, vendor = value.Length == 0 ? "Unknown" : value }));
     }
 
@@ -188,7 +251,7 @@ public static partial class KillerScanAdapter
     {
         if (!ObjectWith(input, "target", property) || !RequiredString(input, "target", out var target) || !ValidTarget(target!)) return Task.FromResult(Error("Target must be one IPv4 address or hostname"));
         if (!OptionalInteger(input, property, minimum, maximum, defaultValue, out var value)) return Task.FromResult(Error(rangeError));
-        return JsonCommand(path, input, ["target", property], [command, target!, flag, value.ToString(), "/json"], timeout, _ => null, token);
+        return JsonCommand(path, input, ["target", property], [command, target!, flag, value.ToString(), "/json"], timeout, _ => null, token, CompletedNetworkResults);
     }
 
     private static Task<AppCallResult> Diagnose(string path, JsonElement input, CancellationToken token)
@@ -201,10 +264,10 @@ public static partial class KillerScanAdapter
             if (ports.GetArrayLength() > 0) args.AddRange(["/ports", string.Join(',', ports.EnumerateArray().Select(port => port.GetInt32()))]);
         }
         args.Add("/json");
-        return JsonCommand(path, input, ["target", "ports"], args, 120, _ => null, token);
+        return JsonCommand(path, input, ["target", "ports"], args, 120, _ => null, token, CompletedNetworkResults);
     }
 
-    private static Task<AppCallResult> Watch(string path, JsonElement input, CancellationToken token)
+    private static Task<AppCallResult> Watch(string path, JsonElement input, bool timeLimit, CancellationToken token)
     {
         if (!ObjectWith(input, "targets", "count", "interval") || !input.TryGetProperty("targets", out var targets) || targets.ValueKind != JsonValueKind.Array || targets.GetArrayLength() is < 1 or > 16 || targets.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String || !IsIpv4(item.GetString()!))) return Task.FromResult(Error("Targets must contain 1 to 16 IPv4 addresses"));
         if (!OptionalInteger(input, "count", 1, 20, 4, out var count)) return Task.FromResult(Error("Count must be between 1 and 20"));
@@ -212,7 +275,12 @@ public static partial class KillerScanAdapter
         var args = new List<string> { "/watch" };
         args.AddRange(targets.EnumerateArray().Select(item => item.GetString()!));
         args.AddRange(["/count", count.ToString(), "/interval", interval.ToString(), "/json"]);
-        return JsonCommand(path, input, ["targets", "count", "interval"], args, 220, _ => null, token);
+        // KillerScan pings each target sequentially with a 1.2-second timeout, then waits
+        // between sample rounds. The host grace includes startup and the final JSON flush.
+        var workSeconds = (int)Math.Ceiling(targets.GetArrayLength() * count * 1.2 + (count - 1) * interval);
+        if (workSeconds + 15 > 600) return Task.FromResult(Error("This watch would exceed the ten-minute limit; reduce targets, count or interval."));
+        if (timeLimit) args.AddRange(["/max-seconds", (workSeconds + 5).ToString()]);
+        return JsonCommand(path, input, ["targets", "count", "interval"], args, workSeconds + 15, _ => null, token, CompletedNetworkResults);
     }
 
     private static async Task<AppCallResult> JsonArray(string path, IEnumerable<string> args, int timeout, int maximum, string label, CancellationToken token)
@@ -233,13 +301,13 @@ public static partial class KillerScanAdapter
         catch (JsonException) { return Error($"KillerScan returned an invalid {label} response"); }
     }
 
-    private static async Task<AppCallResult> JsonCommand(string path, JsonElement input, string[] allowed, IEnumerable<string> args, int timeout, Func<JsonElement, string?> validate, CancellationToken token)
+    private static async Task<AppCallResult> JsonCommand(string path, JsonElement input, string[] allowed, IEnumerable<string> args, int timeout, Func<JsonElement, string?> validate, CancellationToken token, IReadOnlySet<int>? successCodes = null)
     {
         if (!ObjectWith(input, allowed)) return Error("Invalid arguments");
         var problem = validate(input);
         if (problem is not null) return Error(problem);
         var response = await Run(path, args, timeout, 1048576, token).ConfigureAwait(false);
-        if (response.ExitCode != 0) return ProcessError(response);
+        if (!(successCodes?.Contains(response.ExitCode) ?? response.ExitCode == 0)) return ProcessError(response);
         try
         {
             using var document = JsonDocument.Parse(response.StandardOutput);

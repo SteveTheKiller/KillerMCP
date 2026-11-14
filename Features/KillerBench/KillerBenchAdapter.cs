@@ -54,6 +54,7 @@ public sealed class KillerBenchOptions
 public static partial class KillerBenchAdapter
 {
     private const int MaximumOutput = 4 * 1024 * 1024;
+    internal static Func<ProcessStartInfo, Process?>? ElevatedProcessStartForChecks { get; set; }
 
     private static readonly string[] Checks =
     [
@@ -357,7 +358,7 @@ public static partial class KillerBenchAdapter
             Audit(plan, "requested", null);
             // Any program that can write a file can write the repair setting, so the first repair after
             // it appears or changes needs a person at the desktop, even a safe one. The approval is
-            // remembered by the setting's hash in the KillerMCP state folder, where agents cannot write.
+            // remembered by the setting's hash only in this running host, never in an editable file.
             var (level, settingsHash) = KillerBenchSettings.ReadSettings();
             var problem = Permission(plan, level);
             if (problem is not null)
@@ -482,6 +483,7 @@ public static partial class KillerBenchAdapter
             var title = KillerBenchRepairs.Optional(input, "title") ?? "KillerBench report " + job.Started.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
             var group = KillerBenchRepairs.Optional(input, "group");
             if (title.Length > 120 || group?.Length > 240) return Error("title or group is too long");
+            if (NotesContent.AvailabilityRefusal(notes!) is { } unavailable) return Error(unavailable);
             var content = Markdown(job.Work.Result["data"] ?? job.Work.Result["text"]);
             // A full scan report can run past what a command line holds; NotesContent sends it in a file then.
             var args = new List<string> { "create", "--title", title };
@@ -491,8 +493,16 @@ public static partial class KillerBenchAdapter
             try
             {
                 args.AddRange(contentArguments);
-                var response = await ProcessRunner.RunAsync(notes!, NotesContent.Prefix(notes!).Concat(args), TimeSpan.FromSeconds(30), 1_048_576, token).ConfigureAwait(false);
-                return response.ExitCode == 0 ? Ok(response.StandardOutput.Trim()) : Error(Limit(string.IsNullOrWhiteSpace(response.StandardError) ? "KillerNotes command failed" : response.StandardError.Trim()));
+                token.ThrowIfCancellationRequested();
+                try
+                {
+                    var response = await ProcessRunner.RunAsync(notes!, NotesContent.Prefix(notes!).Concat(args), TimeSpan.FromSeconds(40), 1_048_576, token).ConfigureAwait(false);
+                    return response.ExitCode == 0 && !response.OutputExceeded ? Ok(response.StandardOutput.Trim()) : Error(Limit(response.OutputExceeded ? "KillerNotes returned too much output. Check the note before retrying." : string.IsNullOrWhiteSpace(response.StandardError) ? "KillerNotes command failed" : response.StandardError.Trim()));
+                }
+                catch (Exception exception) when (exception is TimeoutException or OperationCanceledException)
+                {
+                    return Error("KillerNotes outcome unknown. Check the note before retrying; the command may already have run.");
+                }
             }
             finally { NotesContent.Delete(folder); }
         }
@@ -667,53 +677,18 @@ public static partial class KillerBenchAdapter
             return new KillerBenchRun(direct.ExitCode, direct.StandardOutput, direct.StandardError, direct.OutputExceeded);
         }
         if (!OperatingSystem.IsWindows()) throw new InvalidOperationException("Administrator approval is only available on Windows.");
-        var folder = Path.Combine(Path.GetTempPath(), "killermcp-bench-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(folder);
-        var output = Path.Combine(folder, "out.txt");
-        var error = Path.Combine(folder, "err.txt");
-        foreach (var value in args.Append(executable).Append(output))
-        {
-            if (value.IndexOfAny(['"', '%', '&', '|', '<', '>', '^', '!', '\r', '\n', '\0']) >= 0) throw new ArgumentException("A repair argument contains a character KillerMCP will not pass to an elevated command.");
-        }
-        var line = "\"\"" + executable + "\" " + string.Join(" ", args.Select(value => "\"" + value + "\"")) + " 1>\"" + output + "\" 2>\"" + error + "\"\"";
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = Path.Combine(Environment.SystemDirectory, "cmd.exe"),
-                Arguments = "/d /s /c " + line,
-                UseShellExecute = true,
-                Verb = "runas",
-                WindowStyle = ProcessWindowStyle.Hidden,
-            }) ?? throw new InvalidOperationException("The elevated command did not start.");
-            using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
-            limit.CancelAfter(timeout);
-            try
-            {
-                await process.WaitForExitAsync(limit.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                throw new TimeoutException("The repair did not finish in time and may still be running.");
-            }
-            var text = File.Exists(output) ? await File.ReadAllTextAsync(output, CancellationToken.None).ConfigureAwait(false) : string.Empty;
-            var problem = File.Exists(error) ? await File.ReadAllTextAsync(error, CancellationToken.None).ConfigureAwait(false) : string.Empty;
-            var truncated = text.Length > MaximumOutput;
-            return new KillerBenchRun(process.ExitCode, truncated ? text[..MaximumOutput] : text, Limit(problem, 65536), truncated);
-        }
-        finally
-        {
-            try { Directory.Delete(folder, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        }
+        return await ElevatedRepairBridge.RunAsync(executable, args, timeout, token, ElevatedProcessStartForChecks).ConfigureAwait(false);
     }
 
     private static async Task<bool> DefaultConfirm(string? notifier, KillerBenchConfirmation confirmation, CancellationToken token)
     {
-        notifier ??= Environment.GetEnvironmentVariable("KILLERMCP_NOTIFIER") ?? Path.Combine(AppContext.BaseDirectory, "KillerMCP.Notify.exe");
+        notifier ??= Path.Combine(AppContext.BaseDirectory, "KillerMCP.Notify.exe");
         if (!IsFile(notifier)) return false;
         var request = Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(confirmation)));
-        var result = await ProcessRunner.RunAsync(notifier, ["--confirm-repair", request], TimeSpan.FromMinutes(5), 4096, token).ConfigureAwait(false);
-        return result.ExitCode == 0;
+        var challenge = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        var result = await ProcessRunner.RunAsync(notifier, ["--confirm-repair", request, "--consent-stdio"], TimeSpan.FromMinutes(5), 4096, token, standardInput: challenge).ConfigureAwait(false);
+        return result.ExitCode == 0 && !result.OutputExceeded
+            && string.Equals(result.StandardOutput.Trim(), "APPROVED:" + challenge, StringComparison.Ordinal);
     }
 
     private static string Markdown(JsonNode? node)

@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace KillerMCP;
 
@@ -11,6 +13,20 @@ internal static class NotesContent
     internal const int CommandLineLimit = 30000;
     internal const int NoteLimit = 500000;
     private static readonly ConcurrentDictionary<string, bool> FileSupport = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, bool> PipeSupport = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly AsyncLocal<Func<string, string>?> PipeNames = new();
+
+    internal static IDisposable WithPipeNames(Func<string, string> names)
+    {
+        var previous = PipeNames.Value;
+        PipeNames.Value = names;
+        return new PipeNameScope(previous);
+    }
+
+    private sealed class PipeNameScope(Func<string, string>? previous) : IDisposable
+    {
+        public void Dispose() => PipeNames.Value = previous;
+    }
 
     internal static IEnumerable<string> Prefix(string notes) =>
         notes.EndsWith("KillerNotes.exe", StringComparison.OrdinalIgnoreCase) ? ["--cli"] : [];
@@ -18,7 +34,28 @@ internal static class NotesContent
     internal static bool AcceptsFile(string help) => help.Contains("--content-file", StringComparison.Ordinal);
 
     // The KillerNotes adapter reads the help when it starts, so what it found replaces anything remembered.
-    internal static void Remember(string notes, string help) => FileSupport[notes] = AcceptsFile(help);
+    internal static void Remember(string notes, string help)
+    {
+        FileSupport[notes] = AcceptsFile(help);
+        PipeSupport[notes] = help.Contains("app-pipe-v1", StringComparison.Ordinal);
+    }
+
+    internal static string? AvailabilityRefusal(string notes) =>
+        PipeSupport.TryGetValue(notes, out bool required) && required && PipeMissing("KillerNotes-MCP-" + Process.GetCurrentProcess().SessionId)
+            ? "Open and unlock KillerNotes before using active-vault commands" : null;
+
+    internal static bool PipeMissing(string name)
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        name = PipeNames.Value?.Invoke(name) ?? name;
+        if (WaitNamedPipe(@"\\.\pipe\" + name, 1)) return false;
+        return Marshal.GetLastWin32Error() == 2;
+    }
+
+    [DllImport("kernel32.dll", EntryPoint = "WaitNamedPipeW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool WaitNamedPipe(string name, uint timeout);
 
     internal static async Task<bool> SupportsFileAsync(string notes, CancellationToken token)
     {

@@ -35,9 +35,12 @@ public static class KillendarAdapter
         };
         var tool = new RuntimeTool(
             "killendar_agenda",
-            "Read appointments from the active Killendar calendar, including recurring events, without changing the calendar. Use for requests such as \"killer what is on my calendar this week\". Encrypted calendars currently require an app unlock path and are unavailable through this tool.",
+            help.StandardOutput.Contains("app-pipe-v1", StringComparison.Ordinal)
+                ? "Read appointments, including recurring events, from the currently open and unlocked Killendar. Supports encrypted calendars without exposing their keys."
+                : "Read appointments from the active Killendar calendar without changing it. This older CLI cannot read encrypted calendars; update Killendar for unlocked-app reads.",
             schema);
-        return new AppAdapter(tool, (input, token) => CallAsync(path!, input, token));
+        bool pipeReads = help.StandardOutput.Contains("app-pipe-v1", StringComparison.Ordinal);
+        return new AppAdapter(tool, (input, token) => CallAsync(path!, input, token, pipeReads));
     }
 
     public static async Task<AppAdapter?> CreateAppointmentAsync(string? path, CancellationToken cancellationToken = default)
@@ -64,12 +67,13 @@ public static class KillendarAdapter
         };
         return new AppAdapter(new RuntimeTool("killendar_create_appointment",
             "Create one appointment in the currently open and unlocked Killendar. This writes calendar data. For all-day appointments, end is the next date after the last included day.", schema),
-            (input, token) => CreateAppointmentCallAsync(path!, input, token));
+            (input, token) => CreateAppointmentCallAsync(path!, input, token, help.StandardOutput.Contains("app-pipe-v1", StringComparison.Ordinal)));
     }
 
-    private static async Task<AppCallResult> CreateAppointmentCallAsync(string path, JsonElement input, CancellationToken token)
+    private static async Task<AppCallResult> CreateAppointmentCallAsync(string path, JsonElement input, CancellationToken token, bool pipeReads)
     {
         if (!ValidAppointment(input)) return new AppCallResult("Provide a title and valid local start and end times", true);
+        if (pipeReads && CalendarPipeMissing()) return new AppCallResult("Open and unlock Killendar before using calendar commands", true);
         try
         {
             var response = await RunAsync(path, ["create", input.GetRawText()], TimeSpan.FromSeconds(20), 32768, token).ConfigureAwait(false);
@@ -112,12 +116,13 @@ public static class KillendarAdapter
                text.Length <= max && (!required || !string.IsNullOrWhiteSpace(text));
     }
 
-    private static async Task<AppCallResult> CallAsync(string path, JsonElement input, CancellationToken cancellationToken)
+    private static async Task<AppCallResult> CallAsync(string path, JsonElement input, CancellationToken cancellationToken, bool pipeReads)
     {
         if (!ValidInput(input, out var date, out var days, out var limit))
         {
             return new AppCallResult("Provide a valid date, up to 31 days, and a limit up to 100 events", true);
         }
+        if (pipeReads && CalendarPipeMissing()) return new AppCallResult("Open and unlock Killendar before using calendar commands", true);
 
         try
         {
@@ -186,6 +191,8 @@ public static class KillendarAdapter
         var prefix = path.EndsWith("Killendar.exe", StringComparison.OrdinalIgnoreCase) ? new[] { "--cli" } : Array.Empty<string>();
         return ProcessRunner.RunAsync(path, prefix.Concat(arguments), timeout, maximumCharacters, cancellationToken);
     }
+
+    private static bool CalendarPipeMissing() => NotesContent.PipeMissing("Killendar-" + System.Diagnostics.Process.GetCurrentProcess().SessionId + "-CalendarCommands");
 
     private static bool IsFile(string? path)
     {

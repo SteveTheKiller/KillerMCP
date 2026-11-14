@@ -29,7 +29,7 @@ public static class KillerShellAdapter
             {
                 ["root"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024, ["description"] = "Absolute directory path to search" },
                 ["name"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 256, ["description"] = "Filename text or wildcard pattern" },
-                ["content"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 512, ["description"] = "Text to find inside files" },
+                ["content"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 512, ["description"] = "Text to find inside files. Choose a root that does not contain KillerMCP or KillerBench settings." },
                 ["limit"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 100, ["default"] = 100 },
             },
             ["required"] = new JsonArray("root"),
@@ -38,8 +38,8 @@ public static class KillerShellAdapter
         var adapters = new List<AppAdapter>
         {
             new(
-            new RuntimeTool("killershell_search_files", "Search local files with KillerShell by filename, file content, or both. Returns bounded JSON results.", schema),
-            (input, token) => SearchAsync(path!, input, token))
+            new RuntimeTool("killershell_search_files", "Search local files with KillerShell by filename, file content, or both. Returns bounded JSON results. Builds advertising a search deadline return collected matches with stoppedEarly=true after 25 seconds.", schema),
+            (input, token) => SearchAsync(path!, input, help.StandardOutput.Split('\n').Any(line => line.Contains("search <folder>", StringComparison.Ordinal) && line.Contains("--max-seconds", StringComparison.Ordinal)), token))
         };
         Add(help, "list <folder>", adapters,
             new RuntimeTool("killershell_list_directory", "List the files and folders directly inside one local directory with KillerShell.", PathSchema("Absolute directory path to list", includeLimit: true)),
@@ -185,7 +185,7 @@ public static class KillerShellAdapter
 
     /// <summary>Masks and shortens the command line of each process row and the path (the command line)
     /// of each service row. A response in any other shape goes back unchanged.</summary>
-    internal static string ProtectDetailRows(string json, string command)
+    internal static string ProtectDetailRows(string json, string command, bool truncate = true)
     {
         string field = command == "processes" ? "commandLine" : "path";
         try
@@ -193,7 +193,7 @@ public static class KillerShellAdapter
             if (JsonNode.Parse(json) is not JsonObject root || root[command] is not JsonArray rows) return json;
             foreach (var row in rows.OfType<JsonObject>())
                 if (row[field] is JsonValue value && value.TryGetValue<string>(out var text))
-                    row[field] = ProtectText(text);
+                    row[field] = truncate ? ProtectText(text) : MaskSecrets(text);
             return root.ToJsonString(new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
         }
         catch (JsonException) { return json; }
@@ -216,6 +216,7 @@ public static class KillerShellAdapter
             || !ReadOptionalLimit(input, 100, 100, out var limit))
             return new AppCallResult(Expected, true);
         var arguments = new List<string> { command, "--limit", limit.ToString(CultureInfo.InvariantCulture) };
+        string? protectedFilter = null;
         bool detail = false;
         if (input.TryGetProperty("detail", out var detailValue))
         {
@@ -226,13 +227,30 @@ public static class KillerShellAdapter
         if (input.TryGetProperty("filter", out _))
         {
             if (!ReadString(input, "filter", 256, out var text)) return new AppCallResult(Expected, true);
-            arguments.AddRange(["--filter", text!]);
+            if (command == "processes" && detail)
+            {
+                // The app's raw filter must never become an oracle for values masked below.
+                protectedFilter = text;
+                arguments[2] = "500";
+            }
+            else arguments.AddRange(["--filter", text!]);
         }
-        var result = await RunJsonAsync(path, arguments, command, JsonValueKind.Array, OutputLimit(detail), cancellationToken).ConfigureAwait(false);
-        return detail && !result.IsError ? new AppCallResult(ProtectDetailRows(result.Text, command)) : result;
+        var result = await RunJsonAsync(path, arguments, command, JsonValueKind.Array, OutputLimit(detail) * (protectedFilter is null ? 1 : 5), cancellationToken).ConfigureAwait(false);
+        if (!detail || result.IsError) return result;
+        var protectedJson = ProtectDetailRows(result.Text, command, truncate: protectedFilter is null);
+        if (protectedFilter is null) return new AppCallResult(protectedJson);
+        var root = JsonNode.Parse(protectedJson)!.AsObject();
+        var rows = root[command]!.AsArray();
+        bool Contains(JsonObject row, string field) => row[field] is JsonValue value && value.TryGetValue<string>(out var text) && text.Contains(protectedFilter, StringComparison.OrdinalIgnoreCase);
+        var matches = rows.OfType<JsonObject>().Where(row => Contains(row, "name") || Contains(row, "path") || Contains(row, "commandLine")
+            || row["pid"]?.ToString() == protectedFilter).ToArray();
+        var sourceLimited = root["limitReached"] is JsonValue limited && limited.TryGetValue<bool>(out var reached) && reached;
+        root[command] = new JsonArray(matches.Take(limit).Select(row => row.DeepClone()).ToArray());
+        root["limitReached"] = sourceLimited || matches.Length > limit;
+        return new AppCallResult(ProtectDetailRows(root.ToJsonString(), command));
     }
 
-    private static async Task<AppCallResult> SearchAsync(string path, JsonElement input, CancellationToken cancellationToken)
+    private static async Task<AppCallResult> SearchAsync(string path, JsonElement input, bool timeLimit, CancellationToken cancellationToken)
     {
         var problem = Validate(input, out var root, out var name, out var content, out var limit);
         if (problem is not null)
@@ -240,13 +258,16 @@ public static class KillerShellAdapter
             return new AppCallResult(problem, true);
         }
 
+        var refusal = content is null ? AgentPaths.ReadRefusal(root!) : AgentPaths.RecursiveReadRefusal(root!);
+        if (refusal is not null) return new AppCallResult(refusal, true);
         var arguments = new List<string> { "search", root! };
         if (name is not null) arguments.AddRange(["--name", name]);
         if (content is not null) arguments.AddRange(["--content", content]);
         arguments.AddRange(["--limit", limit.ToString(CultureInfo.InvariantCulture)]);
+        if (timeLimit) arguments.AddRange(["--max-seconds", "25"]);
         try
         {
-            var response = await RunAsync(path, arguments, TimeSpan.FromSeconds(30), 262144, cancellationToken).ConfigureAwait(false);
+            var response = await RunAsync(path, arguments, TimeSpan.FromSeconds(timeLimit ? 35 : 30), 262144, cancellationToken).ConfigureAwait(false);
             if (response.ExitCode != 0)
             {
                 return new AppCallResult(ErrorText(response), true);
@@ -289,6 +310,7 @@ public static class KillerShellAdapter
     {
         if (!ValidatePathInput(input, allowLimit: false, allowMaximum: true, out var target, out var maximum))
             return Task.FromResult(new AppCallResult("Expected an absolute file path and optional maxCharacters from 1 to 32768", true));
+        if (AgentPaths.ReadRefusal(target!) is { } refusal) return Task.FromResult(new AppCallResult(refusal, true));
         return RunJsonAsync(path, ["read", target!, "--max-chars", maximum.ToString(CultureInfo.InvariantCulture)], "text", JsonValueKind.String, 262144, cancellationToken);
     }
 
@@ -305,7 +327,7 @@ public static class KillerShellAdapter
             || !ReadString(input, "log", 16, out var log) || log is not ("Application" or "System" or "Security")
             || !ReadOptionalLimit(input, 100, 50, out var limit))
             return Task.FromResult(new AppCallResult("Expected log Application, System, or Security and an optional limit from 1 to 100", true));
-        return RunJsonAsync(path, ["events", log!, "--limit", limit.ToString(CultureInfo.InvariantCulture)], "events", JsonValueKind.Array, 524288, cancellationToken);
+        return ProtectReadResult(RunJsonAsync(path, ["events", log!, "--limit", limit.ToString(CultureInfo.InvariantCulture)], "events", JsonValueKind.Array, 524288, cancellationToken));
     }
 
     private static Task<AppCallResult> RegistryAsync(string path, JsonElement input, CancellationToken cancellationToken)
@@ -313,7 +335,33 @@ public static class KillerShellAdapter
         if (input.ValueKind != JsonValueKind.Object || input.EnumerateObject().Any(item => item.Name is not ("path" or "limit"))
             || !ReadString(input, "path", 1024, out var key) || !ReadOptionalLimit(input, 100, 100, out var limit))
             return Task.FromResult(new AppCallResult("Expected a registry key path and an optional limit from 1 to 100", true));
-        return RunJsonAsync(path, ["registry", key!, "--limit", limit.ToString(CultureInfo.InvariantCulture)], "values", JsonValueKind.Array, 524288, cancellationToken);
+        return ProtectReadResult(RunJsonAsync(path, ["registry", key!, "--limit", limit.ToString(CultureInfo.InvariantCulture)], "values", JsonValueKind.Array, 524288, cancellationToken));
+    }
+
+    private static bool SecretName(string name) => new[] { "password", "passwd", "pwd", "token", "secret", "apikey", "api_key", "api-key", "accountkey", "sharedaccesskey", "credential" }
+        .Any(word => name.Contains(word, StringComparison.OrdinalIgnoreCase));
+
+    private static async Task<AppCallResult> ProtectReadResult(Task<AppCallResult> pending)
+    {
+        var result = await pending.ConfigureAwait(false);
+        if (result.IsError) return result;
+        var root = JsonNode.Parse(result.Text)!;
+        void Protect(JsonNode? node)
+        {
+            if (node is JsonArray array) { foreach (var row in array) Protect(row); }
+            else if (node is JsonObject item)
+            {
+                var secretValue = item["name"] is JsonValue name && name.TryGetValue<string>(out var label) && SecretName(label);
+                foreach (var property in item.ToArray())
+                {
+                    if (property.Value is JsonValue value && value.TryGetValue<string>(out var text))
+                        item[property.Key] = secretValue && property.Key is "data" or "value" || SecretName(property.Key) ? "***" : MaskSecrets(text);
+                    else Protect(property.Value);
+                }
+            }
+        }
+        Protect(root);
+        return new AppCallResult(root.ToJsonString());
     }
 
     private static Task<AppCallResult> EmptyCommandAsync(string path, string command, string property, JsonElement input, CancellationToken cancellationToken)
@@ -327,7 +375,14 @@ public static class KillerShellAdapter
     {
         if (!ValidatePathInput(input, false, false, out var target, out _))
             return Task.FromResult(new AppCallResult("Expected one absolute file path", true));
-        return RunJsonAsync(path, ["hash", target!], "hash", JsonValueKind.String, 32768, cancellationToken);
+        if (AgentPaths.ReadRefusal(target!) is { } refusal) return Task.FromResult(new AppCallResult(refusal, true));
+        try
+        {
+            // Allow eight MiB per second plus startup time, within one five-minute ceiling.
+            var seconds = Math.Clamp(15d + Math.Ceiling(new FileInfo(target!).Length / (8d * 1024 * 1024)), 15d, 300d);
+            return RunJsonAsync(path, ["hash", target!], "hash", JsonValueKind.String, 32768, cancellationToken, timeout: TimeSpan.FromSeconds(seconds));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return Task.FromResult(new AppCallResult(Truncate(error.Message), true)); }
     }
 
     private static async Task<AppCallResult> RunJsonAsync(string path, IEnumerable<string> arguments, string property, JsonValueKind kind, int maximumOutput, CancellationToken cancellationToken, JsonValueKind? alternateKind = null, TimeSpan? timeout = null)

@@ -26,6 +26,20 @@ public partial class App : Application
             return;
         }
 
+        string? challenge = null;
+        if (Array.IndexOf(e.Args, "--consent-stdio") >= 0)
+        {
+            try
+            {
+                var buffer = new char[65];
+                int count = 0, read;
+                while (count < buffer.Length && (read = Console.In.Read(buffer, count, buffer.Length - count)) > 0) count += read;
+                if (count == 64 && buffer.Take(count).All(value => value >= '0' && value <= '9' || value >= 'A' && value <= 'F'))
+                    challenge = new string(buffer, 0, count);
+            }
+            catch (IOException) { }
+        }
+        if (challenge is null) { Shutdown(1); return; }
         TaskbarIdentity.UseRepair();
         RepairConfirmWindow? confirm = index + 1 < e.Args.Length ? RepairConfirmWindow.TryCreate(e.Args[index + 1]) : null;
         if (confirm is null)
@@ -34,7 +48,16 @@ public partial class App : Application
             return;
         }
         MainWindow = confirm;
-        confirm.Closed += (_, _) => Shutdown(confirm.Approved ? 0 : 1);
+        confirm.Closed += (_, _) =>
+        {
+            bool approved = confirm.Approved;
+            if (approved)
+            {
+                try { Console.Out.WriteLine("APPROVED:" + challenge); Console.Out.Flush(); }
+                catch (IOException) { approved = false; }
+            }
+            Shutdown(approved ? 0 : 1);
+        };
         confirm.Show();
     }
 

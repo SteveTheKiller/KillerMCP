@@ -16,9 +16,10 @@ internal sealed record UpdateStatus(
 internal static class UpdateChecker
 {
     private const string ReleaseApi = "https://api.github.com/repos/SteveTheKiller/KillerMCP/releases/latest";
-    private const string InstallerUrl = "https://github.com/SteveTheKiller/KillerMCP/releases/latest/download/KillerMCP-Setup.exe";
+    private static string InstallerUrl => InstallerUrlFor(AppContext.BaseDirectory);
     private const string ReleaseUrl = "https://github.com/SteveTheKiller/KillerMCP/releases/latest";
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromHours(1);
+    private static readonly TimeSpan FailedCacheLifetime = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan NotificationLifetime = TimeSpan.FromDays(1);
     private const string NotificationMutexName = @"Local\KillerMCP-UpdateNotification";
     private const string NoticeOpenedEventName = @"Local\KillerMCP-UpdateNotice-Opened";
@@ -64,7 +65,9 @@ internal static class UpdateChecker
         }
         catch
         {
-            return new UpdateStatus(currentVersion, null, false, null, false, InstallerUrl, ReleaseUrl, true);
+            var checkedAt = DateTimeOffset.UtcNow;
+            await WriteCacheAsync(cachePath, new Cache(null, checkedAt, Unavailable: true)).ConfigureAwait(false);
+            return new UpdateStatus(currentVersion, null, false, checkedAt, false, InstallerUrl, ReleaseUrl, true);
         }
     }
 
@@ -72,12 +75,19 @@ internal static class UpdateChecker
         ? $" KillerMCP {status.LatestVersion} is available. This computer has {status.InstalledVersion}. The user can download the signed installer from {status.InstallerUrl}. Do not download or install it without the user's approval."
         : string.Empty;
 
+    private static string InstallerUrlFor(string installFolder) => ReleaseUrl + "/download/" + Updates.SetupAsset.For(installFolder);
+
+    public static UpdateStatus InitialStatus(string currentVersion, string? installFolder = null) =>
+        new(currentVersion, null, false, null, false, InstallerUrlFor(installFolder ?? AppContext.BaseDirectory), ReleaseUrl, true);
+
     public static void StartMonitoring(string currentVersion, UpdateStatus initialStatus, Action<UpdateStatus> onUpdate)
     {
         // The notice waits for its window to open, so it runs beside the MCP connection instead of delaying it.
         _ = Task.Run(async () =>
         {
-            ShowNotification(initialStatus);
+            var first = initialStatus.CheckedAt.HasValue ? initialStatus : await CheckForUpdateAsync(currentVersion).ConfigureAwait(false);
+            onUpdate(first);
+            ShowNotification(first);
             while (true)
             {
                 await Task.Delay(CacheLifetime).ConfigureAwait(false);
@@ -104,12 +114,15 @@ internal static class UpdateChecker
         try
         {
             var cache = JsonSerializer.Deserialize<Cache>(await File.ReadAllTextAsync(path).ConfigureAwait(false));
-            if (cache is null || DateTimeOffset.UtcNow - cache.CheckedAt >= CacheLifetime || !TryVersion(cache.LatestVersion, out _))
+            if (cache is null || DateTimeOffset.UtcNow - cache.CheckedAt >= (cache.Unavailable ? FailedCacheLifetime : CacheLifetime)
+                || (!cache.Unavailable && !TryVersion(cache.LatestVersion, out _)))
             {
                 return null;
             }
 
-            return MakeStatus(currentVersion, cache.LatestVersion, cache.CheckedAt, true);
+            return cache.Unavailable
+                ? new UpdateStatus(currentVersion, null, false, cache.CheckedAt, true, InstallerUrl, ReleaseUrl, true)
+                : MakeStatus(currentVersion, cache.LatestVersion!, cache.CheckedAt, true);
         }
         catch
         {
@@ -163,8 +176,7 @@ internal static class UpdateChecker
         {
             string behavior = ReadBehavior();
             if (behavior == "off") return;
-            string notifier = Environment.GetEnvironmentVariable("KILLERMCP_NOTIFIER")
-                ?? Path.Combine(AppContext.BaseDirectory, "KillerMCP.Notify.exe");
+            string notifier = Path.Combine(AppContext.BaseDirectory, "KillerMCP.Notify.exe");
             if (!File.Exists(notifier)) return;
 
             // Agent clients often start several hosts at once. Only one of them may read the state,
@@ -220,6 +232,6 @@ internal static class UpdateChecker
 
     private static bool TryVersion(string? value, out Version version) => Version.TryParse(value?.Trim().TrimStart('v', 'V'), out version!);
 
-    private sealed record Cache(string LatestVersion, DateTimeOffset CheckedAt, string? Notes = null);
+    private sealed record Cache(string? LatestVersion, DateTimeOffset CheckedAt, string? Notes = null, bool Unavailable = false);
     private sealed record NotificationState(string LatestVersion, DateTimeOffset ShownAt);
 }

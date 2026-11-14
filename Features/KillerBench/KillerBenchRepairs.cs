@@ -361,7 +361,7 @@ internal static partial class KillerBenchRepairs
     private static bool SafeText(JsonElement input, string name, int maximum, out string? text)
     {
         text = Optional(input, name)?.Trim();
-        return !string.IsNullOrEmpty(text) && text.Length <= maximum && PlainText().IsMatch(text);
+        return !string.IsNullOrEmpty(text) && !text.StartsWith('-') && text.Length <= maximum && PlainText().IsMatch(text);
     }
 
     private static bool Journal(JsonElement input, string name, out string? path)

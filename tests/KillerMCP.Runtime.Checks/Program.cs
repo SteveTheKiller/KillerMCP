@@ -1,6 +1,39 @@
 using KillerMCP;
 using System.Text.Json;
 
+if (await NativeHostFixture.TryRunAsync(args)) return;
+if (ChildInputReviewChecks.Serve(args)) return;
+if (ReleaseGapReviewChecks.Serve(args)) return;
+if (args.SequenceEqual(["--review-release-gaps"])) { await ReleaseGapReviewChecks.RunAsync(); return; }
+if (args.SequenceEqual(["--review-update-flavor"])) { await UpdateFlavorReviewChecks.RunAsync(); return; }
+if (NotesBridgeReviewChecks.Serve(args)) return;
+if (NotesWorkflowReviewChecks.Serve(args)) return;
+if (args.SequenceEqual(["--review-notes-bridge"])) { await NotesBridgeReviewChecks.RunAsync(); return; }
+if (args.SequenceEqual(["--review-notes-workflows"])) { await NotesWorkflowReviewChecks.RunAsync(); return; }
+if (ElevatedOutputReviewChecks.Serve(args)) return;
+if (RepairTrustReviewChecks.Serve(args)) return;
+if (PdfDataMoveReviewChecks.Serve(args)) return;
+if (await ElevatedRepairBridge.TryRunAsync(args)) return;
+if (PositionalInputReviewChecks.Serve(args)) return;
+if (IntegrationPdfReviewChecks.Serve(args)) return;
+if (AdapterSafetyReviewChecks.Serve(args)) return;
+if (args.SequenceEqual(["--review-adapter-safety"])) { await AdapterSafetyReviewChecks.RunAsync(); return; }
+if (args.SequenceEqual(["--review-input-probe"])) { await ChildInputReviewChecks.ProbeAsync(); return; }
+if (args.SequenceEqual(["--review-child-input"])) { await ChildInputReviewChecks.RunAsync(); return; }
+if (args.SequenceEqual(["--review-positional-input"]))
+{
+    await PositionalInputReviewChecks.RunPdfAsync();
+    await PositionalInputReviewChecks.RunNotesAsync();
+    await PositionalInputReviewChecks.RunBenchAsync();
+    return;
+}
+if (args.SequenceEqual(["--review-integration-pdf"])) { await IntegrationPdfReviewChecks.RunAsync(); return; }
+if (args.SequenceEqual(["--review-integration-pdf-real"])) { await IntegrationPdfReviewChecks.RunRealAsync(); return; }
+if (args.SequenceEqual(["--review-download-paths"])) { DownloadWriteReviewChecks.Run(); PathPolicyReviewChecks.Run(); ProtectedReadReviewChecks.Run(); return; }
+if (args.SequenceEqual(["--review-data-moves"])) { DataMoveLimitReviewChecks.Run(); await PdfDataMoveReviewChecks.RunAsync(); return; }
+if (args.SequenceEqual(["--review-repair-trust"])) { RepairTrustReviewChecks.Run(); await ElevatedOutputReviewChecks.RunAsync(); return; }
+if (args.SequenceEqual(["--review-async"])) { await McpAsyncReviewChecks.RunAsync(); return; }
+
 if (NetworkPathReviewChecks.Serve(args)) return;
 if (args.SequenceEqual(["--review-network-path"])) { await NetworkPathReviewChecks.RunAsync(); return; }
 if (BenchReadOnlyChecks.Serve(args)) return;
@@ -125,13 +158,13 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     }
     if (arguments.SequenceEqual(["/network"]))
     {
-        Console.WriteLine($"INTERFACE  Ethernet\nLOCAL IP   192.0.2.10\nSUBNET     {Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_SUBNET") ?? "192.0.2.0/24"}\nGATEWAY    192.0.2.1\nDNS        192.0.2.53");
+        Console.WriteLine($"INTERFACE  Ethernet\nLOCAL IP   192.168.50.10\nSUBNET     {Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_SUBNET") ?? "192.168.50.0/24"}\nGATEWAY    192.168.50.1\nDNS        192.168.50.53");
         return;
     }
     if (arguments.SequenceEqual(["/locations", "/json"]))
     {
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_EXIT") is { Length: > 0 } listExit) { Console.Error.Write("Error: Locations are unavailable - the catalog is damaged."); Environment.ExitCode = int.Parse(listExit); return; }
-        Console.Write("[{\"id\":\"a1\",\"name\":\"Main Office\",\"customer\":\"Acme\",\"lastTargets\":\"192.0.2.0/24\",\"lastAdapter\":\"\"}]");
+        Console.Write("[{\"id\":\"a1\",\"name\":\"Main Office\",\"customer\":\"Acme\",\"lastTargets\":\"192.168.50.0/24\",\"lastAdapter\":\"\"}]");
         return;
     }
     if (arguments.Length >= 2 && arguments[0] == "/vendor")
@@ -144,13 +177,13 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
     {
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG") is { Length: > 0 } scanLog) File.WriteAllText(scanLog, string.Join(" ", arguments));
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_STDERR") is { Length: > 0 } scanNotes) Console.Error.Write(scanNotes);
-        Console.Write("[{\"IpAddress\":\"192.0.2.10\",\"Hostname\":\"workstation.example\",\"MacAddress\":\"00:11:22:33:44:55\",\"Vendor\":\"Example Devices\",\"DeviceType\":\"Computer\",\"OpenPortsDisplay\":\"80, 443\"},{\"IpAddress\":\"192.0.2.1\",\"Hostname\":\"gateway.example\",\"MacAddress\":\"00:11:22:33:44:01\",\"Vendor\":\"Example Networks\",\"DeviceType\":\"Router\",\"OpenPortsDisplay\":\"443\"}]");
+        Console.Write("[{\"IpAddress\":\"192.168.50.10\",\"Hostname\":\"workstation.example\",\"MacAddress\":\"00:11:22:33:44:55\",\"Vendor\":\"Example Devices\",\"DeviceType\":\"Computer\",\"OpenPortsDisplay\":\"80, 443\"},{\"IpAddress\":\"192.168.50.1\",\"Hostname\":\"gateway.example\",\"MacAddress\":\"00:11:22:33:44:01\",\"Vendor\":\"Example Networks\",\"DeviceType\":\"Router\",\"OpenPortsDisplay\":\"443\"}]");
         return;
     }
     if (arguments.Length > 0 && arguments[0] == "/probe")
     {
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG") is { Length: > 0 } probeLog) File.WriteAllText(probeLog, string.Join(" ", arguments));
-        Console.Write("[{\"IpAddress\":\"192.0.2.20\",\"Hostname\":\"probe.example\"}]");
+        Console.Write("[{\"IpAddress\":\"192.168.50.20\",\"Hostname\":\"probe.example\"}]");
         return;
     }
     if (arguments.Length > 0 && arguments[0] is "/ping" or "/trace" or "/diagnose" or "/watch" or "/speedtest")
@@ -469,6 +502,7 @@ try
     var stateDir = Path.Combine(root, "state");
     Environment.SetEnvironmentVariable("KILLERMCP_STATE_DIR", stateDir);
     Environment.SetEnvironmentVariable("KILLERBENCH_STATE_DIR", Path.Combine(root, "bench-state"));
+    using var benchTestFolders = KillerBenchSettings.UseTestFolders(stateDir, Path.Combine(root, "bench-state"));
     var clock = DateTimeOffset.UtcNow;
     var confirmations = new List<KillerBenchConfirmation>();
     var approve = false;
@@ -1034,7 +1068,7 @@ try
     var scanByName = scanAdapters.ToDictionary(item => item.Tool.Name);
     using var empty = JsonDocument.Parse("{}");
     var networkResult = await scanByName["killerscan_local_network"].CallAsync(empty.RootElement, CancellationToken.None);
-    Equal("192.0.2.10", JsonDocument.Parse(networkResult.Text).RootElement.GetProperty("localIp").GetString());
+    Equal("192.168.50.10", JsonDocument.Parse(networkResult.Text).RootElement.GetProperty("localIp").GetString());
     // An omitted target is the detected local network, held to the same 1,024 addresses as a given one,
     // and the result names the range that was scanned.
     var scanLog = Path.Combine(root, "scan-args.txt");
@@ -1042,10 +1076,10 @@ try
     var scanResult = await scanByName["killerscan_scan_network"].CallAsync(empty.RootElement, CancellationToken.None);
     var scanned = JsonDocument.Parse(scanResult.Text).RootElement;
     Equal(2, scanned.GetProperty("devices").GetArrayLength());
-    Equal("192.0.2.0/24", scanned.GetProperty("target").GetString());
+    Equal("192.168.50.0/24", scanned.GetProperty("target").GetString());
     // KillerScan skips the network and broadcast addresses below /31, so a /24 probes 254.
     Equal(254, scanned.GetProperty("addresses").GetInt32());
-    Equal(true, File.ReadAllText(scanLog).StartsWith("/scan 192.0.2.0/24 ", StringComparison.Ordinal));
+    Equal(true, File.ReadAllText(scanLog).StartsWith("/scan 192.168.50.0/24 ", StringComparison.Ordinal));
     File.Delete(scanLog);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_SUBNET", "10.0.0.0/22");
     Equal(1022, JsonDocument.Parse((await scanByName["killerscan_scan_network"].CallAsync(empty.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("addresses").GetInt32());
@@ -1066,11 +1100,11 @@ try
         using var shorthandTarget = JsonDocument.Parse(JsonSerializer.Serialize(new { target = shorthand }));
         Equal(true, (await scanByName["killerscan_scan_network"].CallAsync(shorthandTarget.RootElement, CancellationToken.None)).IsError);
     }
-    using var pointToPoint = JsonDocument.Parse("{\"target\":\"192.0.2.4/31\"}");
+    using var pointToPoint = JsonDocument.Parse("{\"target\":\"192.168.50.4/31\"}");
     Equal(2, JsonDocument.Parse((await scanByName["killerscan_scan_network"].CallAsync(pointToPoint.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("addresses").GetInt32());
-    using var givenTarget = JsonDocument.Parse("{\"target\":\"198.51.100.7\"}");
+    using var givenTarget = JsonDocument.Parse("{\"target\":\"192.168.50.7\"}");
     var given = JsonDocument.Parse((await scanByName["killerscan_scan_network"].CallAsync(givenTarget.RootElement, CancellationToken.None)).Text).RootElement;
-    Equal("198.51.100.7", given.GetProperty("target").GetString());
+    Equal("192.168.50.7", given.GetProperty("target").GetString());
     Equal(1, given.GetProperty("addresses").GetInt32());
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_SUBNET", null);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG", null);
@@ -1128,10 +1162,10 @@ try
     string Arguments() { var text = File.ReadAllText(scanLog); File.Delete(scanLog); return text; }
 
     // Every option reaches KillerScan, and the result says the run was saved and what KillerScan noted.
-    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_STDERR", "KillerScan: scanning 198.51.100.7 (1 addresses)...\r\nBaseline set: 2 devices are now known. None are approved yet.\r\n");
-    var saved = await ScanTool(optionScan, "killerscan_scan_network", new { target = "198.51.100.7", location = "  Main Office ", skip = new[] { "mdns", "ssdp" }, adapter = "Ethernet 2" });
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_STDERR", "KillerScan: scanning 192.168.50.7 (1 addresses)...\r\nBaseline set: 2 devices are now known. None are approved yet.\r\n");
+    var saved = await ScanTool(optionScan, "killerscan_scan_network", new { target = "192.168.50.7", location = "  Main Office ", skip = new[] { "mdns", "ssdp" }, adapter = "Ethernet 2" });
     Equal(false, saved.IsError);
-    Equal("/scan 198.51.100.7 /json /timeout 60 /limit 100 /quick /location Main Office /adapter Ethernet 2 /skip mdns,ssdp", Arguments());
+    Equal("/scan 192.168.50.7 /json /timeout 60 /limit 100 /quick /location Main Office /adapter Ethernet 2 /skip mdns,ssdp", Arguments());
     var savedResult = JsonDocument.Parse(saved.Text).RootElement;
     Equal("Main Office", savedResult.GetProperty("location").GetString());
     Equal(true, savedResult.GetProperty("saved").GetBoolean());
@@ -1146,7 +1180,7 @@ try
     foreach (var failure in new[] { "Warning: the scan could not be saved to history - disk full", "Warning: known devices could not be saved - access denied", "Warning: Location \"Main Office\" was deleted during the scan, so the run was not recorded." })
     {
         Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_STDERR", failure + "\r\n");
-        var failedSave = await ScanTool(optionScan, "killerscan_scan_network", new { target = "198.51.100.7", location = "Main Office" });
+        var failedSave = await ScanTool(optionScan, "killerscan_scan_network", new { target = "192.168.50.7", location = "Main Office" });
         Equal(false, failedSave.IsError);
         var unsavedResult = JsonDocument.Parse(failedSave.Text).RootElement;
         Equal(false, unsavedResult.GetProperty("saved").GetBoolean());
@@ -1156,16 +1190,16 @@ try
     }
 
     // Without a Location nothing is saved, so the result claims nothing about saving.
-    var temporary = JsonDocument.Parse((await ScanTool(optionScan, "killerscan_scan_network", new { target = "198.51.100.7" })).Text).RootElement;
+    var temporary = JsonDocument.Parse((await ScanTool(optionScan, "killerscan_scan_network", new { target = "192.168.50.7" })).Text).RootElement;
     Equal(false, temporary.TryGetProperty("saved", out _) || temporary.TryGetProperty("location", out _) || temporary.TryGetProperty("notes", out _));
-    Equal("/scan 198.51.100.7 /json /timeout 60 /limit 100 /quick", Arguments());
+    Equal("/scan 192.168.50.7 /json /timeout 60 /limit 100 /quick", Arguments());
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_STDERR", null);
-    await ScanTool(optionScan, "killerscan_scan_network", new { target = "198.51.100.7", skip = Array.Empty<string>() });
-    Equal("/scan 198.51.100.7 /json /timeout 60 /limit 100 /quick", Arguments());
+    await ScanTool(optionScan, "killerscan_scan_network", new { target = "192.168.50.7", skip = Array.Empty<string>() });
+    Equal("/scan 192.168.50.7 /json /timeout 60 /limit 100 /quick", Arguments());
 
-    var probed = await ScanTool(optionScan, "killerscan_probe_host", new { target = "192.0.2.20", location = "site-id", skip = new[] { "snmp" }, adapter = "192.0.2.10" });
+    var probed = await ScanTool(optionScan, "killerscan_probe_host", new { target = "192.168.50.20", location = "site-id", skip = new[] { "snmp" }, adapter = "192.168.50.10" });
     Equal(false, probed.IsError);
-    Equal("/probe 192.0.2.20 /json /timeout 60 /limit 1 /location site-id /adapter 192.0.2.10 /skip snmp", Arguments());
+    Equal("/probe 192.168.50.20 /json /timeout 60 /limit 1 /location site-id /adapter 192.168.50.10 /skip snmp", Arguments());
     Equal(JsonValueKind.Array, JsonDocument.Parse(probed.Text).RootElement.ValueKind);
 
     // Bad options are refused before anything is probed, by the adapter and by the host's schema check.
@@ -1189,7 +1223,7 @@ try
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG", null);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_HELP_STYLE", null);
-    using var probe = JsonDocument.Parse("{\"target\":\"192.0.2.20\"}");
+    using var probe = JsonDocument.Parse("{\"target\":\"192.168.50.20\"}");
     Equal(false, (await scanByName["killerscan_probe_host"].CallAsync(probe.RootElement, CancellationToken.None)).IsError);
     using var vendor = JsonDocument.Parse("{\"mac\":\"00:00:0C:00:00:00\"}");
     Equal("Cisco Systems", JsonDocument.Parse((await scanByName["killerscan_mac_vendor"].CallAsync(vendor.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("vendor").GetString());
@@ -1197,7 +1231,7 @@ try
     Equal(false, (await scanByName["killerscan_ping"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
     Equal(false, (await scanByName["killerscan_trace_route"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
     Equal(false, (await scanByName["killerscan_diagnose_host"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
-    using var targets = JsonDocument.Parse("{\"targets\":[\"192.0.2.20\"]}");
+    using var targets = JsonDocument.Parse("{\"targets\":[\"192.168.50.20\"]}");
     Equal(false, (await scanByName["killerscan_watch_hosts"].CallAsync(targets.RootElement, CancellationToken.None)).IsError);
     Equal(false, (await scanByName["killerscan_speed_test"].CallAsync(empty.RootElement, CancellationToken.None)).IsError);
     using var badTarget = JsonDocument.Parse("{\"target\":\"example.com\"}");
@@ -1241,14 +1275,17 @@ try
     using var registryArgs = JsonDocument.Parse("{\"path\":\"HKEY_CURRENT_USER\\\\Software\",\"limit\":1}");
     Equal("Fixture", JsonDocument.Parse((await shellByName["killershell_read_registry_key"].CallAsync(registryArgs.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("values")[0].GetProperty("name").GetString());
     Equal("C:\\", JsonDocument.Parse((await shellByName["killershell_list_drives"].CallAsync(emptyShell.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("drives")[0].GetProperty("name").GetString());
-    Equal(64, JsonDocument.Parse((await shellByName["killershell_hash_file"].CallAsync(shellPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("hash").GetString()!.Length);
+    var shellHashFile = Path.Combine(root, "hash-fixture.txt");
+    File.WriteAllText(shellHashFile, "fixture hash input");
+    using var shellHashPath = JsonDocument.Parse(JsonSerializer.Serialize(new { path = shellHashFile }));
+    Equal(64, JsonDocument.Parse((await shellByName["killershell_hash_file"].CallAsync(shellHashPath.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("hash").GetString()!.Length);
     // detail and filter exist because the fake help names them; storage is offered only from KillerShell 1.5.1, which this fake executable is not.
     Equal(false, shellByName.ContainsKey("killershell_storage_report"));
     Equal(true, shellByName["killershell_list_processes"].Tool.InputSchema["properties"]!.AsObject().ContainsKey("detail"));
     using var detailArgs = JsonDocument.Parse("{\"limit\":5,\"detail\":true,\"filter\":\"fix\"}");
     var detailRow = JsonDocument.Parse((await shellByName["killershell_list_processes"].CallAsync(detailArgs.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("processes")[0];
     Equal("fixture.exe /detail", detailRow.GetProperty("commandLine").GetString());
-    Equal("fix", detailRow.GetProperty("filter").GetString());
+    Equal<string?>(null, detailRow.GetProperty("filter").GetString());
     using var badDetail = JsonDocument.Parse("{\"detail\":\"yes\"}");
     Equal(true, (await shellByName["killershell_list_services"].CallAsync(badDetail.RootElement, CancellationToken.None)).IsError);
     // Detail rows stay opt-in, and secret-looking values are masked before a row leaves the host.
@@ -1349,10 +1386,10 @@ try
     Equal(false, monitorShot.IsError);
     var monitorArgs = ShotArgs(monitorShot);
     // A capture saves only the requested file and stays out of the library unless the call asks to keep it there.
-    Equal(true, monitorArgs.SequenceEqual(["capture", "--mode", "monitor", "--monitor", "2", "--no-clipboard", "--save", "--no-recent", "--no-shutter", "--json"]));
+    Equal(true, monitorArgs.SequenceEqual(["capture", "--mode", "monitor", "--monitor", "2", "--no-clipboard", "--save", "--no-recent", "--json"]));
     Equal(true, (await Shot("killershot_capture_monitor", new { monitor = "0" })).IsError);
     var allArgs = ShotArgs(await Shot("killershot_capture_all", new { clipboard = true, cursor = false, delay = 2, output = root, keepInLibrary = true }));
-    Equal(true, allArgs.SequenceEqual(["capture", "--mode", "all", "--out", root, "--clipboard", "--no-cursor", "--delay", "2", "--save", "--no-shutter", "--json"]));
+    Equal(true, allArgs.SequenceEqual(["capture", "--mode", "all", "--out", root, "--clipboard", "--no-cursor", "--delay", "2", "--save", "--json"]));
     Equal(true, (await Shot("killershot_capture_all", new { output = "relative.png" })).IsError);
     Equal(true, ShotArgs(await Shot("killershot_capture_window", new { window = "Fixture" })).Contains("Fixture"));
     Equal(true, (await Shot("killershot_capture_window", new { })).IsError);
@@ -1406,9 +1443,9 @@ try
     var reportScanLog = Path.Combine(root, "report-scan-args.txt");
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_ARGS_LOG", reportScanLog);
     Equal(false, (await Integration("killerscan_save_report_note", new { limit = 5 })).IsError);
-    Equal(true, File.ReadAllText(reportScanLog).StartsWith("/scan 192.0.2.0/24 ", StringComparison.Ordinal));
-    Equal(false, (await Integration("killerscan_save_report_note", new { target = "192.0.2.0/24", limit = 5 })).IsError);
-    Equal(true, File.ReadAllText(reportScanLog).StartsWith("/scan 192.0.2.0/24 ", StringComparison.Ordinal));
+    Equal(true, File.ReadAllText(reportScanLog).StartsWith("/scan 192.168.50.0/24 ", StringComparison.Ordinal));
+    Equal(false, (await Integration("killerscan_save_report_note", new { target = "192.168.50.0/24", limit = 5 })).IsError);
+    Equal(true, File.ReadAllText(reportScanLog).StartsWith("/scan 192.168.50.0/24 ", StringComparison.Ordinal));
     File.Delete(reportScanLog);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SCAN_SUBNET", "10.0.0.0/16");
     Equal(true, (await Integration("killerscan_save_report_note", new { limit = 5 })).IsError);
@@ -1421,12 +1458,12 @@ try
     Equal(false, (await Integration("killendar_save_agenda_note", new { date = "2026-09-28", days = 7, limit = 5 })).IsError);
     Equal(false, (await Integration("killershell_save_directory_note", new { path = root, limit = 5 })).IsError);
     Equal(false, (await Integration("killerpdf_save_pages_as_notes", new { path = sourceOne, pages = "1", dpi = 150 })).IsError);
-    // Cross-app tools take PDFs up to the same 64 MiB as the KillerPDF tools.
+    // Cross-app tools take PDFs up to the same 512 MiB as the KillerPDF tools.
     var oversizedPdf = Path.Combine(root, "oversized.pdf");
-    using (var oversizedStream = File.Create(oversizedPdf)) oversizedStream.SetLength(64L * 1024 * 1024 + 1);
+    using (var oversizedStream = File.Create(oversizedPdf)) oversizedStream.SetLength(512L * 1024 * 1024 + 1);
     var oversizedResult = await Integration("killerpdf_save_text_as_note", new { path = oversizedPdf });
     Equal(true, oversizedResult.IsError);
-    Equal(true, oversizedResult.Text.Contains("64 MiB", StringComparison.Ordinal));
+    Equal(true, oversizedResult.Text.Contains("512 MiB", StringComparison.Ordinal));
     Equal(true, (await Integration("killerpdf_save_pages_as_notes", new { path = oversizedPdf, pages = "1" })).IsError);
     File.Delete(oversizedPdf);
     // Arguments of the wrong kind get the tool's own message instead of an internal error.

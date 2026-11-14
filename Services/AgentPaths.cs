@@ -18,7 +18,7 @@ namespace KillerMCP;
 public static class AgentPaths
 {
     public const string ProtectedMessage = "Agents cannot write into the KillerMCP or KillerBench settings folders.";
-    public const string NetworkMessage = "KillerMCP opens network paths only on servers in the local network or listed in network-servers.json in the KillerMCP settings folder.";
+    public const string NetworkMessage = "KillerMCP opens network paths only by local-network IP address or by server name listed in network-servers.json in the KillerMCP settings folder.";
     public const string DeviceMessage = "Device paths are not accepted.";
     private const int LinkHops = 8;
 
@@ -35,11 +35,17 @@ public static class AgentPaths
         if (string.IsNullOrWhiteSpace(path)) return null;
         if (hops > LinkHops) return NetworkMessage;
         var normalized = path.Replace('/', '\\');
+        var ordinary = normalized.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) ? @"\\" + normalized[8..]
+            : normalized.StartsWith(@"\\?\", StringComparison.Ordinal) && IsDrivePath(normalized[4..]) ? normalized[4..] : normalized;
+        if (normalized.StartsWith(@"\\?\", StringComparison.Ordinal) && !normalized.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) && !IsDrivePath(normalized[4..])
+            || normalized.StartsWith(@"\\.\", StringComparison.Ordinal) || normalized.StartsWith(@"\??\", StringComparison.Ordinal)) return DeviceMessage;
+        var streamStart = IsDrivePath(ordinary) ? 2 : ordinary.StartsWith(@"\\", StringComparison.Ordinal) ? ordinary.IndexOf('\\', 2) : 0;
+        if (streamStart >= 0 && ordinary.IndexOf(':', streamStart) >= 0) return "Alternate data streams are not accepted.";
         if (normalized.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) return ServerRefusal(normalized[8..]);
         if (normalized.StartsWith(@"\\?\", StringComparison.Ordinal) && IsDrivePath(normalized[4..])) return LocalRefusal(normalized[4..], hops);
         if (normalized.StartsWith(@"\\?\", StringComparison.Ordinal) || normalized.StartsWith(@"\\.\", StringComparison.Ordinal) || normalized.StartsWith(@"\??\", StringComparison.Ordinal)) return DeviceMessage;
         if (normalized.StartsWith(@"\\", StringComparison.Ordinal)) return ServerRefusal(normalized[2..]);
-        return IsDrivePath(normalized) ? LocalRefusal(normalized, hops) : null;
+        return IsDrivePath(normalized) ? LocalRefusal(normalized, hops) : "Use a fully qualified file or folder path.";
     }
 
     private static bool IsDrivePath(string path) => path.Length >= 3 && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] == '\\';
@@ -106,15 +112,8 @@ public static class AgentPaths
         if (host.Length == 0) return NetworkMessage;
         if (Allowlisted(server) || Allowlisted(host)) return null;
         if (IPAddress.TryParse(host.Trim('[', ']'), out var literal)) return IsLocalNetwork(literal) ? null : NetworkMessage;
-        try
-        {
-            var addresses = Dns.GetHostAddressesAsync(host).WaitAsync(TimeSpan.FromSeconds(3)).GetAwaiter().GetResult();
-            return addresses.Length > 0 && addresses.All(IsLocalNetwork) ? null : NetworkMessage;
-        }
-        catch (Exception exception) when (exception is SocketException or TimeoutException or ArgumentException)
-        {
-            return NetworkMessage;
-        }
+        // Names must be explicitly trusted because a second DNS answer could name a different server.
+        return NetworkMessage;
     }
 
     private static bool Allowlisted(string server)
@@ -165,9 +164,44 @@ public static class AgentPaths
 
     private static IEnumerable<string> ProtectedFolders => [KillerBenchSettings.Folder, KillerBenchSettings.BenchFolder];
 
+    public static string? ReadRefusal(string path)
+    {
+        if (AccessRefusal(path) is { } access) return access;
+        try
+        {
+            var target = Resolve(path);
+            foreach (var folder in ProtectedFolders)
+                if (IsInside(target, Path.GetFullPath(folder)) || IsInside(target, Resolve(folder)))
+                    return "Agents cannot read the KillerMCP or KillerBench settings folders.";
+            return null;
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return "The input path could not be checked.";
+        }
+    }
+
+    internal static string? RecursiveReadRefusal(string path)
+    {
+        if (ReadRefusal(path) is { } refusal) return refusal;
+        try
+        {
+            var target = Resolve(path);
+            foreach (var folder in ProtectedFolders)
+                if (IsInside(Path.GetFullPath(folder), target) || IsInside(Resolve(folder), target))
+                    return "Content search cannot include KillerMCP or KillerBench settings. Choose a folder outside those settings folders.";
+            return null;
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return "The input path could not be checked.";
+        }
+    }
+
     /// <summary>Returns null when a tool may write to the path, otherwise the reason it may not.</summary>
     public static string? WriteRefusal(string path)
     {
+        if (AccessRefusal(path) is { } access) return access;
         string target;
         try
         {
@@ -183,6 +217,24 @@ public static class AgentPaths
             try
             {
                 if (IsInside(target, Resolve(folder))) return ProtectedMessage;
+            }
+            catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+            {
+                return "The output path could not be checked.";
+            }
+        }
+        foreach (var folder in new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.Startup),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs"),
+        })
+        {
+            if (string.IsNullOrEmpty(folder)) continue;
+            try
+            {
+                if (IsInside(target, Path.GetFullPath(folder)) || IsInside(target, Resolve(folder)))
+                    return "Agents cannot write into Startup or installed program folders.";
             }
             catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
             {
@@ -216,7 +268,8 @@ public static class AgentPaths
     private static bool IsInside(string target, string folder)
     {
         var root = folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return target.Equals(root, Comparison) || target.StartsWith(root + Path.DirectorySeparatorChar, Comparison);
+        return target.Equals(root, Comparison) || target.StartsWith(root + Path.DirectorySeparatorChar, Comparison)
+            || target.StartsWith(root + ":", Comparison);
     }
 
     private static string ResolveLinks(string path)

@@ -13,6 +13,7 @@ internal static class McpServer
     private const int MaximumMessageBytes = 16 * 1024 * 1024;
     private const int MaximumResultCharacters = 32 * 1024 * 1024;
     private const int MaximumRunningCalls = 32;
+    private const int MaximumLocalCalls = 8;
 
     public static async Task RunAsync()
     {
@@ -21,8 +22,9 @@ internal static class McpServer
         var json = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version!;
         var currentVersion = $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}";
-        BuiltInTools.Status = await UpdateChecker.CheckForUpdateAsync(currentVersion);
+        BuiltInTools.Status = UpdateChecker.InitialStatus(currentVersion);
         UpdateChecker.StartMonitoring(currentVersion, BuiltInTools.Status, status => BuiltInTools.Status = status);
+        _ = Task.Run(() => IntegrationAdapter.SweepStaleTemporaryFoldersAsync());
         var adaptersReady = RegisterAdaptersAsync(AppCatalog.LoadAsync());
 
         // Tool calls run on their own tasks so a slow one never holds up ping, tools/list or other calls.
@@ -30,6 +32,8 @@ internal static class McpServer
         // written as one whole line.
         var outputGate = new object();
         var running = new System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource>(StringComparer.Ordinal);
+        var localRunning = 0;
+        var externalRunning = 0;
         var calls = new List<Task>();
         void Send(object message)
         {
@@ -54,9 +58,18 @@ internal static class McpServer
             }
             JsonElement request;
             try { request = JsonSerializer.Deserialize<JsonElement>(line); }
-            catch { continue; }
-            // Only an object can be a request or a notification; anything else is ignored.
-            if (request.ValueKind != JsonValueKind.Object || !request.TryGetProperty("method", out var methodElement)) continue;
+            catch (JsonException)
+            {
+                Send(new { jsonrpc = "2.0", id = (object?)null, error = new { code = -32700, message = "Parse error: invalid JSON." } });
+                continue;
+            }
+            if (request.ValueKind != JsonValueKind.Object)
+            {
+                Send(new { jsonrpc = "2.0", id = (object?)null, error = new { code = -32600, message = "Invalid request: an object is required." } });
+                continue;
+            }
+            // Client responses have no method and do not require a server reply.
+            if (!request.TryGetProperty("method", out var methodElement)) continue;
             var method = methodElement.ValueKind == JsonValueKind.String ? methodElement.GetString() : null;
             if (!request.TryGetProperty("id", out var id))
             {
@@ -73,9 +86,13 @@ internal static class McpServer
             if (method == "tools/call")
             {
                 var key = id.GetRawText();
-                if (running.Count >= MaximumRunningCalls)
+                var callParams = request.TryGetProperty("params", out var givenParams) ? givenParams : default;
+                var localCall = ToolRegistry.IsFastLocalCall(callParams);
+                var limit = localCall ? MaximumLocalCalls : MaximumRunningCalls;
+                var occupied = localCall ? Volatile.Read(ref localRunning) : Volatile.Read(ref externalRunning);
+                if (occupied >= limit)
                 {
-                    Send(new { jsonrpc = "2.0", id, error = new { code = -32000, message = $"KillerMCP is already running {MaximumRunningCalls} tool calls. Try again when one finishes." } });
+                    Send(new { jsonrpc = "2.0", id, error = new { code = -32000, message = $"KillerMCP is already running {limit} calls in this tool group. Try again when one finishes." } });
                     continue;
                 }
                 var source = new CancellationTokenSource();
@@ -85,14 +102,15 @@ internal static class McpServer
                     Send(new { jsonrpc = "2.0", id, error = new { code = -32600, message = "A request with this id is still running." } });
                     continue;
                 }
-                var callParams = request.TryGetProperty("params", out var givenParams) ? givenParams : default;
+                if (localCall) Interlocked.Increment(ref localRunning);
+                else Interlocked.Increment(ref externalRunning);
                 calls.RemoveAll(task => task.IsCompleted);
-                calls.Add(Task.Run(async () =>
+                async Task ExecuteCallAsync()
                 {
                     try
                     {
-                        await adaptersReady.ConfigureAwait(false);
-                        var result = ToolRegistry.Call(callParams, json, source.Token);
+                        if (!localCall) await adaptersReady.ConfigureAwait(false);
+                        var result = await ToolRegistry.CallAsync(callParams, json, source.Token).ConfigureAwait(false);
                         // A cancelled request gets no reply, and a result too large to send is an error instead.
                         if (!source.IsCancellationRequested)
                         {
@@ -108,9 +126,16 @@ internal static class McpServer
                     finally
                     {
                         running.TryRemove(key, out _);
+                        if (localCall) Interlocked.Decrement(ref localRunning);
+                        else Interlocked.Decrement(ref externalRunning);
                         source.Dispose();
                     }
-                }));
+                }
+                // Windows pipe readers can occupy pool workers while app processes wait. These few
+                // bounded local operations have their own slots so that they still answer promptly.
+                calls.Add(localCall
+                    ? Task.Factory.StartNew(ExecuteCallAsync, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap()
+                    : Task.Run(ExecuteCallAsync));
                 continue;
             }
             if (method == "tools/list" && !adaptersReady.IsCompleted)

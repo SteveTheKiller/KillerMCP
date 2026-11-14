@@ -34,7 +34,40 @@ internal static partial class BuiltInTools
     }
     public static UpdateStatus Status { get; set; } = null!;
 
-    public static object Call(string? name, JsonElement arguments) => name switch
+    public static object Call(string? name, JsonElement arguments) => CallAsync(name, arguments).GetAwaiter().GetResult();
+
+    public static async Task<object> CallAsync(string? name, JsonElement arguments, CancellationToken cancellationToken = default,
+        HttpClient? client = null, TimeSpan? networkTimeout = null)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (name is not ("lookup_domain_dns" or "lookup_domain_rdap" or "lookup_cve" or "search_gifs" or "list_killer_scripts"))
+            return CallLocal(name, arguments);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(networkTimeout ?? TimeSpan.FromSeconds(name switch
+        {
+            "list_killer_scripts" => 5,
+            "lookup_cve" => 15,
+            "lookup_domain_dns" or "search_gifs" => 8,
+            _ => 10,
+        }));
+        try
+        {
+            return name switch
+            {
+                "lookup_domain_dns" => await DnsLookup(arguments, client, deadline.Token).ConfigureAwait(false),
+                "lookup_domain_rdap" => await RdapLookup(arguments, client, deadline.Token).ConfigureAwait(false),
+                "lookup_cve" => await Cve(arguments, client, deadline.Token).ConfigureAwait(false),
+                "search_gifs" => await SearchGifs(arguments, client, deadline.Token).ConfigureAwait(false),
+                _ => await KillerScripts(arguments, client, deadline.Token).ConfigureAwait(false),
+            };
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new ToolCallException("The network lookup timed out.");
+        }
+    }
+
+    private static object CallLocal(string? name, JsonElement arguments) => name switch
     {
         "text_statistics" => TextStatistics.Calculate(arguments.GetProperty("text").GetString()!),
         "convert_case" => CaseConverter.Convert(arguments.GetProperty("text").GetString()!),
@@ -63,7 +96,6 @@ internal static partial class BuiltInTools
         "lookup_windows_error" => Localize("windows-error-codes", MicrosoftReferenceLookups.SearchErrors(Query(arguments), Limit(arguments)), Locale(arguments)),
         "lookup_windows_event" => Localize("windows-event-lookup", MicrosoftReferenceLookups.SearchEvents(Query(arguments), Limit(arguments)), Locale(arguments)),
         "list_killer_modules" => KillerCatalogs.ListModules(OptionalNullableString(arguments, "name")),
-        "list_killer_scripts" => KillerScripts(arguments),
         "search_powershell_cmdlets" => PowerShellBuilder.Search(Query(arguments), Limit(arguments)),
         "get_powershell_cmdlet" => PowerShellCmdlet(arguments),
         "build_powershell_command" => PowerShellCommand(arguments),
@@ -78,7 +110,6 @@ internal static partial class BuiltInTools
         "convert_toml" => StructuredConvert(arguments, "toml"),
         "format_yaml" => YamlFormat(arguments),
         "generate_meta_tags" => MetaTagResult(arguments),
-        "search_gifs" => SearchGifs(arguments),
         "open_browser_companion_local" => OpenCompanion(),
         "get_browser_device_information_local" => BrowserState("device"),
         "get_browser_keycode_local" => BrowserState("key"),
@@ -101,15 +132,13 @@ internal static partial class BuiltInTools
         "parse_phone_number" => PhoneNumber(arguments),
         "convert_color" => Color(arguments),
         "lookup_mac_vendor" => MacVendor(arguments),
-        "lookup_domain_dns" => DnsLookup(arguments),
-        "lookup_domain_rdap" => RdapLookup(arguments),
-        "lookup_cve" => Cve(arguments),
         "generate_spf_record" => new { record = EmailRecords.BuildSpf(StringArray(arguments, "providers"), StringArray(arguments, "ipAddresses"), OptionalString(arguments, "enforcement", "-all")) },
         "generate_dmarc_record" => new { record = EmailRecords.BuildDmarc(OptionalString(arguments, "policy", "reject"), OptionalString(arguments, "subdomainPolicy", ""), OptionalInteger(arguments, "percentage", 100), StringArray(arguments, "ruaEmails"), StringArray(arguments, "rufEmails"), OptionalString(arguments, "adkim", ""), OptionalString(arguments, "aspf", "")) },
         "parse_email_headers" => EmailHeaderParser.Parse(arguments.GetProperty("headers").GetString()!),
         "test_regex" => SafeRegex.Test(arguments.GetProperty("pattern").GetString()!, arguments.GetProperty("text").GetString()!, OptionalBoolean(arguments, "global", true), OptionalBoolean(arguments, "ignoreCase"), OptionalBoolean(arguments, "multiline"), OptionalBoolean(arguments, "dotAll", true)),
         "encode_file_base64_local" => EncodeFile(arguments),
         "decode_file_base64_local" => DecodeFile(arguments),
+        "write_text_file_local" => DownloadFiles.WriteText(arguments.GetProperty("path").GetString()!, arguments.GetProperty("text").GetString()!),
         "check_pdf_signatures_local" => CheckPdfSignatures(arguments),
         "otp_private" => Otp(arguments),
         "generate_otp_secret_private" => OtpTools.GenerateSecret(OptionalString(arguments, "issuer", "killer-tools"), OptionalString(arguments, "account", "demo-user")),

@@ -52,7 +52,7 @@ internal static class ProcessRunner
 
     // standardInput, when given, is written to the app as UTF-8 and then closed. It carries what must not
     // appear on a command line, where other programs and process logs can read it.
-    public static async Task<ProcessResult> RunAsync(string executable, IEnumerable<string> arguments, TimeSpan timeout, int maximumCharacters, CancellationToken cancellationToken = default, string? standardInput = null)
+    public static async Task<ProcessResult> RunAsync(string executable, IEnumerable<string> arguments, TimeSpan timeout, int maximumCharacters, CancellationToken cancellationToken = default, string? standardInput = null, IReadOnlyDictionary<string, string?>? environment = null)
     {
         using var process = new Process
         {
@@ -63,10 +63,14 @@ internal static class ProcessRunner
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                RedirectStandardInput = standardInput is not null,
-                StandardInputEncoding = standardInput is not null ? new UTF8Encoding(false) : null,
+                RedirectStandardInput = true,
+                StandardInputEncoding = new UTF8Encoding(false),
             },
         };
+        if (environment is not null)
+            foreach (var (name, value) in environment)
+                if (value is null) process.StartInfo.Environment.Remove(name);
+                else process.StartInfo.Environment[name] = value;
         var commandLineLength = executable.Length + 3;
         foreach (var argument in arguments)
         {
@@ -134,6 +138,7 @@ internal static class ProcessRunner
             // The input is written under the same timeout and cancellation as the wait, so an app that
             // is cancelled or never reads it is stopped like any other.
             if (standardInput is not null) await WriteInputAsync(process, standardInput, timeoutSource.Token).ConfigureAwait(false);
+            else process.StandardInput.Close();
             await process.WaitForExitAsync(timeoutSource.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)

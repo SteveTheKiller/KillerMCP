@@ -13,6 +13,7 @@ internal static class ToolSafety
         "killerpdf_comments", "killerpdf_navigation_audit", "killerpdf_measurements", "killerpdf_separations",
         "killerpdf_compare_structure", "killerpdf_list_attachments", "killerpdf_recognize_fields",
         "killerpdf_list_macros", "killerpdf_list_scanners",
+        "killernotes_templates", "killernotes_trash_list", "killernotes_version_get", "killernotes_tag_definitions",
     };
 
     // KillerPDF tools that only write a new file or folder and never change their sources.
@@ -27,6 +28,7 @@ internal static class ToolSafety
         "killerpdf_convert_office", "killerpdf_convert_book", "killerpdf_data_merge", "killerpdf_replace_text", "killerpdf_export_form_data",
         "killerpdf_import_form_data", "killerpdf_xfa_to_acroform", "killerpdf_flatten_forms", "killerpdf_run_macro",
         "killerpdf_sign", "killerpdf_scan", "killerpdf_images_to_pdf",
+        "killerpdf_set_metadata", "killerpdf_set_bookmarks", "killerpdf_add_comment", "killerpdf_delete_comments", "killerpdf_crop",
     };
 
     private static readonly HashSet<string> ReadOnlyShellTools = new(StringComparer.Ordinal)
@@ -40,14 +42,17 @@ internal static class ToolSafety
     private static readonly HashSet<string> ReadOnlyShotTools = new(StringComparer.Ordinal)
     {
         "killershot_list_monitors", "killershot_list_windows", "killershot_recent", "killershot_settings",
+        "killershot_read_text", "killershot_text_languages", "killershot_read_qr",
     };
 
     private static readonly HashSet<string> DestructiveTools = new(StringComparer.Ordinal)
     {
         "killernotes_update", "killernotes_set_group_color", "killernotes_set_title_color",
         "killerpdf_print", "killerbench_repair_execute",
-        // Writes any bytes to any new path the agent names.
-        "decode_file_base64_local",
+        "decode_file_base64_local", "write_text_file_local",
+        "killershot_recording_control", "killernotes_pin", "killernotes_unpin", "killernotes_version_restore",
+        "killernotes_rename_group", "killernotes_rename_tag", "killernotes_set_tag_color",
+        "killernotes_template_group", "killernotes_daily_group",
     };
 
     private static readonly HashSet<string> NetworkTools = new(StringComparer.Ordinal)
@@ -56,11 +61,52 @@ internal static class ToolSafety
         "list_killer_scripts", "killermcp_update_status",
     };
 
+    private static readonly HashSet<string> ReadOnlyBenchTools = new(StringComparer.Ordinal)
+    {
+        "killerbench_code_lookup", "killerbench_diagnostic_scopes", "killerbench_check", "killerbench_scan",
+        "killerbench_job", "killerbench_repair_actions", "killerbench_repair_preview", "killerbench_repair_recover",
+        "killerbench_evidence", "killerbench_knowledge", "killerbench_review", "killerbench_catalog",
+    };
+
+    private static readonly HashSet<string> ReadOnlyCoreTools = new(StringComparer.Ordinal)
+    {
+        "text_statistics", "convert_case", "encode_base64", "decode_base64", "text_to_ascii_binary", "ascii_binary_to_text",
+        "draw_ascii_text", "search_emoji", "arabic_to_roman", "roman_to_arabic", "text_to_nato_alphabet", "convert_integer_base",
+        "convert_temperature", "calculate_percentage", "escape_html_entities", "unescape_html_entities", "markdown_to_html",
+        "format_sql", "convert_date_time", "lookup_exchange_ndr", "lookup_group_policy", "lookup_http_status", "lookup_m365_sku",
+        "lookup_port_protocol", "lookup_windows_error", "lookup_windows_event", "list_killer_modules", "list_killer_scripts",
+        "search_powershell_cmdlets", "get_powershell_cmdlet", "build_powershell_command", "diff_text", "format_json", "minify_json",
+        "diff_json", "convert_xml_json", "format_xml", "convert_json", "convert_yaml", "convert_toml", "format_yaml",
+        "generate_meta_tags", "search_gifs", "get_browser_device_information_local", "get_browser_keycode_local",
+        "get_browser_html_local", "get_browser_signature_local", "get_browser_camera_local", "describe_cron", "calculate_nd_exposure",
+        "calculate_exposure_equivalence", "calculate_depth_of_field", "generate_svg_placeholder", "generate_qr_code", "calculate_chmod",
+        "expand_ipv4_range", "calculate_ipv4_subnet", "generate_ipv6_ula", "json_to_csv", "parse_url", "parse_user_agent",
+        "parse_phone_number", "convert_color", "lookup_mac_vendor", "lookup_domain_dns", "lookup_domain_rdap", "lookup_cve",
+        "generate_spf_record", "generate_dmarc_record", "parse_email_headers", "test_regex", "encode_file_base64_local",
+        "check_pdf_signatures_local", "otp_private", "generate_otp_secret_private", "generate_ulids", "generate_uuids",
+        "generate_lorem_ipsum", "parse_jwt_private", "generate_rsa_keypair_private", "crypt_text_private", "hash_text_private",
+        "hmac_private", "bcrypt_private", "bip39_private", "analyze_password_private", "generate_password_private", "evaluate_math",
+        "list_film_stocks", "calculate_reciprocity", "list_film_development_options", "calculate_film_development", "killermcp_update_status",
+    };
+
+    private static readonly HashSet<string> ActiveScanTools = new(StringComparer.Ordinal)
+    {
+        "killerscan_scan_network", "killerscan_probe_host", "killerscan_ping", "killerscan_trace_route",
+        "killerscan_diagnose_host", "killerscan_watch_hosts", "killerscan_speed_test",
+    };
+
+    private static readonly HashSet<string> AdditiveShotTools = new(StringComparer.Ordinal)
+    {
+        "killershot_capture_monitor", "killershot_capture_all", "killershot_capture_window", "killershot_capture_region",
+        "killershot_record", "killershot_open_in_editor", "killershot_edit_image",
+    };
+
     public static object For(string name)
     {
         bool readOnly = IsReadOnly(name);
-        bool openWorld = name.StartsWith("killerscan_", StringComparison.Ordinal)
-            && name is not ("killerscan_local_network" or "killerscan_list_locations" or "killerscan_mac_vendor")
+        if (!readOnly && !DestructiveTools.Contains(name) && !IsKnownAdditive(name))
+            throw new InvalidOperationException("Tool annotations are missing for " + name);
+        bool openWorld = ActiveScanTools.Contains(name)
             || name is "open_browser_companion_local" or "killerpdf_print" or "killerpdf_ocr"
             or "killerpdf_scan_to_text" or "killerpdf_fix_orientation" or "killerpdf_run_macro" or "killerpdf_sign" or "killerpdf_scan"
             or "killerbench_check" or "killerbench_scan" or "killerbench_repair_preview" or "killerbench_repair_execute"
@@ -73,22 +119,8 @@ internal static class ToolSafety
         };
     }
 
-    private static bool IsReadOnly(string name)
-    {
-        if (name.StartsWith("killershell_", StringComparison.Ordinal))
-            return ReadOnlyShellTools.Contains(name);
-        if (name.StartsWith("killerbench_", StringComparison.Ordinal))
-            return name is not ("killerbench_repair_execute" or "killerbench_save_scan_note");
-        if (name.StartsWith("killershot_", StringComparison.Ordinal))
-            return ReadOnlyShotTools.Contains(name);
-        if (name.StartsWith("killernotes_", StringComparison.Ordinal)
-            || name.StartsWith("killendar_", StringComparison.Ordinal)
-            || name.StartsWith("killerscan_", StringComparison.Ordinal)
-            || name.StartsWith("killerpdf_", StringComparison.Ordinal)
-            || name is "killer_create_pdf")
-            return ReadOnlyAppTools.Contains(name);
-        return name is not ("decode_file_base64_local" or "open_browser_companion_local");
-    }
+    private static bool IsReadOnly(string name) => ReadOnlyShellTools.Contains(name) || ReadOnlyBenchTools.Contains(name)
+        || ReadOnlyShotTools.Contains(name) || ReadOnlyAppTools.Contains(name) || ReadOnlyCoreTools.Contains(name);
 
     private static bool IsKnownAdditive(string name) =>
         name is "killer_create_pdf" or "killendar_create_appointment"
@@ -103,7 +135,6 @@ internal static class ToolSafety
         or "killerpdf_ocr" or "killerpdf_resave" or "killerpdf_benchmark_render"
         or "killerpdf_rotate_pages" or "killerpdf_delete_pages" or "killerpdf_move_pages"
         or "killerpdf_insert_blank_page" or "killerpdf_duplicate_page"
-        or "open_browser_companion_local" || AdditivePdfTools.Contains(name) ||
-        name.StartsWith("killerscan_", StringComparison.Ordinal) ||
-        name.StartsWith("killershot_", StringComparison.Ordinal);
+        or "killernotes_create_from_template" or "killernotes_today" or "killernotes_restore" or "killernotes_create_tag"
+        or "open_browser_companion_local" || AdditivePdfTools.Contains(name) || ActiveScanTools.Contains(name) || AdditiveShotTools.Contains(name);
 }

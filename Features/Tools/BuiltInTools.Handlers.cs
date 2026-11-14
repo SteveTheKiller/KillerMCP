@@ -141,7 +141,7 @@ internal static partial class BuiltInTools
         try
         {
             var text = StructuredJson.Format(arguments.GetProperty("text").GetString()!, OptionalInteger(arguments, "indentSize", 3), OptionalBoolean(arguments, "sortKeys", true));
-            if (text.Length > 16_384) throw new ToolCallException("Output is too large");
+            if (text.Length > 4 * 1024 * 1024) throw new ToolCallException("Output is too large");
             return new { text };
         }
         catch (ToolCallException) { throw; }
@@ -155,7 +155,7 @@ internal static partial class BuiltInTools
         try
         {
             var text = StructuredJson.Minify(arguments.GetProperty("text").GetString()!);
-            if (text.Length > 16_384) throw new ToolCallException("Output is too large");
+            if (text.Length > 4 * 1024 * 1024) throw new ToolCallException("Output is too large");
             return new { text };
         }
         catch (ToolCallException) { throw; }
@@ -169,7 +169,7 @@ internal static partial class BuiltInTools
         try
         {
             var value = StructuredJson.Diff(arguments.GetProperty("left").GetString()!, arguments.GetProperty("right").GetString()!, OptionalBoolean(arguments, "onlyDifferences", true));
-            if (JsonSerializer.Serialize(value, CamelCaseJson).Length > 16_384) throw new ToolCallException("Output is too large");
+            if (JsonSerializer.Serialize(value, CamelCaseJson).Length > 4 * 1024 * 1024) throw new ToolCallException("Output is too large");
             return value;
         }
         catch (ToolCallException) { throw; }
@@ -217,7 +217,7 @@ internal static partial class BuiltInTools
                 ("toml", "yaml") => StructuredTextConverter.TomlToYaml(text),
                 _ => throw new FormatException(),
             };
-            if (converted.Length > 16_384) throw new ToolCallException("Output is too large");
+            if (converted.Length > (from == "json" ? 4 * 1024 * 1024 : 16_384)) throw new ToolCallException("Output is too large");
             return new { text = converted };
         }
         catch (ToolCallException) { throw; }
@@ -303,13 +303,14 @@ internal static partial class BuiltInTools
         }
         catch (Exception) { throw new ToolCallException("Unable to process encrypted text"); }
     }
-    private static object DnsLookup(JsonElement arguments)
+    private static async Task<object> DnsLookup(JsonElement arguments, HttpClient? client, CancellationToken cancellationToken)
     {
         try
         {
-            var result = DomainDnsLookup.LookupAsync(arguments.GetProperty("name").GetString()!, OptionalString(arguments, "type", "A")).GetAwaiter().GetResult();
+            var result = await DomainDnsLookup.LookupAsync(arguments.GetProperty("name").GetString()!, OptionalString(arguments, "type", "A"), client, cancellationToken).ConfigureAwait(false);
             return new { status = result.Status, answers = result.Answers.Select(answer => new { name = answer.Name, type = answer.Type, ttl = answer.Ttl, data = answer.Data }) };
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception) { throw new ToolCallException("DNS lookup is unavailable"); }
     }
     private static object MarkdownToHtml(JsonElement arguments)
@@ -335,23 +336,26 @@ internal static partial class BuiltInTools
         catch (InvalidDataException) { throw new ToolCallException("Output is too large"); }
         catch (Exception) { throw new ToolCallException("Invalid SQL formatting request"); }
     }
-    private static object SearchGifs(JsonElement arguments)
+    private static async Task<object> SearchGifs(JsonElement arguments, HttpClient? client, CancellationToken cancellationToken)
     {
-        try { return GifSearch.SearchAsync(arguments.GetProperty("query").GetString()!, Limit(arguments)).GetAwaiter().GetResult(); }
+        try { return await GifSearch.SearchAsync(arguments.GetProperty("query").GetString()!, Limit(arguments), client, cancellationToken).ConfigureAwait(false); }
+        catch (OperationCanceledException) { throw; }
         catch (Exception) { throw new ToolCallException("GIF search is unavailable"); }
     }
-    private static object RdapLookup(JsonElement arguments)
+    private static async Task<object> RdapLookup(JsonElement arguments, HttpClient? client, CancellationToken cancellationToken)
     {
         try
         {
-            var result = DomainRdapLookup.LookupAsync(arguments.GetProperty("domain").GetString()!).GetAwaiter().GetResult();
+            var result = await DomainRdapLookup.LookupAsync(arguments.GetProperty("domain").GetString()!, client, cancellationToken).ConfigureAwait(false);
             return new { domain = result.Domain, handle = result.Handle, status = result.Status, events = result.Events.Select(value => new { eventAction = value.EventAction, eventDate = value.EventDate }), nameservers = result.Nameservers, dnssecSigned = result.DnssecSigned };
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception) { throw new ToolCallException("RDAP lookup is unavailable for this domain"); }
     }
-    private static object Cve(JsonElement arguments)
+    private static async Task<object> Cve(JsonElement arguments, HttpClient? client, CancellationToken cancellationToken)
     {
-        try { return CveLookup.LookupAsync(arguments.GetProperty("query").GetString()!).GetAwaiter().GetResult(); }
+        try { return await CveLookup.LookupAsync(arguments.GetProperty("query").GetString()!, client, cancellationToken).ConfigureAwait(false); }
+        catch (OperationCanceledException) { throw; }
         catch { throw new ToolCallException("CVE lookup is unavailable"); }
     }
     private static object PhoneNumber(JsonElement arguments)
@@ -382,13 +386,14 @@ internal static partial class BuiltInTools
             throw new ToolCallException("Invalid MAC address");
         }
     }
-    private static object KillerScripts(JsonElement arguments)
+    private static async Task<object> KillerScripts(JsonElement arguments, HttpClient? client, CancellationToken cancellationToken)
     {
         try
         {
-            return KillerCatalogs.ListScriptsAsync(OptionalString(arguments, "query", "")).GetAwaiter().GetResult();
+            return await KillerCatalogs.ListScriptsAsync(OptionalString(arguments, "query", ""), client, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidDataException or JsonException)
+        catch (OperationCanceledException) { throw; }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidDataException or JsonException)
         {
             throw new ToolCallException("Script catalog is unavailable");
         }
@@ -451,7 +456,7 @@ internal static partial class BuiltInTools
     {
         try
         {
-            return Base64Files.Decode(arguments.GetProperty("path").GetString()!, arguments.GetProperty("base64").GetString()!);
+            return DownloadFiles.Decode(arguments.GetProperty("path").GetString()!, arguments.GetProperty("base64").GetString()!);
         }
         catch (FormatException exception)
         {
