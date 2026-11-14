@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Added
 
+- `killerpdf_convert_book` converts EPUB and DjVu books to PDF with KillerPDF 1.9.3 or later.
 - Expanded the port reference with 58 firewall and network appliance entries for common MSP platforms.
 
 ## [0.9.3] - 2026-11-03

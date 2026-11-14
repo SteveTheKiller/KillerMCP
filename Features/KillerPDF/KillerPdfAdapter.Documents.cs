@@ -13,6 +13,8 @@ public static partial class KillerPdfAdapter
     private static readonly string[] OfficeOutputs = [".docx", ".xlsx", ".pptx", ".html", ".md", ".txt", ".json"];
     private static readonly string[] FormDataOutputs = [".fdf", ".xfdf", ".json"];
     private static readonly string[] OfficeInputs = [".docx", ".xlsx", ".doc", ".xls"];
+    private static readonly string[] BookInputs = [".epub", ".djvu", ".djv"];
+    private static readonly string[] BookLayoutInputs = ["paper", "width", "height", "margin"];
 
     private static IEnumerable<Operation> DocumentOperations()
     {
@@ -159,6 +161,9 @@ public static partial class KillerPdfAdapter
             Schema(new JsonObject { ["path"] = FilePath("Absolute path to a local .docx, .xlsx, .doc or .xls file"), ["output"] = NewPdf() }, "path", "output"),
             (input, output) => ["--convert-office", String(input, "path"), output], 300)
             with { InputExtensions = OfficeInputs };
+        yield return FileOperation("killerpdf_convert_book", "--convert-book <in.epub", "Convert a local EPUB or DjVu book to a new PDF. For EPUB, set the page size with paper (A4 when omitted) or with width and height in millimeters, and the margin in millimeters; DjVu keeps its own pages and takes none of these. Book conversion of both formats is still in development in KillerPDF, and it reports any chapters or text it left out. Never changes the source.",
+            BookSchema(), (input, output) => Options(["--convert-book", String(input, "path"), output], input, ("paper", "--paper"), ("width", "--width"), ("height", "--height"), ("margin", "--margin")), 600)
+            with { InputExtensions = BookInputs };
         yield return DirectoryOperation("killerpdf_data_merge", "--data-merge <template.pdf>", "Fill one copy of a local PDF form per record of a CSV, JSON or XLSX file, writing the copies into a new folder. Never changes the sources.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["data"] = FilePath("Absolute path to a local .csv, .json or .xlsx file"), ["outputFolder"] = NewFolder(), ["name"] = Text(256, null, "File name template for each copy"), ["flatten"] = Boolean(false) }, "path", "data", "outputFolder"),
             (input, output) => Options(["--data-merge", String(input, "path"), String(input, "data"), output], input, ("name", "--name"), ("flatten", "--flatten")), 600)
@@ -218,6 +223,26 @@ public static partial class KillerPdfAdapter
             Schema(new JsonObject { ["images"] = ListOf(FilePath("Absolute path to a local .png, .jpg, .jpeg, .tif, .tiff, .bmp or .gif image", "\\.(?:[Pp][Nn][Gg]|[Jj][Pp][Ee]?[Gg]|[Tt][Ii][Ff][Ff]?|[Bb][Mm][Pp]|[Gg][Ii][Ff])$"), 1, 50), ["output"] = NewPdf() }, "images", "output")),
             (input, output) => ["--merge", output, .. Strings(input, "images")], 300)
             with { InputExtensions = [], ExtraFiles = ["images"] };
+    }
+
+    // Book layout sizes are millimeters, unlike the points other KillerPDF tools take. Paper has no schema
+    // default, because a client that fills defaults in would send it with a DjVu book, which refuses it.
+    private static JsonObject BookSchema()
+    {
+        static JsonObject Side(string description) => new() { ["type"] = "number", ["exclusiveMinimum"] = 0, ["maximum"] = 5080, ["description"] = description };
+        var paper = Choice("a4", "letter", "legal");
+        paper["description"] = "EPUB page size, A4 when omitted. Not for DjVu.";
+        var schema = Schema(new JsonObject
+        {
+            ["path"] = FilePath("Absolute path to a local .epub, .djvu or .djv book", "\\.(?:[Ee][Pp][Uu][Bb]|[Dd][Jj][Vv][Uu]?)$"),
+            ["output"] = NewPdf(),
+            ["paper"] = paper,
+            ["width"] = Side("EPUB page width in millimeters, given with height; replaces paper. Not for DjVu."),
+            ["height"] = Side("EPUB page height in millimeters, given with width; replaces paper. Not for DjVu."),
+            ["margin"] = new JsonObject { ["type"] = "number", ["minimum"] = 0, ["maximum"] = 1000, ["description"] = "EPUB page margin in millimeters. Not for DjVu." },
+        }, "path", "output");
+        schema["dependentRequired"] = new JsonObject { ["width"] = new JsonArray("height"), ["height"] = new JsonArray("width") };
+        return schema;
     }
 
     private static JsonObject SignatureSchema(JsonObject properties)

@@ -80,6 +80,12 @@ public static partial class KillerPdfAdapter
         "killerpdf_delete_comments", "killerpdf_crop",
     };
 
+    // Commands KillerPDF added in 1.9.3, so their tools stay hidden until then.
+    private static readonly HashSet<string> Release193Tools = new(StringComparer.Ordinal)
+    {
+        "killerpdf_convert_book",
+    };
+
     private static async Task<Version?> VersionAsync(string path, CancellationToken token)
     {
         try
@@ -98,6 +104,7 @@ public static partial class KillerPdfAdapter
     {
         bool hasRelease192 = version is not null && version >= new Version(1, 9, 2);
         if (!hasRelease192 && Release192Tools.Contains(operation.Tool.Name)) return null;
+        if (!(version is not null && version >= new Version(1, 9, 3)) && Release193Tools.Contains(operation.Tool.Name)) return null;
         var definition = version is not null && version >= CurrentVersion ? operation : ForOlderVersion(operation);
         if (definition is not null && !hasRelease192 && operation.Tool.Name == "killerpdf_print")
         {
@@ -386,6 +393,10 @@ public static partial class KillerPdfAdapter
                 if (!names.Add(Path.GetFileName(source))) return "Bates inputs must have different file names so every stamped PDF is preserved";
             }
         }
+        // KillerPDF lays out EPUB pages itself; a DjVu book keeps its own pages, so it refuses layout options.
+        if (definition.Tool.Name == "killerpdf_convert_book" && !String(input, "path").EndsWith(".epub", StringComparison.OrdinalIgnoreCase)
+            && BookLayoutInputs.Any(name => input.TryGetProperty(name, out _)))
+            return "paper, width, height and margin apply to EPUB books only, not DjVu";
         if (!OptionalPageRange(input, "pages")) return "Invalid page range";
         if (!OptionalInteger(input, "dpi", 36, 1200)) return "DPI must be between 36 and 1200";
         if (!OptionalInteger(input, "copies", 1, 99)) return "Copies must be between 1 and 99";

@@ -24,7 +24,7 @@ internal static class ToolSafety
         "killerpdf_extract_attachments", "killerpdf_add_form_fields", "killerpdf_set_layer", "killerpdf_portfolio_view",
         "killerpdf_add_attachment", "killerpdf_edit_attachment", "killerpdf_repair_links", "killerpdf_table_of_contents",
         "killerpdf_page_labels", "killerpdf_initial_view", "killerpdf_redact", "killerpdf_protect", "killerpdf_export",
-        "killerpdf_convert_office", "killerpdf_data_merge", "killerpdf_replace_text", "killerpdf_export_form_data",
+        "killerpdf_convert_office", "killerpdf_convert_book", "killerpdf_data_merge", "killerpdf_replace_text", "killerpdf_export_form_data",
         "killerpdf_import_form_data", "killerpdf_xfa_to_acroform", "killerpdf_flatten_forms", "killerpdf_run_macro",
         "killerpdf_sign", "killerpdf_scan", "killerpdf_images_to_pdf",
     };

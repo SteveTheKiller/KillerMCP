@@ -179,6 +179,7 @@ PDF creation uses the installed Microsoft Edge print engine in a private session
 - Render bounded benchmark images with timing data.
 - Rotate, delete, move, insert, or duplicate pages into a new PDF when the installed KillerPDF version supports those commands.
 - Read document details or search PDF text without changing the file when the installed KillerPDF version supports those commands.
+- With KillerPDF 1.9.3 or newer, convert an EPUB or DjVu book into a new PDF. EPUB books take a paper size of A4, Letter or Legal, or a width and height in millimeters, and a margin in millimeters. DjVu books keep their own pages. Book conversion is still in development in KillerPDF, and the result reports any chapters or text it left out.
 - Run general, attachment, or print preflight checks when the installed build supports them.
 - Run an accessibility report when the installed build supports it.
 - Refuse to overwrite existing files or output folders.
