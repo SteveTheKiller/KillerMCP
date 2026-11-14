@@ -356,9 +356,8 @@ public static partial class KillerBenchAdapter
             var command = "killerbench-cli " + string.Join(" ", plan.ExecuteArguments.Select(argument => argument.Contains(' ') ? "\"" + argument + "\"" : argument));
             var result = new JsonObject { ["action"] = plan.Action, ["tier"] = TierName(plan.Tier), ["target"] = plan.Target };
             Audit(plan, "requested", null);
-            // Any program that can write a file can write the repair setting, so the first repair after
-            // it appears or changes needs a person at the desktop, even a safe one. The approval is
-            // remembered by the setting's hash only in this running host, never in an editable file.
+            // The dialog reviews the repair. Only the authenticated Windows approval exchange can
+            // authorize dispatch and accept the current settings hash for this host's lifetime.
             var (level, settingsHash) = KillerBenchSettings.ReadSettings();
             var problem = Permission(plan, level);
             if (problem is not null)
@@ -369,6 +368,13 @@ public static partial class KillerBenchAdapter
                 return result;
             }
             var settingChanged = settingsHash is null || !KillerBenchSettings.IsApproved(settingsHash);
+            if (Environment.IsPrivilegedProcess && ElevatedProcessStartForChecks is null && options.RunElevated is null)
+            {
+                result["outcome"] = "NotApproved";
+                result["detail"] = "Restart the agent client normally. An already elevated KillerMCP cannot request fresh Windows administrator approval.";
+                Audit(plan, "denied", null);
+                return result;
+            }
             if (plan.Tier == KillerBenchTier.B || settingChanged)
             {
                 job.Status = "waiting for approval on the desktop";
@@ -380,7 +386,6 @@ public static partial class KillerBenchAdapter
                 try
                 {
                     approved = await Confirm(new KillerBenchConfirmation(plan.Action, plan.Title, plan.Tier == KillerBenchTier.B ? "Disruptive" : "Safe", effects, plan.Target, command), token).ConfigureAwait(false);
-                    if (approved && settingChanged) KillerBenchSettings.Approve(settingsHash!);
                 }
                 catch (Exception exception) when (exception is IOException or InvalidOperationException or Win32Exception or TimeoutException or OperationCanceledException)
                 {
@@ -396,12 +401,14 @@ public static partial class KillerBenchAdapter
                 }
             }
 
-            // The approval can wait minutes, so the setting, its approval and the lock are read again right
-            // before the repair starts. Turning repairs off meanwhile stops it.
-            var (levelNow, hashNow) = KillerBenchSettings.ReadSettings();
-            var problemNow = hashNow is null || !string.Equals(hashNow, settingsHash, StringComparison.Ordinal)
-                ? "The KillerBench repair setting changed while this repair waited, so nothing changed. Preview it again."
-                : Permission(plan, levelNow);
+            string? CurrentProblem()
+            {
+                var (levelNow, hashNow) = KillerBenchSettings.ReadSettings();
+                return hashNow is null || !string.Equals(hashNow, settingsHash, StringComparison.Ordinal)
+                    ? "The KillerBench repair setting changed while this repair waited, so nothing changed. Preview it again."
+                    : Permission(plan, levelNow);
+            }
+            var problemNow = CurrentProblem();
             if (problemNow is not null)
             {
                 Audit(plan, "denied", null);
@@ -410,16 +417,44 @@ public static partial class KillerBenchAdapter
                 return result;
             }
 
-            job.Status = "running";
+            job.Status = "waiting for Windows administrator approval";
             // Once a repair starts it runs to its own time limit. Cancelling the request that started it,
             // for example because the agent client closed, would stop it partway and leave the PC in an
             // unknown state, so the repair does not take the request's cancellation. The host waits for it.
             KillerBenchRun run;
             try
             {
-                run = plan.Elevate
-                    ? await Elevated(path, plan.ExecuteArguments, TimeSpan.FromSeconds(plan.ExecuteSeconds), CancellationToken.None).ConfigureAwait(false)
-                    : await Direct(plan.ExecuteArguments, plan.ExecuteSeconds, CancellationToken.None).ConfigureAwait(false);
+                void BeforeCommit()
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (CurrentProblem() is { } changed) throw new RepairConsentException(changed);
+                    job.Status = "running";
+                }
+                if (plan.Elevate && options.RunElevated is { } custom)
+                {
+                    BeforeCommit();
+                    run = await custom(path, plan.ExecuteArguments, TimeSpan.FromSeconds(plan.ExecuteSeconds), CancellationToken.None).ConfigureAwait(false);
+                }
+                else
+                {
+                    run = await ElevatedRepairBridge.RunAsync(path, plan.ExecuteArguments, TimeSpan.FromSeconds(plan.ExecuteSeconds),
+                        token, ElevatedProcessStartForChecks, plan.Elevate, BeforeCommit).ConfigureAwait(false);
+                }
+                // The UAC wait is complete. A plain review click never reaches this approval cache.
+                if (CurrentProblem() is null) KillerBenchSettings.Approve(settingsHash!);
+                if (!plan.Elevate)
+                {
+                    if (token.IsCancellationRequested) throw new RepairConsentException("The repair request was canceled before original-user execution.");
+                    if (CurrentProblem() is { } changed) throw new RepairConsentException(changed);
+                    run = await Direct(plan.ExecuteArguments, plan.ExecuteSeconds, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch (RepairConsentException exception)
+            {
+                Audit(plan, "denied", null);
+                result["outcome"] = "NotApproved";
+                result["detail"] = exception.Message;
+                return result;
             }
             catch (Win32Exception exception) when (exception.NativeErrorCode == 1223)
             {
@@ -428,7 +463,7 @@ public static partial class KillerBenchAdapter
                 result["detail"] = "Windows administrator approval was declined, so nothing changed.";
                 return result;
             }
-            catch (Exception exception) when (exception is TimeoutException or IOException or InvalidOperationException or Win32Exception or ArgumentException or OperationCanceledException)
+            catch (Exception exception) when (exception is TimeoutException or IOException or InvalidDataException or InvalidOperationException or Win32Exception or ArgumentException or OperationCanceledException)
             {
                 var saved = Lock(plan, "The repair did not report a result: " + exception.Message, null);
                 result["outcome"] = "Uncertain";
@@ -596,9 +631,6 @@ public static partial class KillerBenchAdapter
             return new KillerBenchRun(result.ExitCode, result.StandardOutput, result.StandardError, result.OutputExceeded);
         }
 
-        private Task<KillerBenchRun> Elevated(string executable, IReadOnlyList<string> args, TimeSpan timeout, CancellationToken token) =>
-            options.RunElevated is { } custom ? custom(executable, args, timeout, token) : DefaultElevated(executable, args, timeout, token);
-
         private Task<bool> Confirm(KillerBenchConfirmation confirmation, CancellationToken token) =>
             options.Confirm is { } custom ? custom(confirmation, token) : DefaultConfirm(options.Notifier, confirmation, token);
 
@@ -671,11 +703,6 @@ public static partial class KillerBenchAdapter
 
     private static async Task<KillerBenchRun> DefaultElevated(string executable, IReadOnlyList<string> args, TimeSpan timeout, CancellationToken token)
     {
-        if (Environment.IsPrivilegedProcess)
-        {
-            var direct = await ProcessRunner.RunAsync(executable, args, timeout, MaximumOutput, token).ConfigureAwait(false);
-            return new KillerBenchRun(direct.ExitCode, direct.StandardOutput, direct.StandardError, direct.OutputExceeded);
-        }
         if (!OperatingSystem.IsWindows()) throw new InvalidOperationException("Administrator approval is only available on Windows.");
         return await ElevatedRepairBridge.RunAsync(executable, args, timeout, token, ElevatedProcessStartForChecks).ConfigureAwait(false);
     }

@@ -21,14 +21,12 @@ internal static class ElevatedOutputReviewChecks
         File.WriteAllText(victim, "untouched");
         KillerBenchAdapter.ElevatedProcessStartForChecks = start =>
         {
-            start.UseShellExecute = false;
-            start.Verb = "";
             var output = Regex.Match(start.Arguments, "1>\\\"([^\\\"]+)\\\"");
             if (output.Success)
             {
                 if (!CreateHardLink(output.Groups[1].Value, victim, IntPtr.Zero)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
             }
-            return Process.Start(start)!;
+            return UacConsentReviewChecks.StartFixture(start);
         };
         try
         {

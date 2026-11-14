@@ -2,6 +2,9 @@ using KillerMCP;
 using System.Text.Json;
 
 if (await NativeHostFixture.TryRunAsync(args)) return;
+if (await UacConsentReviewChecks.ServeAsync(args)) return;
+if (args.SequenceEqual(["--review-uac-consent"])) { await UacConsentReviewChecks.RunAsync(); return; }
+if (args.SequenceEqual(["--review-uac-live"])) { await UacConsentReviewChecks.RunLiveAsync(); return; }
 if (ChildInputReviewChecks.Serve(args)) return;
 if (ReleaseGapReviewChecks.Serve(args)) return;
 if (args.SequenceEqual(["--review-release-gaps"])) { await ReleaseGapReviewChecks.RunAsync(); return; }
@@ -499,6 +502,7 @@ try
     Console.WriteLine("PASS native Killendar adapter");
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", "1");
+    KillerBenchAdapter.ElevatedProcessStartForChecks = start => UacConsentReviewChecks.StartFixture(start);
     var stateDir = Path.Combine(root, "state");
     Environment.SetEnvironmentVariable("KILLERMCP_STATE_DIR", stateDir);
     Environment.SetEnvironmentVariable("KILLERBENCH_STATE_DIR", Path.Combine(root, "bench-state"));
@@ -754,6 +758,7 @@ try
     Environment.SetEnvironmentVariable("KILLERMCP_STATE_DIR", null);
     Environment.SetEnvironmentVariable("KILLERBENCH_STATE_DIR", null);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", null);
+    KillerBenchAdapter.ElevatedProcessStartForChecks = null;
     Console.WriteLine("PASS native KillerBench adapters and repair guardrails");
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_NOTES", "1");

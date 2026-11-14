@@ -11,16 +11,12 @@ public partial class RepairConfirmWindow : Window
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     private int _remaining = 270;
     private int _armDelay = 2;
-    private bool _verifying;
     private bool _closed;
-    private readonly CancellationTokenSource _consentLifetime = new();
-    private Func<IntPtr, string, Task<bool>> _verifyConsent;
 
     public bool Approved { get; private set; }
 
     private RepairConfirmWindow(Request request)
     {
-        _verifyConsent = (owner, message) => WindowsHelloConsent.VerifyAsync(owner, message, _consentLifetime.Token);
         InitializeComponent();
         TaskbarIdentity.Track(this);
         GrainLayer.Background = UpdateWindow.CreateGrain();
@@ -29,7 +25,7 @@ public partial class RepairConfirmWindow : Window
         EffectsText.Text = request.Effects;
         CommandText.Text = request.Command;
         _timer.Tick += Timer_Tick;
-        Closed += (_, _) => { _closed = true; _timer.Stop(); _consentLifetime.Cancel(); };
+        Closed += (_, _) => { _closed = true; _timer.Stop(); };
         Loaded += (_, _) =>
         {
             Activate();
@@ -65,27 +61,11 @@ public partial class RepairConfirmWindow : Window
         UpdateTimer();
     }
 
-    private void UpdateTimer() => TimerText.Text = $"Denies in {_remaining / 60}:{_remaining % 60:00}";
+    private void UpdateTimer() => TimerText.Text = $"Closes in {_remaining / 60}:{_remaining % 60:00}";
 
-    private async void Approve_Click(object sender, RoutedEventArgs e)
+    private void Approve_Click(object sender, RoutedEventArgs e)
     {
-        if (_verifying || _closed || _armDelay > 0) return;
-        _verifying = true;
-        ApproveButton.IsEnabled = false;
-        bool verified;
-        try
-        {
-            verified = await _verifyConsent(new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle(), "Approve this KillerBench repair: " + TitleText.Text);
-        }
-        catch { verified = false; }
-        _verifying = false;
-        if (_closed) return;
-        if (!verified)
-        {
-            TimerText.Text = "Windows Hello did not verify approval. Nothing has been authorized.";
-            ApproveButton.IsEnabled = true;
-            return;
-        }
+        if (_closed || _armDelay > 0) return;
         Approved = true;
         _timer.Stop();
         Close();

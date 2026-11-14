@@ -4,7 +4,7 @@
     <AssemblyName>KillerMCP</AssemblyName>
     <RootNamespace>KillerMCP</RootNamespace>
     <Version>0.9.4</Version>
-    <ReleaseDate>2026-11-03</ReleaseDate>
+    <ReleaseDate>2026-11-14</ReleaseDate>
     <ApplicationIcon>assets\KillerMCP.ico</ApplicationIcon>
     <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
     <DefaultItemExcludes>$(DefaultItemExcludes);**\bin\**;**\obj\**;artifacts\**;dist\**;**\node_modules\**;**\.git</DefaultItemExcludes>

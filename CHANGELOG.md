@@ -4,23 +4,26 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.4] - Unreleased
+## [0.9.4] - 2026-11-14
+
+0.9.4 fixes stalled tool calls and encrypted-app workflows, expands data handling, and uses Windows administrator approval for repairs.
 
 ### Security
 
+- Require Windows administrator approval through UAC for repairs and return elevated results through a private, process-verified pipe.
 - Bound structured-text parsing and PDF signature inspection, and report changes after signing.
 - Close child input pipes, block switch-shaped queries and protect settings, Startup, installed programs and network paths.
-- Require Windows Hello for repair consent and return elevated results through a private, process-verified pipe.
 - Pin the update publisher's signing key and prevent silent downgrades or installation during active repairs.
 
 ### Fixed
 
-- Create PDFs reliably under agent clients, publish complete files atomically and clean up private browser sessions.
 - Read unlocked encrypted Notes vaults and calendars through supported app pipes, and warn before retrying uncertain note writes.
+- Create PDFs reliably under agent clients, publish complete files atomically and clean up private browser sessions.
 - Keep local tools responsive during app calls, cancel network lookups and preserve valid unreachable-host results.
-- Honor capture sound preferences, mask likely registry and event secrets, and correct tool permission annotations.
-- Preserve update choices made during downloads and select the installer matching the installed runtime.
 - Stop stalled client registration and its child processes during setup.
+- Preserve update choices made during downloads and select the installer matching the installed runtime.
+- Honor capture sound preferences, mask likely registry and event secrets, and correct tool permission annotations.
+- Prevent clipping of the repair approval window's shadow and clarify its instructions.
 
 ### Changed
 

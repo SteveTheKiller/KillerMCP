@@ -21,7 +21,7 @@ if ($LASTEXITCODE -ne 0) { throw 'KillerMCP client checks failed.' }
 dotnet run --project (Join-Path $root 'tests\KillerMCP.Runtime.Checks\KillerMCP.Runtime.Checks.csproj') -c Release --no-build
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP runtime checks failed.' }
 
-foreach ($review in @('--review-child-input', '--review-positional-input', '--review-download-paths', '--review-data-moves', '--review-repair-trust', '--review-async', '--review-adapter-safety', '--review-notes-bridge', '--review-notes-workflows', '--review-integration-pdf', '--review-network-path', '--review-release-gaps', '--review-update-flavor')) {
+foreach ($review in @('--review-child-input', '--review-positional-input', '--review-download-paths', '--review-data-moves', '--review-repair-trust', '--review-uac-consent', '--review-async', '--review-adapter-safety', '--review-notes-bridge', '--review-notes-workflows', '--review-integration-pdf', '--review-network-path', '--review-release-gaps', '--review-update-flavor')) {
     $previousPdfRoot = [Environment]::GetEnvironmentVariable('KILLERMCP_PDF_CHECK_ROOT')
     $previousTemp = [Environment]::GetEnvironmentVariable('TEMP')
     $previousTmp = [Environment]::GetEnvironmentVariable('TMP')
@@ -65,8 +65,8 @@ if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Ru
         powershell @lifetimeArguments
         if ($LASTEXITCODE -ne 0) { throw 'KillerMCP configurator lifetime checks failed.' }
     }
-    powershell -NoProfile -STA -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Test-RepairHello.ps1') -AssemblyPath (Join-Path $root 'Shell\bin\Release\net48\KillerMCP.Notify.exe')
-    if ($LASTEXITCODE -ne 0) { throw 'KillerMCP repair consent check failed.' }
+    powershell -NoProfile -STA -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Test-ApprovalShadow.ps1') -AssemblyPath (Join-Path $root 'Shell\bin\Release\net48\KillerMCP.Notify.exe') -OutputDirectory (Join-Path $ArtifactRoot ('approval-shadow-' + [Guid]::NewGuid().ToString('N'))) -LabMachine $env:COMPUTERNAME
+    if ($LASTEXITCODE -ne 0) { throw 'KillerMCP approval shadow check failed.' }
     & (Join-Path $PSScriptRoot 'Test-InstallerReview.ps1') -ArtifactRoot $ArtifactRoot -LabMachine $LabMachine
     & (Join-Path $PSScriptRoot 'Test-WindowsInstaller.ps1') -ArtifactRoot $ArtifactRoot
     $setupPath = Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe'

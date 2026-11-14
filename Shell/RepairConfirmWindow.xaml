@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="clr-namespace:KillerMCP.Notify"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="KillerMCP Repair Approval" Icon="Assets/app-icon.ico" Width="650" MinHeight="390" SizeToContent="Height"
+        Title="KillerMCP Repair Approval" Icon="Assets/app-icon.ico" Width="682" MinHeight="422" SizeToContent="Height"
         WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="NoResize" Topmost="True"
         AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True"
         FontFamily="./Assets/#Killer Sans UI, Segoe UI" Foreground="{DynamicResource TextBrush}" UseLayoutRounding="True" SnapsToDevicePixels="True"
@@ -82,7 +82,7 @@
         </Style>
         </ResourceDictionary>
     </Window.Resources>
-    <Border Margin="8" Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource WindowCornerRadius}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+    <Border Margin="24" Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource WindowCornerRadius}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
         <Border.Effect><DropShadowEffect Color="Black" BlurRadius="18" ShadowDepth="4" Direction="270" Opacity="0.72" RenderingBias="Quality"/></Border.Effect>
         <Grid ClipToBounds="True">
             <Grid.ColumnDefinitions><ColumnDefinition Width="152"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -107,19 +107,21 @@
                         <Button Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="Deny_Click" Panel.ZIndex="3" ToolTip="Close"><Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"><TextBlock x:Name="CloseGlyph" Text="&#x2715;" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="CloseGlyph" Property="Foreground" Value="#e04444"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Button.Template></Button>
                         <Grid Margin="24,22,24,16">
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                            <TextBlock Text="An agent wants to repair this PC" FontFamily="{StaticResource BrandSans}" FontSize="20" TextOptions.TextFormattingMode="Ideal" Margin="0,0,28,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="Allow this repair?" FontFamily="{StaticResource BrandSans}" FontSize="20" TextOptions.TextFormattingMode="Ideal" Margin="0,0,28,0" TextWrapping="Wrap"/>
                             <StackPanel Grid.Row="1" Margin="0,8,0,12">
                                 <TextBlock x:Name="TitleText" FontSize="14" Foreground="{DynamicResource OutlineBtnBrush}" TextWrapping="Wrap"/>
                                 <TextBlock x:Name="EffectsText" Margin="0,6,0,0" Foreground="{DynamicResource MutedTextBrush}" LineHeight="19" TextWrapping="Wrap"/>
-                                <Border Margin="0,12,0,0" Padding="11,9" Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource InputBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource SmallCornerRadius}">
+                                <Expander Header="Technical details" Margin="0,12,0,0" Foreground="{DynamicResource MutedTextBrush}" FontFamily="{StaticResource UiFont}">
+                                <Border Margin="0,6,0,0" Padding="11,9" Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource InputBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource SmallCornerRadius}">
                                     <TextBlock x:Name="CommandText" FontFamily="Consolas" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap"/>
                                 </Border>
+                                </Expander>
                                 <TextBlock Margin="1,12,0,0" FontFamily="{StaticResource UiFont}" FontSize="10.5" Foreground="{DynamicResource DimTextBrush}" TextWrapping="Wrap" LineHeight="16"
-                                           Text="KillerBench checks the PC again before it changes anything, and Windows asks for administrator approval next. Deny if you did not expect this request."/>
+                                    Text="Select Continue to open Windows administrator approval. The repair starts only after you approve that prompt. Select Cancel to leave the PC unchanged."/>
                             </StackPanel>
                             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button x:Name="DenyButton" Content="Deny" Style="{StaticResource DenyButton}" Margin="0,0,6,0" IsDefault="True" IsCancel="True" Click="Deny_Click"/>
-                                <Button x:Name="ApproveButton" Content="Approve" Style="{StaticResource ApproveButton}" IsEnabled="False" Click="Approve_Click"/>
+                                <Button x:Name="DenyButton" Content="Cancel" Style="{StaticResource DenyButton}" Margin="0,0,6,0" IsDefault="True" IsCancel="True" Click="Deny_Click"/>
+                                <Button x:Name="ApproveButton" Content="Continue" Style="{StaticResource ApproveButton}" IsEnabled="False" Click="Approve_Click"/>
                             </StackPanel>
                         </Grid>
                     </Grid>
