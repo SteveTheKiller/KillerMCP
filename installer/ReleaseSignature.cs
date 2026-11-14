@@ -9,9 +9,8 @@ namespace KillerMCP.Signing
     /// Decides whether a setup file is a KillerMCP release: Windows trusts its Authenticode signature,
     /// no certificate in the chain is revoked, and the signer is the KillerMCP publisher. Setup and the
     /// update window both compile this file, so both paths apply the same rule. The publisher is pinned
-    /// by its name and by the organization of the certificate authority that issued it, rather than by
-    /// thumbprint, so a renewed certificate keeps working while a certificate another authority issued
-    /// under the same name does not.
+    /// by its name, issuer organization and public key. Renewal with the same key keeps working;
+    /// a new signing key requires a deliberate update of the trusted key pin.
     /// </summary>
     internal static class ReleaseSignature
     {
@@ -19,6 +18,7 @@ namespace KillerMCP.Signing
 
         /// <summary>The organization behind the certificate authority that issues the publisher's certificates.</summary>
         internal const string IssuerOrganization = "Asseco Data Systems S.A.";
+        internal const string PublisherPublicKeySha256 = "E09F43EEE1DF45D4FDE291303F671C978DFC992E59FAD9DF29367B7223F0A83B";
 
         internal static bool IsKillerMcpRelease(string path)
         {
@@ -30,7 +30,14 @@ namespace KillerMCP.Signing
         /// <summary>Whether a signer certificate names the KillerMCP publisher and comes from its certificate authority.</summary>
         internal static bool IsPublisherCertificate(X509Certificate2 certificate) =>
             certificate.GetNameInfo(X509NameType.SimpleName, false) == Publisher
-            && Organization(certificate.IssuerName) == IssuerOrganization;
+            && Organization(certificate.IssuerName) == IssuerOrganization
+            && PublicKeySha256(certificate) == PublisherPublicKeySha256;
+
+        private static string PublicKeySha256(X509Certificate2 certificate)
+        {
+            using (var hash = SHA256.Create())
+                return BitConverter.ToString(hash.ComputeHash(certificate.GetPublicKey())).Replace("-", string.Empty);
+        }
 
         private static string? Organization(X500DistinguishedName name)
         {

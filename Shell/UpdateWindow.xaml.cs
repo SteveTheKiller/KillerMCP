@@ -10,8 +10,18 @@ using System.Windows.Media.Imaging;
 
 namespace KillerMCP.Notify;
 
+internal sealed class UpdateWindowOptions
+{
+    internal Func<string, Task<UpdateInstaller.VerifiedInstaller>> Download { get; set; } = UpdateInstaller.DownloadAndVerifyAsync;
+    internal Func<UpdateInstaller.VerifiedInstaller, string, string, bool> StartInstaller { get; set; } = UpdateInstaller.TryStart;
+    internal Action<UpdateWindow> Show { get; set; } = window => window.ShowFront();
+    internal Action<UpdateWindow> Exit { get; set; } = window => window.Exit();
+    internal string? PreferencesFile { get; set; }
+}
+
 public partial class UpdateWindow : Window
 {
+    private readonly UpdateWindowOptions _options;
     private string _installedVersion = "0.0.0";
     private string? _latestVersion;
     private string _releaseUrl = string.Empty;
@@ -37,8 +47,11 @@ public partial class UpdateWindow : Window
         ? $"Downloading KillerMCP {_latestVersion}"
         : $"KillerMCP {_latestVersion} is available";
 
-    public UpdateWindow(string[] args)
+    public UpdateWindow(string[] args) : this(args, new UpdateWindowOptions()) { }
+
+    internal UpdateWindow(string[] args, UpdateWindowOptions options)
     {
+        _options = options;
         InitializeComponent();
         TaskbarIdentity.Track(this);
         GrainLayer.Background = CreateGrain();
@@ -79,6 +92,7 @@ public partial class UpdateWindow : Window
         _releaseUrl = Value(args, "--release") ?? "https://github.com/SteveTheKiller/KillerMCP/releases/latest";
         _behavior = Value(args, "--behavior") ?? "check";
         _updated = Has(args, "--updated");
+        if (!_updated && !UpdateInstaller.IsNewerRelease(_latestVersion, _installedVersion)) _latestVersion = null;
         _statusPath = Value(args, "--status") ?? ReleaseNotes.DefaultStatusPath();
         // A download started for the notification this one replaces no longer owns the window.
         _runs.Supersede();
@@ -130,24 +144,24 @@ public partial class UpdateWindow : Window
         UpdateStateChanged?.Invoke();
         try
         {
-            var installer = await UpdateInstaller.DownloadAndVerifyAsync(version);
+            var installer = await _options.Download(version);
             if (!_runs.IsCurrent(run)) return;
             _downloadedInstaller = installer;
-            if (_behavior == "install")
+            if (_behavior == "install" && ReadBehavior() == "install")
             {
-                if (!UpdateInstaller.TryStart(_downloadedInstaller, version, "/silent /notify"))
+                if (!_options.StartInstaller(_downloadedInstaller, version, "/silent /notify"))
                 {
                     _downloadedInstaller = null;
                     throw new InvalidDataException("The downloaded update changed after it was verified.");
                 }
-                Exit();
+                _options.Exit(this);
                 return;
             }
             SetHeading("Your update is ready");
             BodyText.Text = "The signed installer has been downloaded and verified. Install it when you are ready.";
             SetStatus("SHA256 and Windows signature verified");
             UpdateButton.Content = "Install now";
-            ShowFront();
+            _options.Show(this);
         }
         catch (Exception exception)
         {
@@ -157,7 +171,7 @@ public partial class UpdateWindow : Window
             SetStatus(exception.Message);
             UpdateButton.Content = "Open release";
             _openReleaseOnClick = true;
-            ShowFront();
+            _options.Show(this);
         }
         finally
         {
@@ -183,7 +197,7 @@ public partial class UpdateWindow : Window
             if (_downloadedInstaller is null)
             {
                 SetStatus("Downloading and verifying the signed update...");
-                var installer = await UpdateInstaller.DownloadAndVerifyAsync(_latestVersion);
+                var installer = await _options.Download(_latestVersion);
                 // A newer notification arrived during the download; the window now offers that one.
                 if (!_runs.IsCurrent(run)) return;
                 _downloadedInstaller = installer;
@@ -191,7 +205,7 @@ public partial class UpdateWindow : Window
             // The download may have waited in the temporary folder since it was checked, so it is checked again
             // through the same open file that starts.
             SetStatus("Starting the verified upgrade...");
-            if (!UpdateInstaller.TryStart(_downloadedInstaller, _latestVersion, "/silent /notify"))
+            if (!_options.StartInstaller(_downloadedInstaller, _latestVersion, "/silent /notify"))
             {
                 _downloadedInstaller = null;
                 throw new InvalidDataException("The downloaded update changed after it was verified.");
@@ -255,6 +269,7 @@ public partial class UpdateWindow : Window
     private void BehaviorBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loadingPreferences || BehaviorBox.SelectedItem is not ComboBoxItem item || item.Tag is not string behavior) return;
+        _behavior = behavior;
         try { KillerMCP.Setup.UpdatePreferences.Write(PreferencesPath(), behavior); }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -275,9 +290,9 @@ public partial class UpdateWindow : Window
         BehaviorBox.SelectedIndex = 1;
     }
 
-    private static string ReadBehavior() => KillerMCP.Setup.UpdatePreferences.Read(PreferencesPath());
+    private string ReadBehavior() => KillerMCP.Setup.UpdatePreferences.Read(PreferencesPath());
 
-    private static string PreferencesPath() => Path.Combine(
+    private string PreferencesPath() => _options.PreferencesFile ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerMCP", "update-preferences.json");
 
     private void Later_Click(object sender, RoutedEventArgs e) => Close();

@@ -8,6 +8,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $mcpHost = if ($HostPath) { [IO.Path]::GetFullPath($HostPath) } else { Join-Path $root 'bin\Release\net10.0\KillerMCP.exe' }
 if (-not (Test-Path -LiteralPath $mcpHost -PathType Leaf)) { throw "The KillerMCP host is missing at $mcpHost. Build the solution first." }
 . (Join-Path $PSScriptRoot 'ClientJob.ps1')
+. (Join-Path $PSScriptRoot 'New-HostCheckFixture.ps1')
 
 $scratch = Join-Path ([IO.Path]::GetFullPath($env:TEMP)) ('KillerMCP-client-notice-' + [guid]::NewGuid().ToString('N'))
 $marker = Join-Path $scratch 'notice-started.txt'
@@ -21,6 +22,8 @@ $noticeId = $null
 
 try {
     New-Item -ItemType Directory -Path $scratch -Force | Out-Null
+    $mcpHost = New-HostCheckFixture $mcpHost (Join-Path $scratch 'host')
+    $notifier = Join-Path (Split-Path $mcpHost) 'KillerMCP.Notify.exe'
     # Stands in for the update window: records that it started, then waits like an open window.
     Add-Type -OutputType WindowsApplication -OutputAssembly $notifier -TypeDefinition @'
 public static class NoticeStandIn {
@@ -32,7 +35,6 @@ public static class NoticeStandIn {
 '@
     $env:KILLERMCP_UPDATE_CACHE = Join-Path $scratch 'update-status.json'
     $env:KILLERMCP_UPDATE_API = 'https://127.0.0.1:9/no-release'
-    $env:KILLERMCP_NOTIFIER = $notifier
     $env:KILLERMCP_TOOL_CALL_LOG = Join-Path $scratch 'tool-calls.jsonl'
     $env:KILLERMCP_TEST_NOTICE_MARKER = $marker
     # A fresh cached check that offers a newer release, so the host shows the notice without the network.

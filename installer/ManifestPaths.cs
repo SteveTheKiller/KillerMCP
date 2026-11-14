@@ -87,7 +87,12 @@ namespace KillerMCP.Setup
         private static bool HasLinkedRoot(string folder)
         {
             string full = Path.GetFullPath(folder);
-            string current = Path.GetPathRoot(full)!;
+            string programs = Path.GetFullPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs")).TrimEnd(Path.DirectorySeparatorChar);
+            // Profile relocation can put a junction above Programs. Only the installation boundary
+            // and its descendants belong to setup; isolated test roots use their own boundary.
+            string current = full.Equals(programs, StringComparison.OrdinalIgnoreCase)
+                || full.StartsWith(programs + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ? programs : full;
+            if (Directory.Exists(current) && IsLink(current)) return true;
             foreach (string step in full.Substring(current.Length).Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries))
             {
                 current = Path.Combine(current, step);

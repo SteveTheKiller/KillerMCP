@@ -35,7 +35,8 @@ KillerMCP checks GitHub Releases hourly and shows a Black/Fuchsia update window 
 
 - All 81 KillerTools website utilities from the native KillerTools engine.
 - Automatic tool discovery for supported versions of KillerPDF, KillerScan, KillerNotes, KillerShell, Killendar, KillerBench, and KillerShot.
-- Safe migration from the earlier Node based KillerMCP installation and client registrations.
+- Ordinary text saving to new UTF-8 files in Downloads without converting it to Base64.
+- Client registrations preserved during native KillerMCP updates.
 - Install, reinstall, repair, and uninstall behavior through the KillerUI styled Windows setup.
 - A framework dependent native package for each supported operating system and processor architecture.
 
@@ -43,9 +44,11 @@ KillerPDF provides PDF editing, conversion, inspection, OCR, printing, and acces
 
 KillerShot takes screenshots, records MP4 or GIF, lists monitors, windows and recent captures, and opens images in its editor. Version 1.1.1 or newer also provides local OCR and QR reading, image edits into new files, recording controls, and capture-library search when its command line advertises them. PDF optimization's signature-invalidation option requires KillerPDF 1.9.1 or newer, and EPUB and DjVu book conversion requires KillerPDF 1.9.3 or newer, so MCP can be updated before PDF.
 
-KillerBench provides offline Windows code lookups, read-only checks and full diagnostic scans. It can also preview and run a fixed list of guarded Windows repairs. Repairs are off until you turn them on in the KillerMCP section of the KillerBench About window. Every repair needs a fresh preview and Windows administrator approval. Disruptive repairs, and the first repair after the repair setting is turned on or changed, also need your approval in a KillerMCP window on the desktop. See [KillerBench](docs/CAPABILITIES.md#killerbench) for the full list and safeguards.
+KillerBench provides offline Windows code lookups, read-only checks and full diagnostic scans. It can also preview and run a fixed list of guarded Windows repairs. Repairs are off until you turn them on in the KillerMCP section of the KillerBench About window. Every repair needs a fresh preview and Windows administrator approval. Disruptive repairs, the first repair in each host session, and repairs after a setting change also require Windows Hello approval in a KillerMCP window. See [KillerBench](docs/CAPABILITIES.md#killerbench) for the full list and safeguards.
 
 Cross app workflows can export a KillerNotes note, KillerScan network report, Killendar agenda, or KillerShell directory listing to PDF. They can also save scan, agenda, and directory reports as notes, or render selected KillerPDF pages into image notes.
+
+Notes and Calendar versions advertising active-app pipe support can read encrypted data after you open and unlock the app. Newer Notes capabilities also expose templates, trash and version reads, restoration, pinning and tag organization. Tools appear only when the installed app advertises them.
 
 See [What KillerMCP can do](docs/CAPABILITIES.md) for the complete tool guide, examples, limits, and data handling details.
 
@@ -74,11 +77,11 @@ Open `KillerMCP.slnx` at the repository root. The main app project, `KillerMCP.c
 
 See [Architecture](docs/ARCHITECTURE.md) for the project and request flow. To add the app to an existing Visual Studio solution, add `KillerMCP.csproj` and `dependencies/KillerTools/src/KillerTools.Engine/KillerTools.Engine.csproj`. Visual Studio needs the referenced engine project loaded for package restore.
 
-Build and test the native host:
+Build and test the native host in a disposable lab named `LAB-VM` (substitute the lab's actual name):
 
 ```powershell
 dotnet build KillerMCP.slnx -c Release
-powershell -NoProfile -File scripts\Test-All.ps1
+powershell -NoProfile -File scripts\Test-All.ps1 -LabMachine LAB-VM
 ```
 
 Build a framework dependent package for the current platform:
@@ -92,6 +95,8 @@ Build and test the Windows installer:
 ```powershell
 powershell -NoProfile -File scripts\Test-WindowsInstaller.ps1
 ```
+
+Run app, installer and desktop acceptance in a disposable Windows lab. The maintained [fuzz and data-move drivers](scripts/review/README.md) take an explicit candidate host, scratch root and seed; app-writing scenarios require the lab mutation gate.
 
 The native host requires the .NET 10 runtime. The Windows installer checks for it before installation and links to the official Microsoft download when it is missing.
 

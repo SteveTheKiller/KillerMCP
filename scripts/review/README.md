@@ -1,0 +1,22 @@
+# Maintained review drivers
+
+Use Node.js with no package installation. Supply the exact host executable and a new absolute scratch directory. Each run creates its own fixtures, overwrite sentinel and results.json. Existing nonempty roots require the driver's ownership marker; fixtures and results are retained for review. No installed/build path, user profile or review date is embedded in the drivers.
+
+```powershell
+node scripts/Test-Fuzz.mjs --host C:\lab\KillerMCP.exe --root C:\scratch\mcp-fuzz --seed 17 --count 10000
+node scripts/Test-DataMoves.mjs --host C:\lab\KillerMCP.exe --root C:\scratch\mcp-moves --seed 19 --count 30
+```
+
+Run real app acceptance only on the task's leased disposable Windows VM. These scripts do not acquire a VM lease. App mutations require both `--lab-writes` and an explicit `--lab-machine LAB-VM` matching that VM's actual hostname. Do not substitute an automatic current-host expression for that safeguard. Screen capture, hardware actions and repairs have no valid-call path, even with the lab flag. Notes edit/additive tools in the fuzzer receive only guaranteed schema-refusal calls. The move driver's one additive note round trip requires the lab gate; created note IDs are retained in its report for lab cleanup.
+
+The default fuzzer permits safe read calls and schema-refusal cases. Potential mutations, personal vault/calendar reads and external services receive only schema-refusal calls. A small explicit set of PDF/file outputs gains schema-shaped sandbox calls only behind the lab gate. Unknown or newly added mutation tools receive no valid calls. Hostile output probes also require the lab gate. Their unique paths are checked for strays, but stray files or directories are never deleted. Remote paths are never opened by the driver for existence checks. A returned success on a must-refuse probe fails the run.
+
+The default move driver skips app-writing sinks. Its file sink uses `write_text_file_local` with one fresh unique filename in Downloads, compares every UTF-8 byte directly with the actual file and removes only that exact produced regular file. `--downloads` supplies a relocated Downloads directory or a stub fixture directory. This direct comparison avoids `encode_file_base64_local`'s 32 KiB read cap. A byte mismatch is copied into the run's evidence folder before the owned Downloads file is removed. PDF render folders are never precreated.
+
+The seeded source/sink choices retain the original twelve sources, eight sinks and boundary sizes up to 999,000 characters. Use `--source lorem --sink file --size 100000` for a focused file chain. Notes payloads beyond the advertised limit (capped at 500,000 characters) must receive schema refusal. Smaller lab Notes chains call get and inspect actual note content for the marker. For payloads beyond get's 50,000-character read cap, the report explicitly limits verification to the actual head marker. Directory/calendar PDF exports verify a readable export and do not claim to carry generated payload markers.
+
+Other options: `--tool regex`, `--timeout milliseconds`, `--date YYYY-MM-DD` and repeatable `--host-arg value` for a wrapper or a pure Node stub. Fuzz `--count` caps tool calls; data moves `--count` caps chains. An abbreviated fuzz budget reports unvisited tools and budget-limited cases and is not full coverage. Seed controls case choices; dates default to the current UTC date and can be fixed with `--date`. Run paths and unique output names intentionally vary between runs.
+
+Reports distinguish skipped, unavailable, expected refusals, tool errors, RPC errors, timeouts, transport errors and unexpected failures. Schema-shaped fuzz inputs can legitimately fail domain validation; these are counted as tool errors without being mislabeled as regressions. Every generated must-refuse schema case requires -32602 or an explicit invalid-arguments tool response. Unexpected success, timeout, broken protocol, failed liveness, nonzero/hung exit, changed fixtures/sentinel or stray output exits nonzero. A missing advertised app capability is unavailable in data moves; an advertised tool that fails a normal chain is a failure. A run with only skipped/unavailable chains is not application acceptance.
+
+Live KillerMCP/app runs are separate from pure driver verification. The drivers can be checked on the host with `node --check` and a pure Node MCP stub. Such stub checks establish lifecycle, accounting and safety behavior, not actual app compatibility or UI behavior.

@@ -3,6 +3,7 @@ param([string]$Installer = '', [string]$StoreInstaller = '', [string]$PreviousSi
 $ErrorActionPreference = 'Stop'
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) { throw 'The KillerMCP Windows installer test requires Windows.' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $PSScriptRoot 'Invoke-SetupCheck.ps1')
 [xml]$hostProject = Get-Content -LiteralPath (Join-Path $root 'KillerMCP.csproj') -Raw
 $releaseVersion = [string]$hostProject.Project.PropertyGroup.Version
 $utf8NoBom = New-Object Text.UTF8Encoding($false)
@@ -29,7 +30,7 @@ if (-not $FakeCodex) {
 }
 if (-not (Test-Path -LiteralPath $setup -PathType Leaf) -or -not (Test-Path -LiteralPath $storeSetup -PathType Leaf) -or -not (Test-Path -LiteralPath $fakeCodex -PathType Leaf)) { throw 'Installer test prerequisites are missing.' }
 
-$scratch = Join-Path ([IO.Path]::GetFullPath($env:TEMP)) ('KillerMCP-native-installer-' + [guid]::NewGuid().ToString('N'))
+$scratch = Join-Path ([IO.Path]::GetFullPath($env:TEMP)) ('km-inst-' + [guid]::NewGuid().ToString('N').Substring(0, 12))
 $installed = Join-Path $scratch 'Installed'
 $codexState = Join-Path $scratch 'codex-state.json'
 $previous = @{}
@@ -58,15 +59,16 @@ try {
     # The regular setup uses the installed .NET 10 runtime and refuses a silent install without it.
     # The Microsoft Store installs silently on machines without .NET 10, so its setup carries its own runtime.
     # These checks use their own root so their uninstall entry never meets the migration fixtures below.
-    $freshRoot = Join-Path $scratch ('fresh-' + [guid]::NewGuid().ToString('N'))
+    $freshRoot = Join-Path $scratch ('f-' + [guid]::NewGuid().ToString('N').Substring(0, 12))
     $freshInstalled = Join-Path $freshRoot 'Installed'
     $freshKey = 'HKCU:\Software\KillerMCP\InstallerTests\' + (Split-Path $freshRoot -Leaf)
     $env:KILLERMCP_TEST_INSTALL_ROOT = $freshInstalled
     $env:KILLERMCP_TEST_RUNTIME = '0'
-    $refused = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+    $refused = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
     if ($refused.ExitCode -ne 10 -or (Test-Path -LiteralPath $freshInstalled)) { throw "The regular setup returned $($refused.ExitCode) instead of 10 without .NET 10, or installed anyway." }
-    $noRuntime = Start-Process -FilePath $storeSetup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
-    if ($noRuntime.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $freshKey)) { throw "Silent Store setup failed with exit code $($noRuntime.ExitCode) when .NET 10 was unavailable." }
+    $storeError = Join-Path $scratch 'store-install.stderr.txt'
+    $noRuntime = Invoke-SetupCheck -FilePath $storeSetup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden -RedirectStandardError $storeError
+    if ($noRuntime.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $freshKey)) { throw "Silent Store setup failed with exit code $($noRuntime.ExitCode) when .NET 10 was unavailable: $([IO.File]::ReadAllText($storeError))" }
     $hostConfig = Get-Content -LiteralPath (Join-Path $freshInstalled 'KillerMCP.runtimeconfig.json') -Raw | ConvertFrom-Json
     if ($hostConfig.runtimeOptions.framework -or $hostConfig.runtimeOptions.frameworks -or -not $hostConfig.runtimeOptions.includedFrameworks) { throw 'The installed host still depends on a shared .NET runtime.' }
     foreach ($runtimeFile in @('hostfxr.dll', 'coreclr.dll')) {
@@ -76,56 +78,23 @@ try {
     node (Join-Path $PSScriptRoot 'Test-NativePackage.mjs') $freshInstalled
     if ($LASTEXITCODE -ne 0) { throw 'The installed host did not run on its bundled runtime.' }
     Remove-Item Env:DOTNET_ROOT
-    $uninstallFresh = Start-Process -FilePath $storeSetup -ArgumentList '/uninstall', '/silent' -Wait -PassThru -WindowStyle Hidden
+    $uninstallFresh = Invoke-SetupCheck -FilePath $storeSetup -ArgumentList '/uninstall', '/silent' -Wait -PassThru -WindowStyle Hidden
     if ($uninstallFresh.ExitCode -ne 0 -or (Test-Path -LiteralPath $freshInstalled) -or (Test-Path -LiteralPath "$freshInstalled-Setup.exe") -or (Test-Path -LiteralPath $freshKey)) { throw 'Silent uninstall did not remove the self-contained installation.' }
     foreach ($name in $names) { Write-Utf8NoBom ([Environment]::GetEnvironmentVariable("KILLERMCP_TEST_${name}_CONFIG")) '{"preservedSetting":"keep"}' }
     $env:KILLERMCP_TEST_INSTALL_ROOT = $installed
 
     $env:KILLERMCP_TEST_RUNTIME = '1'
-    New-Item -ItemType Directory -Path $installed -Force | Out-Null
-    $legacyFiles = @{
-        'node.exe' = 'legacy node runtime'
-        'killermcp.mjs' = 'legacy MCP host'
-        'killertools.mjs' = 'legacy KillerTools bundle'
-    }
-    $legacyManifest = @{ files = @{} }
-    foreach ($item in $legacyFiles.GetEnumerator()) {
-        $path = Join-Path $installed $item.Key
-        Write-Utf8NoBom $path $item.Value
-        $legacyManifest.files[$item.Key] = @{ bytes = (Get-Item -LiteralPath $path).Length; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash }
-    }
-    Write-Utf8NoBom (Join-Path $installed 'manifest.json') ($legacyManifest | ConvertTo-Json -Depth 5)
     $setupCopy = "$installed-Setup.exe"
-    Copy-Item -LiteralPath $setup -Destination $setupCopy
     $uninstallKey = 'HKCU:\Software\KillerMCP\InstallerTests\' + (Split-Path $scratch -Leaf)
-    $legacyNode = Join-Path $installed 'node.exe'
-    $legacyScript = Join-Path $installed 'killermcp.mjs'
-    Write-Utf8NoBom $codexState (@{ transport = @{ type = 'stdio'; command = $legacyNode; args = @($legacyScript) } } | ConvertTo-Json -Depth 5)
-    foreach ($name in $names) {
-        $path = [Environment]::GetEnvironmentVariable("KILLERMCP_TEST_${name}_CONFIG")
-        $configuration = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
-        $registration = @{ command = $legacyNode; args = @($legacyScript) }
-        if ($name -eq 'CLAUDE') { $registration.type = 'stdio' }
-        $configuration | Add-Member -NotePropertyName mcpServers -NotePropertyValue @{ killermcp = $registration }
-        Write-Utf8NoBom $path ($configuration | ConvertTo-Json -Depth 10)
-    }
+    # Exercise a fresh native install, then reinstall over stale native uninstall metadata.
     foreach ($pass in 1..2) {
-        $install = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
-        if ($install.ExitCode -ne 0) { throw "Installer pass $pass failed with exit code $($install.ExitCode)." }
+        $install = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        if ($install.ExitCode -ne 0) { throw "Installer pass $pass failed with exit code $($install.ExitCode): $($install.Error)" }
         node (Join-Path $PSScriptRoot 'Test-NativePackage.mjs') $installed
         if ($LASTEXITCODE -ne 0) { throw "Installed runtime check failed on pass $pass." }
-        if (Test-Path -LiteralPath $legacyNode) { throw 'Installer did not remove the legacy Node runtime.' }
         if ($pass -eq 1) {
-            New-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value '0.1.0' -PropertyType String -Force | Out-Null
+            New-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value '0.9.3' -PropertyType String -Force | Out-Null
             New-ItemProperty -Path $uninstallKey -Name SetupSha256 -Value 'STALE' -PropertyType String -Force | Out-Null
-            Write-Utf8NoBom $codexState (@{ transport = @{ type = 'stdio'; command = $legacyNode; args = @($legacyScript) } } | ConvertTo-Json -Depth 5)
-            foreach ($name in $names) {
-                $path = [Environment]::GetEnvironmentVariable("KILLERMCP_TEST_${name}_CONFIG")
-                $configuration = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
-                $configuration.mcpServers.killermcp.command = $legacyNode
-                $configuration.mcpServers.killermcp.args = @($legacyScript)
-                Write-Utf8NoBom $path ($configuration | ConvertTo-Json -Depth 10)
-            }
         }
     }
 
@@ -146,7 +115,7 @@ try {
         Start-Sleep -Milliseconds 500
         if (@($runningHosts | Where-Object HasExited).Count -ne 0) { throw 'An installed MCP host exited before the active-process reinstall test.' }
         # Updates can inherit the installation folder as their working directory.
-        $reinstall = Start-Process -FilePath $setup -ArgumentList '/silent' -WorkingDirectory $installed -Wait -PassThru -WindowStyle Hidden
+        $reinstall = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -WorkingDirectory $installed -Wait -PassThru -WindowStyle Hidden
         if ($reinstall.ExitCode -ne 0 -or @($runningHosts | Where-Object { -not $_.HasExited }).Count -ne 0) { throw "Reinstall did not close every active MCP host and replace its working directory (exit $($reinstall.ExitCode))." }
     }
     finally {
@@ -171,7 +140,7 @@ try {
 
     $sentinel = Join-Path $installed 'user-file.txt'
     Set-Content -LiteralPath $sentinel -Value 'keep'
-    $blocked = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+    $blocked = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
     if ($blocked.ExitCode -eq 0 -or -not (Test-Path -LiteralPath $sentinel)) { throw 'Reinstall did not preserve an installation folder with an extra file.' }
     Remove-Item -LiteralPath $sentinel
 
@@ -179,7 +148,7 @@ try {
     $runtimeBytes = [IO.File]::ReadAllBytes($runtime)
     try {
         [IO.File]::AppendAllText($runtime, 'modified')
-        $blocked = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        $blocked = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
         if ($blocked.ExitCode -eq 0) { throw 'Reinstall replaced a modified runtime file.' }
     }
     finally { [IO.File]::WriteAllBytes($runtime, $runtimeBytes) }
@@ -187,7 +156,7 @@ try {
     $setupBytes = [IO.File]::ReadAllBytes($setupCopy)
     try {
         [IO.File]::AppendAllText($setupCopy, 'modified')
-        $blocked = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        $blocked = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
         if ($blocked.ExitCode -eq 0) { throw 'Reinstall replaced a modified setup file.' }
     }
     finally { [IO.File]::WriteAllBytes($setupCopy, $setupBytes) }
@@ -196,24 +165,24 @@ try {
     Remove-Item -LiteralPath $setupCopy
     Set-ItemProperty -LiteralPath $uninstallKey -Name InstallLocation -Value 'C:\Elsewhere\KillerMCP'
     try {
-        $blocked = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        $blocked = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
         if ($blocked.ExitCode -eq 0) { throw 'Setup adopted an uninstall entry for a different folder.' }
     }
     finally { Set-ItemProperty -LiteralPath $uninstallKey -Name InstallLocation -Value $installed }
-    $recovered = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+    $recovered = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
     if ($recovered.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $setupCopy -PathType Leaf) -or (Get-ItemProperty -LiteralPath $uninstallKey).SetupSha256 -ne (Get-FileHash -LiteralPath $setupCopy -Algorithm SHA256).Hash) { throw "Setup could not reinstall after its setup copy went missing (exit $($recovered.ExitCode))." }
 
     # A backup that an earlier upgrade could not remove is cleared by the next install.
     $leftoverBackup = "$installed.previous-test"
     Copy-Item -LiteralPath $installed -Destination $leftoverBackup -Recurse
-    $install = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+    $install = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
     if ($install.ExitCode -ne 0 -or (Test-Path -LiteralPath $leftoverBackup)) { throw "Install did not remove a backup an earlier upgrade left behind (exit $($install.ExitCode))." }
 
     # A preferences file that holds valid JSON but not an object falls back to checking for updates.
     $preferences = Join-Path $scratch 'update-preferences.json'
     Write-Utf8NoBom $preferences '[]'
     $env:KILLERMCP_TEST_UPDATE_API = 'https://127.0.0.1:9/no-release'
-    $check = Start-Process -FilePath $setup -ArgumentList '/check-update', '/silent' -Wait -PassThru -WindowStyle Hidden
+    $check = Invoke-SetupCheck -FilePath $setup -ArgumentList '/check-update', '/silent' -Wait -PassThru -WindowStyle Hidden
     Remove-Item -LiteralPath $preferences
     if ($check.ExitCode -ne 0) { throw "The update check failed on a preferences file that is not an object (exit $($check.ExitCode))." }
 
@@ -222,11 +191,11 @@ try {
     $env:KILLERMCP_FAKE_CODEX_HANG = '1'
     $env:KILLERMCP_TEST_CONFIGURE_TIMEOUT_MS = '3000'
     $hungStarted = [Diagnostics.Stopwatch]::StartNew()
-    try { $blocked = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden }
+    try { $blocked = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden }
     finally { $env:KILLERMCP_FAKE_CODEX_HANG = $null; $env:KILLERMCP_TEST_CONFIGURE_TIMEOUT_MS = $null }
     $hungSeconds = $hungStarted.Elapsed.TotalSeconds
-    $leftCodex = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $fakeCodex })
-    $leftCodex | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    $leftCodex = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $fakeCodex })
+    $leftCodex | ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
     if ($blocked.ExitCode -eq 0 -or $hungSeconds -gt 20 -or $leftCodex.Count -gt 0) { throw "A hung client configuration was not ended at the time limit (exit $($blocked.ExitCode), $([int]$hungSeconds) s, $($leftCodex.Count) Codex left)." }
     node (Join-Path $PSScriptRoot 'Test-NativePackage.mjs') $installed
     if ($LASTEXITCODE -ne 0) { throw 'A timed-out install did not keep the previous installation.' }
@@ -237,14 +206,14 @@ try {
         $cursorDifferent = $cursorOriginal | ConvertFrom-Json
         $cursorDifferent.mcpServers.killermcp.command = 'C:\DifferentApp\KillerMCP.exe'
         Write-Utf8NoBom $cursorPath ($cursorDifferent | ConvertTo-Json -Depth 20)
-        $blocked = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        $blocked = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
         $preserved = (Get-Content -LiteralPath $cursorPath -Raw | ConvertFrom-Json).mcpServers.killermcp.command
         if ($blocked.ExitCode -eq 0 -or $preserved -ne 'C:\DifferentApp\KillerMCP.exe') { throw 'Reinstall replaced a different Cursor connection.' }
     }
     finally { Write-Utf8NoBom $cursorPath $cursorOriginal }
 
     Set-Content -LiteralPath $sentinel -Value 'keep'
-    $blocked = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+    $blocked = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
     if ($blocked.ExitCode -eq 0 -or -not (Test-Path -LiteralPath $sentinel)) { throw 'Uninstall did not preserve an installation folder with an extra file.' }
     Remove-Item -LiteralPath $sentinel
 
@@ -255,7 +224,7 @@ try {
         if (-not $runningHost.Start()) { throw 'The installed MCP host did not start for the active-process uninstall test.' }
         Start-Sleep -Milliseconds 500
         if ($runningHost.HasExited) { throw 'The installed MCP host exited before the active-process uninstall test.' }
-        $uninstall = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+        $uninstall = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
         if (-not $runningHost.HasExited) { throw 'Uninstall did not close the active MCP host.' }
     }
     finally {
@@ -273,12 +242,12 @@ try {
     # Earlier versions could stop uninstalling partway and leave a folder with only some of its files.
     # Setup has to remove such a folder, and reinstall over one, without touching anything it did not install.
     foreach ($recovery in 'uninstall', 'install') {
-        $install = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        $install = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
         if ($install.ExitCode -ne 0) { throw "Install before the stranded-folder $recovery check failed with exit code $($install.ExitCode)." }
         $listed = @((Get-Content -LiteralPath (Join-Path $installed 'manifest.json') -Raw | ConvertFrom-Json).files.PSObject.Properties.Name | Sort-Object)
         Remove-Item -LiteralPath (Join-Path $installed ($listed[0] -replace '/', '\'))
         Remove-Item -LiteralPath (Join-Path $installed ($listed[1] -replace '/', '\'))
-        $stranded = Start-Process -FilePath $setup -ArgumentList $(if ($recovery -eq 'uninstall') { @('/silent', '/uninstall') } else { @('/silent') }) -Wait -PassThru -WindowStyle Hidden
+        $stranded = Invoke-SetupCheck -FilePath $setup -ArgumentList $(if ($recovery -eq 'uninstall') { @('/silent', '/uninstall') } else { @('/silent') }) -Wait -PassThru -WindowStyle Hidden
         if ($stranded.ExitCode -ne 0) { throw "Setup could not $recovery over a partly removed installation (exit $($stranded.ExitCode))." }
         if ($recovery -eq 'install') {
             node (Join-Path $PSScriptRoot 'Test-NativePackage.mjs') $installed
@@ -287,10 +256,10 @@ try {
         elseif (Test-Path -LiteralPath $installed) { throw 'Uninstall left a partly removed installation folder.' }
     }
     Set-Content -LiteralPath $sentinel -Value 'keep'
-    $blocked = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+    $blocked = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
     if ($blocked.ExitCode -eq 0 -or -not (Test-Path -LiteralPath $sentinel)) { throw 'Uninstall removed a file it did not install from a recovered installation.' }
     Remove-Item -LiteralPath $sentinel
-    $uninstall = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+    $uninstall = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
     if ($uninstall.ExitCode -ne 0 -or (Test-Path -LiteralPath $installed)) { throw 'Final uninstall after the stranded-folder checks failed.' }
 
     if ($PreviousSignedSetup -and $PreviousSignedInstall) {
@@ -306,18 +275,18 @@ try {
         $previousSetupBytes = [IO.File]::ReadAllBytes($setupCopy)
         try {
             [IO.File]::AppendAllText($setupCopy, 'modified')
-            $blocked = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+            $blocked = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
             if ($blocked.ExitCode -eq 0) { throw 'Upgrade accepted a modified signed previous setup.' }
         }
         finally { [IO.File]::WriteAllBytes($setupCopy, $previousSetupBytes) }
-        $upgrade = Start-Process -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        $upgrade = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
         if ($upgrade.ExitCode -ne 0 -or (Get-ItemProperty -LiteralPath $uninstallKey).DisplayVersion -ne $releaseVersion) { throw 'Upgrade from a signed previous setup with a stale uninstall entry failed.' }
-        $uninstall = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
+        $uninstall = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru -WindowStyle Hidden
         if ($uninstall.ExitCode -ne 0 -or (Test-Path -LiteralPath $installed) -or (Test-Path -LiteralPath $setupCopy)) { throw 'Previous setup upgrade fixture did not uninstall cleanly.' }
         Write-Output 'Signed previous setup and stale uninstall entry upgrade passed.'
     }
     $success = $true
-    Write-Output 'KillerMCP runtime check, Store bundled runtime, legacy migration, install, reinstall, seven client registrations, MCP calls, and uninstall passed.'
+    Write-Output 'KillerMCP runtime check, Store bundled runtime, native install, reinstall, seven client registrations, MCP calls, and uninstall passed.'
 }
 finally {
     foreach ($name in $variables) { [Environment]::SetEnvironmentVariable($name, $previous[$name]) }

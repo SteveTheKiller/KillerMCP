@@ -21,6 +21,8 @@ foreach ($workflow in Get-ChildItem -LiteralPath $folder -Filter '*.yml') {
     foreach ($step in $steps) {
         $name = ([regex]::Match($step, '^name:\s*(.+)$', 'Multiline')).Groups[1].Value.Trim()
         $label = if ($name) { "$($workflow.Name): $name" } else { $workflow.Name }
+        if ($step -match 'Repair-WinGetPackageManager' -and ($step -match 'Repair-WinGetPackageManager\s+-Latest' -or $step -notmatch 'Repair-WinGetPackageManager\s+-Version\s+''[0-9]+\.[0-9]+\.[0-9]+''')) { $problems.Add("$label does not pin the WinGet client version.") }
+        if ($step -match 'winget\s+validate' -and $step -match 'GITHUB_TOKEN\s*:') { $problems.Add("$label validates manifests in a step with a GitHub token.") }
         foreach ($install in [regex]::Matches($step, '(?m)^.*\bInstall-Module\b.*$')) {
             if ($install.Value -notmatch '-RequiredVersion\s+\S+') { $problems.Add("$label installs a module without -RequiredVersion.") }
         }

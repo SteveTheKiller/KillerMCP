@@ -37,7 +37,7 @@ scripts/         Build, package and verification commands
 
 `ToolRegistry` combines built-in tools with available app tools. It checks file access, records call outcomes and formats results. `BuiltInTools` owns the native tool definitions and handlers; app adapters under `Features` call the installed apps through the shared process runner.
 
-Tool calls retain cancellation by request ID. App discovery runs in parallel with a timeout. Closing the host stops its ordinary child processes; already approved KillerBench repairs retain their existing lifetime and recovery rules.
+Tool calls retain cancellation by request ID. App and network calls run asynchronously, while eight dedicated slots keep bounded local tools responsive beside up to 32 other calls. Update checks run in the background and failed checks are cached for 15 minutes. App discovery runs in parallel with a timeout. Closing the host stops its ordinary child processes; already approved KillerBench repairs retain their existing lifetime and recovery rules. Child input is always redirected and closed when no input is supplied.
 
 ## Executables
 

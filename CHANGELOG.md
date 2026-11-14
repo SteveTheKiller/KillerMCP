@@ -6,8 +6,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ## [0.9.4] - Unreleased
 
+### Security
+
+- Bound structured-text parsing and PDF signature inspection, and report changes after signing.
+- Close child input pipes, block switch-shaped queries and protect settings, Startup, installed programs and network paths.
+- Require Windows Hello for repair consent and return elevated results through a private, process-verified pipe.
+- Pin the update publisher's signing key and prevent silent downgrades or installation during active repairs.
+
+### Fixed
+
+- Create PDFs reliably under agent clients, publish complete files atomically and clean up private browser sessions.
+- Read unlocked encrypted Notes vaults and calendars through supported app pipes, and warn before retrying uncertain note writes.
+- Keep local tools responsive during app calls, cancel network lookups and preserve valid unreachable-host results.
+- Honor capture sound preferences, mask likely registry and event secrets, and correct tool permission annotations.
+- Preserve update choices made during downloads and select the installer matching the installed runtime.
+- Stop stalled client registration and its child processes during setup.
+
+### Changed
+
+- Accept PDFs up to 512 MiB, merge up to 1,000 inputs and process larger JSON and text reports.
+- Add maintained fuzz and data-move drivers, broader regression checks and pinned WinGet validation.
+
 ### Added
 
+- Save ordinary text directly to new files in Downloads with `write_text_file_local`; text needs no Base64 conversion.
+- Add capability-gated Notes templates, trash and version reads, restoration, pinning and tag and group organization.
 - `killerpdf_convert_book` converts EPUB and DjVu books to PDF with KillerPDF 1.9.3 or later.
 - Expanded the port reference with 58 firewall and network appliance entries for common MSP platforms.
 

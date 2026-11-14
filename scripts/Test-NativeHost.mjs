@@ -5,9 +5,15 @@ import { createServer } from 'node:http';
 import { createConnection } from 'node:net';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
+import { isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { brotliDecompressSync } from 'node:zlib';
+
+if (process.argv[2]?.startsWith('--review-')) {
+  const { runReview } = await import('../tests/McpProtocolReview.mjs');
+  await runReview(process.argv[3], process.argv[4], process.argv[2].slice('--review-'.length), process.argv[5]);
+  process.exit(0);
+}
 
 // Fixture paths are relative to the repository, so the checks run the same from any folder.
 process.chdir(fileURLToPath(new URL('..', import.meta.url)));
@@ -15,9 +21,23 @@ process.chdir(fileURLToPath(new URL('..', import.meta.url)));
 const live = process.env.KILLERMCP_LIVE_TESTS === '1';
 
 const releaseVersion = (await readFile(resolve('KillerMCP.csproj'), 'utf8')).match(/<Version>(\d+\.\d+\.\d+)<\/Version>/)[1];
-const hostExecutable = resolve('bin/Release/net10.0', process.platform === 'win32' ? 'KillerMCP.exe' : 'KillerMCP');
-const updateDirectory = await mkdtemp(join(tmpdir(), 'killermcp-update-'));
-// Run the built host directly so startup checks measure the server without SDK launcher overhead.
+const options = new Map();
+for (let index = 2; index < process.argv.length; index += 2) {
+  const option = process.argv[index];
+  const value = process.argv[index + 1];
+  assert.ok(['--host', '--fixture', '--scratch-root'].includes(option) && value && isAbsolute(value), 'Expected --host, --fixture, or --scratch-root with an absolute path.');
+  options.set(option, value);
+}
+const hostExecutable = options.get('--host') ?? resolve('bin/Release/net10.0', process.platform === 'win32' ? 'KillerMCP.exe' : 'KillerMCP');
+const fixtureExecutable = options.get('--fixture') ?? resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe');
+const scratchRoot = options.get('--scratch-root') ?? tmpdir();
+await mkdir(scratchRoot, { recursive: true });
+const updateDirectory = await mkdtemp(join(scratchRoot, 'killermcp-update-'));
+const mcpState = join(updateDirectory, 'state');
+const benchState = join(updateDirectory, 'bench-state');
+const hostArguments = ['--review-mcp-host', mcpState, benchState];
+// Settings-sensitive checks use the test executable's scoped folders and the real MCP server.
+// Production executable startup and identity are covered separately by the review modes above.
 // However the checks end, owned hosts and their child processes stop and the fixture folder is removed.
 const hosts = [];
 process.on('exit', () => {
@@ -48,25 +68,23 @@ const environment = {
   KILLERMCP_UPDATE_API: `http://127.0.0.1:${updateAddress.port}/latest`,
   KILLERMCP_UPDATE_CACHE: join(updateDirectory, 'status.json'),
   KILLERMCP_TOOL_CALL_LOG: join(updateDirectory, 'tool-calls.jsonl'),
-  KILLERNOTES_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
+  KILLERNOTES_CLI: fixtureExecutable,
   KILLERMCP_FAKE_NOTES: '1',
   KILLERMCP_FAKE_KILLENDAR: '1',
   KILLERMCP_FAKE_SHELL: '1',
   KILLERMCP_FAKE_SCAN: '1',
   KILLERMCP_FAKE_PDF: '1',
-  KILLERPDF_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
-  KILLERSCAN_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
-  KILLERSHELL_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
-  KILLENDAR_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
-  KILLERBENCH_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
+  KILLERPDF_CLI: fixtureExecutable,
+  KILLERSCAN_CLI: fixtureExecutable,
+  KILLERSHELL_CLI: fixtureExecutable,
+  KILLENDAR_CLI: fixtureExecutable,
+  KILLERBENCH_CLI: fixtureExecutable,
   KILLERMCP_FAKE_BENCH: '1',
-  KILLERSHOT_CLI: resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe'),
+  KILLERSHOT_CLI: fixtureExecutable,
   KILLERMCP_FAKE_SHOT: '1',
   KILLERMCP_FAKE_SHOT_MARK: join(updateDirectory, 'slow-capture.done'),
-  KILLERMCP_STATE_DIR: join(updateDirectory, 'state'),
-  KILLERBENCH_STATE_DIR: join(updateDirectory, 'bench-state'),
 };
-const child = spawn(hostExecutable, [], { stdio: ['pipe', 'pipe', 'inherit'], env: environment });
+const child = spawn(fixtureExecutable, hostArguments, { stdio: ['pipe', 'pipe', 'inherit'], env: environment });
 hosts.push(child);
 let closing = false;
 child.on('exit', code => {
@@ -76,6 +94,7 @@ child.on('exit', code => {
 });
 let buffer = '';
 const pending = new Map();
+const unmatchedErrors = [];
 child.stdout.setEncoding('utf8');
 child.stdout.on('data', chunk => {
   buffer += chunk;
@@ -83,6 +102,7 @@ child.stdout.on('data', chunk => {
     const end = buffer.indexOf('\n');
     const message = JSON.parse(buffer.slice(0, end));
     buffer = buffer.slice(end + 1);
+    if (!pending.has(message.id) && message.error) unmatchedErrors.push(message.error);
     pending.get(message.id)?.(message.error ? { error: message.error } : message.result);
     pending.delete(message.id);
   }
@@ -104,7 +124,16 @@ function request(method, params = {}) {
 const initialized = await request('initialize', { protocolVersion: '2025-06-18' });
 assert.equal(initialized.serverInfo.name, 'KillerMCP');
 assert.equal(initialized.serverInfo.version, releaseVersion);
-assert.match(initialized.instructions, /KillerMCP 99\.0\.0 is available/);
+async function waitForUpdateStatus(invoke) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const result = await invoke('tools/call', { name: 'killermcp_update_status', arguments: {} });
+    const status = JSON.parse(result.content[0].text);
+    if (status.checkedAt) return status;
+    await new Promise(done => setTimeout(done, 25));
+  }
+  throw new Error('The background update check did not finish.');
+}
+assert.equal((await waitForUpdateStatus(request)).latestVersion, '99.0.0');
 const cachedStatus = JSON.parse(await readFile(join(updateDirectory, 'status.json'), 'utf8'));
 assert.equal(cachedStatus.LatestVersion, '99.0.0');
 assert.equal(cachedStatus.Notes, releaseNotes);
@@ -152,7 +181,7 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'expand_ipv4_range', 'calculate_ipv4_subnet', 'generate_ipv6_ula', 'json_to_csv',
   'parse_url', 'parse_user_agent', 'parse_phone_number', 'convert_color', 'lookup_mac_vendor', 'lookup_domain_dns', 'lookup_domain_rdap', 'lookup_cve', 'generate_spf_record', 'generate_dmarc_record', 'parse_email_headers',
   'test_regex',
-  'encode_file_base64_local', 'decode_file_base64_local', 'check_pdf_signatures_local',
+  'encode_file_base64_local', 'decode_file_base64_local', 'write_text_file_local', 'check_pdf_signatures_local',
   'otp_private', 'generate_otp_secret_private',
   'generate_ulids', 'generate_uuids', 'generate_lorem_ipsum',
   'parse_jwt_private',
@@ -368,22 +397,26 @@ assert.equal(JSON.parse(regex.content[0].text).matches.length, 1);
 const pdfSignatures = JSON.parse((await request('tools/call', { name: 'check_pdf_signatures_local', arguments: { path: signedPdf } })).content[0].text);
 assert.equal(pdfSignatures.signatures.length, 1);
 assert.equal(pdfSignatures.signatures[0].integrity, true);
-const directory = await mkdtemp(join(tmpdir(), 'killermcp-'));
+const directory = await mkdtemp(join(updateDirectory, 'files-'));
+const downloadsProbe = spawnSync(fixtureExecutable, ['--review-downloads-folder'], { encoding: 'utf8' });
+assert.equal(downloadsProbe.status, 0, downloadsProbe.stderr);
+assert.ok(isAbsolute(downloadsProbe.stdout.trim()), 'The fixture did not return the actual Downloads folder.');
+const destination = join(downloadsProbe.stdout.trim(), `killermcp-native-${process.pid}-${Date.now()}.bin`);
+let decodedCreated = false;
 try {
   const source = join(directory, 'source.bin');
-  const destination = join(directory, 'decoded.bin');
   await writeFile(source, Buffer.from([0, 1, 2, 254, 255]));
   const fileEncoded = await request('tools/call', { name: 'encode_file_base64_local', arguments: { path: source } });
   assert.deepEqual(JSON.parse(fileEncoded.content[0].text), { base64: 'AAEC/v8=', byteLength: 5 });
   const fileDecoded = await request('tools/call', { name: 'decode_file_base64_local', arguments: { path: destination, base64: 'AAEC/v8=' } });
-  assert.equal(JSON.parse(fileDecoded.content[0].text).byteLength, 5);
+  assert.notEqual(fileDecoded.isError, true, fileDecoded.content[0].text);
+  decodedCreated = true;
+  assert.equal(JSON.parse(fileDecoded.content[0].text).bytes, 5);
   assert.deepEqual(await readFile(destination), Buffer.from([0, 1, 2, 254, 255]));
   const overwrite = await request('tools/call', { name: 'decode_file_base64_local', arguments: { path: destination, base64: 'AAEC/v8=' } });
   assert.equal(overwrite.isError, true);
   // Agents must not write the files that decide what KillerMCP and KillerBench let them do,
   // whether the path names the folder directly, takes a detour or goes through a link.
-  const benchState = environment.KILLERBENCH_STATE_DIR;
-  const mcpState = environment.KILLERMCP_STATE_DIR;
   await mkdir(join(benchState, 'nested'), { recursive: true });
   await mkdir(mcpState, { recursive: true });
   const link = join(directory, 'bench-link');
@@ -404,6 +437,7 @@ try {
   await assert.rejects(readFile(join(benchState, 'agent-repair-lock.json')));
   await assert.rejects(readFile(join(mcpState, 'killerbench-settings-approved.json')));
 } finally {
+  if (decodedCreated) await rm(destination);
   await rm(directory, { recursive: true, force: true });
 }
 const hotp = await request('tools/call', { name: 'otp_private', arguments: { secret: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', mode: 'hotp', counter: 0 } });
@@ -477,17 +511,17 @@ assert.equal(JSON.parse(benchVitals.content[0].text).result.data.state, 'Clear')
 const benchRepairs = await request('tools/call', { name: 'killerbench_repair_actions', arguments: {} });
 assert.equal(JSON.parse(benchRepairs.content[0].text).repairLevel, 'off');
 const network = await request('tools/call', { name: 'killerscan_local_network', arguments: {} });
-assert.equal(JSON.parse(network.content[0].text).localIp, '192.0.2.10');
+assert.equal(JSON.parse(network.content[0].text).localIp, '192.168.50.10');
 const scan = await request('tools/call', { name: 'killerscan_scan_network', arguments: {} });
 const scanned = JSON.parse(scan.content[0].text);
-assert.equal(scanned.target, '192.0.2.0/24');
-assert.equal(scanned.devices[0].IpAddress, '192.0.2.10');
+assert.equal(scanned.target, '192.168.50.0/24');
+assert.equal(scanned.devices[0].IpAddress, '192.168.50.10');
 const preflight = await request('tools/call', { name: 'killerpdf_preflight', arguments: { path: pdfSourceOne, profile: 'print' } });
 assert.equal(JSON.parse(preflight.content[0].text).valid, true);
 // Opening a file on a server sends the user's Windows sign-in to it, so servers outside the local
 // network are refused before anything contacts them unless the user listed them, and device paths
 // are refused outright. 203.0.113.0/24 is a documentation range that no one owns.
-const networkMessage = /local network or listed in network-servers\.json/;
+const networkMessage = /local-network IP address or by server name listed in network-servers\.json/;
 for (const path of ['\\\\203.0.113.5\\share\\a.pdf', '//203.0.113.5/share/a.pdf', '\\\\?\\UNC\\203.0.113.5\\share\\a.pdf', '\\\\203.0.113.5@SSL\\DavWWWRoot\\a.pdf']) {
   const refused = await request('tools/call', { name: 'killerpdf_document_info', arguments: { path } });
   assert.equal(refused.isError, true, path);
@@ -502,8 +536,8 @@ assert.match(device.content[0].text, /Device paths are not accepted/);
 // Address ranges are covered in the runtime checks; here a loopback server shows the rule lets local servers through.
 const loopback = await request('tools/call', { name: 'killerpdf_document_info', arguments: { path: '\\\\127.0.0.1\\no-such-share\\a.pdf' } });
 assert.doesNotMatch(loopback.content[0].text, networkMessage);
-await mkdir(environment.KILLERMCP_STATE_DIR, { recursive: true });
-await writeFile(join(environment.KILLERMCP_STATE_DIR, 'network-servers.json'), JSON.stringify({ servers: ['files.invalid'] }));
+await mkdir(mcpState, { recursive: true });
+await writeFile(join(mcpState, 'network-servers.json'), JSON.stringify({ servers: ['files.invalid'] }));
 const allowlisted = await request('tools/call', { name: 'killerpdf_document_info', arguments: { path: '\\\\files.invalid\\share\\a.pdf' } });
 assert.doesNotMatch(allowlisted.content[0].text, networkMessage);
 const unlisted = await request('tools/call', { name: 'killerpdf_document_info', arguments: { path: '\\\\other.invalid\\share\\a.pdf' } });
@@ -513,12 +547,14 @@ const merged = await request('tools/call', { name: 'killerpdf_merge', arguments:
 assert.equal(JSON.parse(merged.content[0].text).inputCount, 2);
 assert.equal((await readFile(mergedPath, 'utf8')), 'fixture pdf');
 const unknown = await request('tools/call', { name: 'no_such_tool', arguments: {} });
-assert.equal(unknown.isError, true);
+assert.equal(unknown.error.code, -32602);
 const afterUnknown = await request('tools/call', { name: 'text_statistics', arguments: { text: 'still running' } });
 assert.notEqual(afterUnknown.isError, true);
 // A line that is valid JSON but not a request object must not end the server.
 child.stdin.write('1\n[]\n"text"\nnull\n{"id":[],"method":7}\n');
 assert.deepEqual(await request('ping'), {});
+assert.equal(unmatchedErrors.length, 5);
+assert.deepEqual(unmatchedErrors.map(error => error.code), [-32600, -32600, -32600, -32600, -32601]);
 // A message over the size limit is refused without being read whole, and the server keeps going.
 const oversized = new Promise(done => pending.set(null, done));
 child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 'oversized', method: 'tools/call', params: { name: 'text_statistics', arguments: { text: 'x'.repeat(17 * 1024 * 1024) } } })}\n`);
@@ -563,7 +599,7 @@ if (process.platform === 'win32') {
   const denied = spawnSync('icacls', [brokenApp, '/deny', '*S-1-1-0:(X)'], { stdio: 'ignore' });
   assert.equal(denied.status, 0, 'Could not deny execute on the broken app fixture.');
 }
-const stalled = spawn(hostExecutable, [], {
+const stalled = spawn(fixtureExecutable, hostArguments, {
   stdio: ['pipe', 'pipe', 'ignore'],
   env: { ...environment, KILLERMCP_FAKE_HANG: '1', KILLERNOTES_CLI: fakeApp, KILLERPDF_CLI: brokenApp, KILLENDAR_CLI: missingApp, KILLERSHELL_CLI: missingApp, KILLERSCAN_CLI: missingApp, KILLERBENCH_CLI: missingApp, KILLERSHOT_CLI: missingApp },
 });
@@ -602,11 +638,12 @@ await new Promise(done => { if (stalledExited) done(); else stalled.on('exit', d
 // A host that exits while an app it asked for its commands still hangs stops that app instead of
 // leaving it running.
 if (process.platform === 'win32') {
+  const ownedApps = () => `Get-Process -Name 'KillerMCP.Runtime.Checks' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '${fakeApp.replaceAll("'", "''")}' -and $_.Id -notin @(${hosts.map(host => host.pid).join(',')}) }`;
   const hungApps = () => spawnSync('powershell.exe', ['-NoProfile', '-Command',
-    `@(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*${fakeApp}*' }).Count`],
+    `@(${ownedApps()}).Count`],
     { encoding: 'utf8' }).stdout.trim();
   assert.equal(hungApps(), '0', 'An app was already running before the host that leaves early started.');
-  const early = spawn(hostExecutable, [], {
+  const early = spawn(fixtureExecutable, hostArguments, {
     stdio: ['pipe', 'pipe', 'ignore'],
     env: { ...environment, KILLERMCP_FAKE_HANG: '1', KILLERNOTES_CLI: fakeApp, KILLERPDF_CLI: missingApp, KILLENDAR_CLI: missingApp, KILLERSHELL_CLI: missingApp, KILLERSCAN_CLI: missingApp, KILLERBENCH_CLI: missingApp, KILLERSHOT_CLI: missingApp },
   });
@@ -640,12 +677,12 @@ if (process.platform === 'win32') {
     left = hungApps();
   }
   if (left !== '0') spawnSync('powershell.exe', ['-NoProfile', '-Command',
-    `Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*${fakeApp}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`], { stdio: 'ignore' });
+    `${ownedApps()} | ForEach-Object { Stop-Process -Id $_.Id -Force }`], { stdio: 'ignore' });
   assert.equal(left, '0', 'A host that exited left a hanging app running.');
 }
 
 // A release fetched while the update cache cannot be written is still reported.
-const uncached = spawn(hostExecutable, [], {
+const uncached = spawn(fixtureExecutable, hostArguments, {
   stdio: ['pipe', 'pipe', 'ignore'],
   env: { ...environment, KILLERMCP_UPDATE_CACHE: join(pdfSourceOne, 'status.json') },
 });
@@ -661,7 +698,25 @@ const uncachedInitialize = await new Promise((done, fail) => {
   });
   uncached.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } })}\n`);
 });
-assert.match(uncachedInitialize.instructions, /KillerMCP 99\.0\.0 is available/);
+assert.equal(uncachedInitialize.serverInfo.name, 'KillerMCP');
+let uncachedId = 1;
+const uncachedRequest = (method, params) => new Promise((done, fail) => {
+  let replyBuffer = '';
+  const requestId = ++uncachedId;
+  const timer = setTimeout(() => { uncached.stdout.off('data', receive); fail(new Error('No uncached update status reply.')); }, 5000);
+  function receive(chunk) {
+    replyBuffer += chunk;
+    while (replyBuffer.includes('\n')) {
+      const end = replyBuffer.indexOf('\n');
+      const reply = JSON.parse(replyBuffer.slice(0, end));
+      replyBuffer = replyBuffer.slice(end + 1);
+      if (reply.id === requestId) { clearTimeout(timer); uncached.stdout.off('data', receive); done(reply.result); }
+    }
+  }
+  uncached.stdout.on('data', receive);
+  uncached.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: requestId, method, params })}\n`);
+});
+assert.equal((await waitForUpdateStatus(uncachedRequest)).latestVersion, '99.0.0');
 uncached.stdin.end();
 
 updateServer.close();

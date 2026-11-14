@@ -35,7 +35,7 @@ The 81 KillerTools utilities include calculations, lookups, and generated output
 
 Tool availability depends on the supported apps installed on the computer. Review a client's proposed tool call, especially its arguments, before approving access to sensitive data, network targets, printers, or local output paths.
 
-Opening a file on a network server sends your Windows sign-in to that server, so file tools accept network paths, mapped network drives and links to them only for servers on the local network: loopback, private (10.x, 172.16 to 172.31, 192.168.x), link-local, and IPv6 unique local addresses. To allow another server, list it in `%LOCALAPPDATA%\KillerMCP\network-servers.json`, for example `{"servers": ["files.example.com"]}`. Device paths such as `\\.\PhysicalDrive0` are refused. No tool may write into the KillerMCP or KillerBench settings folders, so an agent cannot change this list or the KillerBench repair setting.
+Opening a file on a network server sends your Windows sign-in to that server. File tools accept local-network IP addresses, including loopback, private (10.x, 172.16 to 172.31, 192.168.x), link-local and IPv6 unique local addresses. Server names require an explicit entry in `%LOCALAPPDATA%\KillerMCP\network-servers.json`, for example `{"servers": ["files.example.com"]}`. These rules also apply to mapped drives and links. Device paths such as `\\.\PhysicalDrive0`, alternate data streams and relative file paths are refused. Tools cannot read or write KillerMCP or KillerBench settings, or write into Startup or installed program folders. Recursive content search refuses roots containing the protected settings folders.
 
 ### Tool call history
 
@@ -69,7 +69,8 @@ On Windows, KillerMCP writes a local JSON Lines log at `%LOCALAPPDATA%\KillerMCP
 ### Data conversion, formatting, and comparison
 
 - `base64-string-converter`: Encode or decode Base64 text.
-- `base64-file-converter`: Encode a local file or decode Base64 into a new local file.
+- `base64-file-converter`: Encode a local file or decode Base64 into a new file directly in Downloads, up to 4 MiB.
+- `write_text_file_local`: Save ordinary text directly as a new UTF-8 file in Downloads, up to 1,000,000 characters and 4 MiB. Existing files are never replaced, and text needs no Base64 conversion.
 - `case-converter`: Convert text among common letter case styles.
 - `color-converter`: Convert colors among common formats.
 - `date-time-converter`: Convert dates, times, and timestamps.
@@ -163,11 +164,11 @@ App tools appear only when KillerMCP finds a supported installed version that ad
 - Render selected KillerPDF pages and save each page image as a new rich note.
 - Save a finished KillerBench scan or check as a KillerNotes note.
 
-PDF creation uses the installed Microsoft Edge print engine in a private session that cannot resolve host names. Agent-generated HTML cannot run scripts or load remote images, fonts, or pages; embed images as data URLs instead. Output paths must be absolute, their parent folder must already exist, and existing files are never overwritten.
+PDF creation uses the installed Microsoft Edge print engine in a private session that cannot resolve host names. Agent-generated HTML cannot run scripts or load remote images, fonts, or pages; embed images as data URLs instead. Output paths must be absolute, their parent folder must already exist, and existing files are never overwritten. Image-note batches accept up to 100 selected pages and check every rendered PNG against a 32 MiB limit before importing the first note.
 
 ### KillerPDF
 
-- Merge 2 to 8 local PDF files into one new PDF while preserving the requested order.
+- Merge 2 to 1,000 local PDF files into one new PDF while preserving the requested order.
 - Extract selected pages into a new PDF or split every page into separate PDFs.
 - Remove encryption into a new PDF, using a supplied password when required.
 - Render selected pages as PNG or JPEG images.
@@ -183,12 +184,12 @@ PDF creation uses the installed Microsoft Edge print engine in a private session
 - Run general, attachment, or print preflight checks when the installed build supports them.
 - Run an accessibility report when the installed build supports it.
 - Refuse to overwrite existing files or output folders.
-- Limit each PDF to 64 MiB and combined merge inputs to 128 MiB.
+- Limit each PDF and combined merge inputs to 512 MiB. Render and split tools require a new output folder.
 
 ### KillerScan
 
 - Report the active local IPv4 interface, address, subnet, gateway, and DNS server without scanning other hosts.
-- Run a quick discovery scan against one IPv4 address or a CIDR containing no more than 1,024 addresses.
+- Run a quick discovery scan against one IPv4 address or a CIDR containing no more than 1,024 addresses. Targets must be private, link-local, carrier-grade NAT or verified within an existing saved Location.
 - Run a full scan with fingerprinting and port checks when explicitly requested.
 - Deep probe one IPv4 host, including ports 1 through 1024.
 - With KillerScan 1.9.0 or later, list the saved Locations with their names, IDs, customers, and last targets and adapters. Listing reads only and sends no network traffic. An older install lists none until KillerScan moves its data into Locations, which opening KillerScan or scanning with a Location does.
@@ -207,7 +208,7 @@ Network tools send probes from the local computer. Only test networks that the u
 ### KillerShell
 
 - Search one absolute local folder by filename text or wildcard pattern.
-- Search file contents for a text value.
+- Search file contents for a text value outside protected settings trees. Builds advertising a search deadline return collected matches and `stoppedEarly` after 25 seconds.
 - Combine filename and content filters.
 - List up to 100 files and folders directly inside one absolute directory.
 - Read file or folder size, timestamps, type, and attributes.
@@ -227,13 +228,14 @@ All KillerShell MCP tools are read-only. They cannot run terminal commands, star
 
 - Search note titles, tags, and Markdown content.
 - List notes by group or tag, read a note by ID, and inspect groups, tags, backlinks, outgoing links, history, and vault statistics.
-- Create Markdown notes of up to 30,000 characters and update their title, content, group, tags, or title color.
+- Create Markdown notes of up to 500,000 characters when the installed app supports content files, and update their title, content, group, tags, or title color. Older command-line-only versions accept content that fits their command line.
 - Create nested groups and set or clear group and note title colors.
 - Save a local image as a new rich note.
 - Export a note to a new TXT, Markdown, HTML, or KNOTE file. The resulting path can be passed to another installed Killer app.
 - Bound query, result, and content sizes before KillerNotes receives the request.
+- With advertised support, list templates, trash, tag definitions and saved versions; create from templates, open today's note, restore or pin notes, restore versions, rename groups and manage tag names and colors.
 
-Encrypted notes databases cannot currently be unlocked through MCP.
+Versions advertising `app-pipe-v1` read the active vault through the open, unlocked app, including encrypted vaults. Unlocking stays in the app. A closed or locked vault is refused. Dispatched writes wait up to 40 seconds; a timeout or cancellation warns that the outcome is unknown and the note should be checked before retrying.
 
 ### Killendar
 
@@ -242,7 +244,7 @@ Encrypted notes databases cannot currently be unlocked through MCP.
 - Read up to 31 days and return no more than 100 events.
 - Create a single timed or all-day appointment in the open, unlocked Killendar. The app saves it and updates the visible calendar.
 
-Agenda lookup cannot currently unlock a password-protected calendar. Appointment creation uses the running app after it has been unlocked. Editing, deleting, and creating recurring appointments remain in the app interface.
+Versions advertising `app-pipe-v1` read the active calendar through the open, unlocked app, including password-protected calendars. Unlocking stays in the app. Appointment creation also uses the running unlocked app. Editing, deleting, and creating recurring appointments remain in the app interface.
 
 ### KillerBench
 
@@ -279,7 +281,7 @@ Every repair follows the same steps:
 
 1. `killerbench_repair_preview` runs KillerBench's own preview. Nothing changes. When repairs are allowed and KillerBench finds something to fix, the result includes a token that works once and expires after 10 minutes.
 2. `killerbench_repair_execute` takes only that token, so the client cannot change the command after the preview.
-3. Disruptive repairs open a KillerMCP approval window on the desktop. So does the first repair of any kind after the repair setting is turned on or changed, because any program that can write a file could have changed it. Deny is the default, and the request is denied automatically after four and a half minutes. Agents cannot write into the KillerMCP or KillerBench settings folders through any KillerMCP tool.
+3. Disruptive repairs open a KillerMCP approval window on the desktop. So does the first repair in each host session and after a repair setting changes. Approval requires Windows Hello verification; clicking Approve alone cannot authorize a repair. Deny is the default, and the request is denied automatically after four and a half minutes. Agents cannot read or write the KillerMCP or KillerBench settings folders through any KillerMCP tool.
 4. Windows asks for administrator approval. Privacy changes run as the current user instead, so they apply to the right account.
 5. KillerBench checks the PC again before it changes anything and verifies the result.
 
@@ -305,7 +307,7 @@ Each repair request, approval, denial and outcome is recorded at `%LOCALAPPDATA%
 
 OCR, QR reading, image editing, recording controls and library search require KillerShot 1.1.1 or newer and the advertised command. If the version cannot be identified, these additions stay unavailable while the existing supported tools remain available.
 
-Captures are saved as PNG or JPEG and recordings as MP4 or GIF. Output paths must be absolute, and an existing file is never replaced. Without an output path, KillerShot saves into its own output folder. A screenshot is kept in KillerShot's capture library only when the call sets keepInLibrary, and a recording's sound never comes from KillerShot's saved setting. The clipboard is left alone unless the call asks for a copy, and no shutter sound plays. The tools return file paths, not image data. MP4 recordings can be at most 4096 pixels wide; use GIF or a smaller area for a wider desktop. A screenshot can show anything on the screen, including other apps and private information, so review capture requests before approving them.
+Captures are saved as PNG or JPEG and recordings as MP4 or GIF. Output paths must be absolute, and an existing file is never replaced. Without an output path, KillerShot saves into its own output folder. A screenshot is kept in KillerShot's capture library only when the call sets keepInLibrary, and a recording's sound never comes from KillerShot's saved setting. Microphone recording captures room audio. The clipboard is left alone unless the call asks for a copy, and captures honor the app's shutter-sound preference. The tools return file paths, not image data. MP4 recordings can be at most 4096 pixels wide; use GIF or a smaller area for a wider desktop. A screenshot can show anything on the screen, including other apps and private information, so review capture requests before approving them.
 
 ## Where data goes
 

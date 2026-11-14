@@ -66,8 +66,7 @@ namespace KillerMCP.Setup
                 {
                     TaskbarIdentity.UseUninstall();
                     if (!silent && !SetupDialog.ConfirmUninstall()) return 0;
-                    IReadOnlyList<string> warnings = Uninstall(destination, removeRegistration: true);
-                    RemoveInstalledApp(destination);
+                    IReadOnlyList<string> warnings = UninstallRegistered(destination);
                     foreach (string warning in warnings) Console.Error.WriteLine(warning);
                     if (!silent && warnings.Count > 0) SetupDialog.ShowFailure(ClientWarningText(warnings));
                     return 0;
@@ -83,7 +82,7 @@ namespace KillerMCP.Setup
                     if (!RuntimeReady(isolated)) return MissingRuntimeExitCode;
                     int? detached = ClientJobEscape.RunOutsideClientJob(args);
                     if (detached.HasValue) return detached.Value;
-                    Install(destination);
+                    Install(destination, args.Any(value => value.Equals("/allow-downgrade", StringComparison.OrdinalIgnoreCase)), enforceVersion: true);
                     if (notify) NotifySuccess(destination);
                     return 0;
                 }
@@ -116,10 +115,12 @@ namespace KillerMCP.Setup
             catch { return false; }
         }
 
-        internal static void Install(string destination)
+        internal static void Install(string destination, bool allowDowngrade = false, bool enforceVersion = false)
         {
             ManifestPaths.EnsureSafeRoot(destination);
             using var installLease = KillerFamily.Deployment.InstallerExitCodes.Acquire("KillerMCP");
+            if (enforceVersion) EnsureVersionAllowed(InstalledVersion(destination), CurrentVersion, allowDowngrade);
+            using var repairLease = AcquireRepairLease();
             ValidateSetupRegistration(destination);
             string parent = Path.GetDirectoryName(destination) ?? throw new InvalidOperationException("The installation directory is unavailable.");
             Directory.CreateDirectory(parent);
@@ -180,6 +181,8 @@ namespace KillerMCP.Setup
         internal static IReadOnlyList<string> Uninstall(string destination, bool removeRegistration)
         {
             ManifestPaths.EnsureSafeRoot(destination);
+            using var installLease = KillerFamily.Deployment.InstallerExitCodes.Acquire("KillerMCP");
+            using var repairLease = AcquireRepairLease();
             var warnings = new List<string>();
             RemoveInterruptedRemovals(destination);
             if (!Directory.Exists(destination)) return warnings;
@@ -201,6 +204,7 @@ namespace KillerMCP.Setup
 
         internal static IReadOnlyList<string> UninstallRegistered(string destination)
         {
+            using var installLease = KillerFamily.Deployment.InstallerExitCodes.Acquire("KillerMCP");
             IReadOnlyList<string> warnings = Uninstall(destination, removeRegistration: true);
             RemoveInstalledApp(destination);
             return warnings;
@@ -208,6 +212,26 @@ namespace KillerMCP.Setup
 
         internal static string ClientWarningText(IReadOnlyList<string> warnings) =>
             "KillerMCP was removed, but these agent clients could not be updated:" + Environment.NewLine + string.Join(Environment.NewLine, warnings.Select(warning => warning.Substring("Warning: ".Length)));
+
+        internal static IDisposable AcquireRepairLease(string? holdPath = null)
+        {
+            string path = holdPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerMCP", "killerbench-repair.hold");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose); }
+            catch (IOException exception) when ((exception.HResult & 0xffff) == 32 || (exception.HResult & 0xffff) == 33)
+            {
+                throw new System.ComponentModel.Win32Exception(KillerFamily.Deployment.InstallerExitCodes.Busy, "A KillerBench repair is running. Wait for it to finish before changing KillerMCP.");
+            }
+        }
+
+        internal static void EnsureVersionAllowed(string? installed, string offered, bool allowDowngrade)
+        {
+            if (installed == null) return;
+            if (!Version.TryParse(installed, out Version? current) || !Version.TryParse(offered, out Version? next))
+                throw new InvalidDataException("The installed or offered version could not be verified.");
+            if (!allowDowngrade && new Version(next.Major, next.Minor, Math.Max(0, next.Build)) < new Version(current.Major, current.Minor, Math.Max(0, current.Build)))
+                throw new System.Security.SecurityException("Silent downgrade refused. Use /allow-downgrade only when an older release is intended.");
+        }
 
         internal static string? InstalledVersion(string destination)
         {
@@ -269,12 +293,15 @@ namespace KillerMCP.Setup
         // The configurator runs Codex, which has to stop with it.
         private static void KillTree(Process process)
         {
+            using var descendants = ConfiguratorProcessTree.Capture(process);
+            bool stoppedTree = false;
             try
             {
                 var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "taskkill.exe"), "/PID " + process.Id + " /T /F") { UseShellExecute = false, CreateNoWindow = true };
-                using (Process? killer = Process.Start(start)) killer?.WaitForExit(10000);
+                using (Process? killer = Process.Start(start)) stoppedTree = killer != null && killer.WaitForExit(10000) && killer.ExitCode == 0;
             }
             catch (System.ComponentModel.Win32Exception) { }
+            if (!stoppedTree) descendants.TerminateRemaining();
             try { if (!process.HasExited) process.Kill(); }
             catch (Exception exception) when (exception is InvalidOperationException || exception is System.ComponentModel.Win32Exception) { }
         }
@@ -526,9 +553,15 @@ namespace KillerMCP.Setup
             Registry.CurrentUser.DeleteSubKeyTree(RegistryPath(destination), false);
             if (!File.Exists(setup)) return;
             if (!Path.GetFullPath(Assembly.GetExecutingAssembly().Location).Equals(Path.GetFullPath(setup), StringComparison.OrdinalIgnoreCase)) { File.Delete(setup); return; }
-            string script = "Wait-Process -Id " + Process.GetCurrentProcess().Id + " -ErrorAction SilentlyContinue; Remove-Item -LiteralPath '" + setup.Replace("'", "''") + "' -Force -ErrorAction SilentlyContinue";
+            Process.Start(SelfRemovalProcess(setup, Process.GetCurrentProcess().Id));
+        }
+
+        internal static ProcessStartInfo SelfRemovalProcess(string setup, int processId)
+        {
+            string script = "Wait-Process -Id " + processId + " -ErrorAction SilentlyContinue; Remove-Item -LiteralPath '" + setup.Replace("'", "''") + "' -Force -ErrorAction SilentlyContinue";
             string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
-            Process.Start(new ProcessStartInfo("powershell.exe", "-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " + encoded) { UseShellExecute = false, CreateNoWindow = true });
+            string powershell = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            return new ProcessStartInfo(powershell, "-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " + encoded) { UseShellExecute = false, CreateNoWindow = true };
         }
 
         private static string ValidateTestRoot(string value)

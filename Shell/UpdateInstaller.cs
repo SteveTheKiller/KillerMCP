@@ -12,6 +12,13 @@ internal static class UpdateInstaller
     internal const long MaximumInstallerBytes = 512L * 1024 * 1024;
     private const long MaximumChecksumBytes = 64 * 1024;
 
+    internal static bool IsNewerRelease(string? offered, string installed)
+    {
+        if (!Version.TryParse(offered, out var latest) || !Version.TryParse(installed, out var current)) return false;
+        return new Version(latest.Major, latest.Minor, Math.Max(0, latest.Build))
+            > new Version(current.Major, current.Minor, Math.Max(0, current.Build));
+    }
+
     /// <summary>A verified download and the SHA-256 it had when it was checked.</summary>
     internal sealed record VerifiedInstaller(string Path, string Sha256);
 

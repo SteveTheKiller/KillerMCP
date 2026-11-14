@@ -5,6 +5,7 @@ param([string]$HostPath = '')
 $ErrorActionPreference = 'Stop'
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) { throw 'The notice retry test requires Windows.' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $PSScriptRoot 'New-HostCheckFixture.ps1')
 $mcpHost = if ($HostPath) { [IO.Path]::GetFullPath($HostPath) } else { Join-Path $root 'bin\Release\net10.0\KillerMCP.exe' }
 if (-not (Test-Path -LiteralPath $mcpHost -PathType Leaf)) { throw "The KillerMCP host is missing at $mcpHost. Build the solution first." }
 
@@ -46,6 +47,7 @@ function Invoke-Host([int]$ExpectedStarts) {
 
 try {
     New-Item -ItemType Directory -Path $scratch -Force | Out-Null
+    $mcpHost = New-HostCheckFixture $mcpHost (Join-Path $scratch 'host')
     $quits = Join-Path $scratch 'notice-quits.exe'
     $opens = Join-Path $scratch 'notice-opens.exe'
     New-StandIn $quits $false
@@ -58,7 +60,7 @@ try {
     $cache = @{ LatestVersion = '99.0.0'; CheckedAt = [DateTimeOffset]::UtcNow.ToString('o'); Notes = $null } | ConvertTo-Json -Compress
     [IO.File]::WriteAllText($env:KILLERMCP_UPDATE_CACHE, $cache, (New-Object Text.UTF8Encoding($false)))
 
-    $env:KILLERMCP_NOTIFIER = $quits
+    Copy-Item -LiteralPath $quits -Destination (Join-Path (Split-Path $mcpHost) 'KillerMCP.Notify.exe')
     Invoke-Host 1
     if ((Get-Starts) -ne 1) { throw "The first host started the notice $(Get-Starts) times, expected once." }
     Invoke-Host 2
@@ -66,14 +68,19 @@ try {
 
     Remove-Item -LiteralPath (Join-Path $scratch 'update-notification.json') -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $marker
-    $env:KILLERMCP_NOTIFIER = $opens
+    Copy-Item -LiteralPath $opens -Destination (Join-Path (Split-Path $mcpHost) 'KillerMCP.Notify.exe') -Force
     Invoke-Host 1
     Invoke-Host 1
     if ((Get-Starts) -ne 1) { throw "A notice that opened was shown again by the next host ($(Get-Starts) starts)." }
     Write-Output 'Notices that never open are retried, and notices that opened are not repeated.'
 }
 finally {
-    Get-CimInstance Win32_Process -Filter "Name = 'notice-opens.exe' OR Name = 'notice-quits.exe'" | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath $marker) {
+        foreach ($noticeId in Get-Content -LiteralPath $marker) {
+            $notice = Get-Process -Id ([int]$noticeId) -ErrorAction SilentlyContinue
+            if ($notice -and $notice.Path -eq (Join-Path (Split-Path $mcpHost) 'KillerMCP.Notify.exe')) { Stop-Process -Id $notice.Id -Force -ErrorAction SilentlyContinue }
+        }
+    }
     foreach ($name in $variables) { [Environment]::SetEnvironmentVariable($name, $previous[$name]) }
     Start-Sleep -Milliseconds 300
     if (Test-Path -LiteralPath $scratch) { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }

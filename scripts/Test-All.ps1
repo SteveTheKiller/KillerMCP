@@ -1,9 +1,14 @@
-param([string]$ArtifactRoot = '')
+param([string]$ArtifactRoot = '', [string]$LabMachine = '')
 
 $ErrorActionPreference = 'Stop'
+if ($env:CI -ne 'true' -and (!$LabMachine -or $LabMachine -ine $env:COMPUTERNAME)) {
+    throw 'Executable app checks must run on the leased disposable VM with its explicit -LabMachine name, or in disposable CI.'
+}
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $ArtifactRoot = & (Join-Path $PSScriptRoot 'Get-ArtifactRoot.ps1') -ArtifactRoot $ArtifactRoot
 & (Join-Path $PSScriptRoot 'Test-PackagingPaths.ps1') -ScratchRoot $ArtifactRoot
+& (Join-Path $PSScriptRoot 'Test-PluginVersion.ps1')
+& (Join-Path $PSScriptRoot 'Test-ReleasePreflight.ps1') -ScratchRoot $ArtifactRoot
 
 dotnet build (Join-Path $root 'KillerMCP.slnx') -c Release
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP solution build failed.' }
@@ -16,8 +21,29 @@ if ($LASTEXITCODE -ne 0) { throw 'KillerMCP client checks failed.' }
 dotnet run --project (Join-Path $root 'tests\KillerMCP.Runtime.Checks\KillerMCP.Runtime.Checks.csproj') -c Release --no-build
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP runtime checks failed.' }
 
-dotnet run --project (Join-Path $root 'tests\KillerMCP.Runtime.Checks\KillerMCP.Runtime.Checks.csproj') -c Release --no-build -- --review-network-path
-if ($LASTEXITCODE -ne 0) { throw 'KillerMCP bookmark path checks failed.' }
+foreach ($review in @('--review-child-input', '--review-positional-input', '--review-download-paths', '--review-data-moves', '--review-repair-trust', '--review-async', '--review-adapter-safety', '--review-notes-bridge', '--review-notes-workflows', '--review-integration-pdf', '--review-network-path', '--review-release-gaps', '--review-update-flavor')) {
+    $previousPdfRoot = [Environment]::GetEnvironmentVariable('KILLERMCP_PDF_CHECK_ROOT')
+    $previousTemp = [Environment]::GetEnvironmentVariable('TEMP')
+    $previousTmp = [Environment]::GetEnvironmentVariable('TMP')
+    try {
+        $reviewTemp = Join-Path $ArtifactRoot ($review.TrimStart('-') + '-' + [Guid]::NewGuid().ToString('N'))
+        [IO.Directory]::CreateDirectory($reviewTemp) | Out-Null
+        [Environment]::SetEnvironmentVariable('TEMP', $reviewTemp)
+        [Environment]::SetEnvironmentVariable('TMP', $reviewTemp)
+        if ($review -eq '--review-integration-pdf') {
+            $pdfRoot = Join-Path $ArtifactRoot ('integration-pdf-review-' + [Guid]::NewGuid().ToString('N'))
+            [IO.Directory]::CreateDirectory($pdfRoot) | Out-Null
+            [Environment]::SetEnvironmentVariable('KILLERMCP_PDF_CHECK_ROOT', $pdfRoot)
+        }
+        dotnet run --project (Join-Path $root 'tests\KillerMCP.Runtime.Checks\KillerMCP.Runtime.Checks.csproj') -c Release --no-build -- $review
+        if ($LASTEXITCODE -ne 0) { throw "KillerMCP review checks failed: $review" }
+    }
+    finally {
+        [Environment]::SetEnvironmentVariable('KILLERMCP_PDF_CHECK_ROOT', $previousPdfRoot)
+        [Environment]::SetEnvironmentVariable('TEMP', $previousTemp)
+        [Environment]::SetEnvironmentVariable('TMP', $previousTmp)
+    }
+}
 
 dotnet run --project (Join-Path $root 'tests\KillerMCP.Setup.Checks\KillerMCP.Setup.Checks.csproj') -c Release --no-build
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP setup checks failed.' }
@@ -25,10 +51,27 @@ if ($LASTEXITCODE -ne 0) { throw 'KillerMCP setup checks failed.' }
 node (Join-Path $PSScriptRoot 'Test-NativeHost.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP native host checks failed.' }
 
+node (Join-Path $PSScriptRoot 'Test-ReviewDrivers.mjs') --root (Join-Path $ArtifactRoot 'driver-stub-checks')
+if ($LASTEXITCODE -ne 0) { throw 'KillerMCP pure Node review-driver checks failed.' }
+
 & (Join-Path $PSScriptRoot 'Test-NativePackage.ps1') -ArtifactRoot $ArtifactRoot
 
 if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
+    $configurator = Join-Path $root 'Configuration\bin\Release\net10.0\KillerMCP.Configure.exe'
+    foreach ($nested in @($false, $true)) {
+        $lifetimeScratch = Join-Path $ArtifactRoot ('configurator-lifetime-' + [Guid]::NewGuid().ToString('N'))
+        $lifetimeArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'Test-ConfiguratorLifetime.ps1'), '-ConfiguratorPath', $configurator, '-ScratchPath', $lifetimeScratch, '-LabMachine', $env:COMPUTERNAME)
+        if ($nested) { $lifetimeArguments += '-NestedJob' }
+        powershell @lifetimeArguments
+        if ($LASTEXITCODE -ne 0) { throw 'KillerMCP configurator lifetime checks failed.' }
+    }
+    powershell -NoProfile -STA -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Test-RepairHello.ps1') -AssemblyPath (Join-Path $root 'Shell\bin\Release\net48\KillerMCP.Notify.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'KillerMCP repair consent check failed.' }
+    & (Join-Path $PSScriptRoot 'Test-InstallerReview.ps1') -ArtifactRoot $ArtifactRoot -LabMachine $LabMachine
     & (Join-Path $PSScriptRoot 'Test-WindowsInstaller.ps1') -ArtifactRoot $ArtifactRoot
+    $setupPath = Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe'
+    & (Join-Path $PSScriptRoot 'Test-UpdatePreferences.ps1') -AssemblyPath $setupPath -ScratchPath (Join-Path $ArtifactRoot 'update-preferences-checks')
+    & (Join-Path $PSScriptRoot 'Test-UpdateBootstrapOff.ps1') -SetupPath $setupPath -ScratchPath (Join-Path $ArtifactRoot 'update-bootstrap-off-checks')
     & (Join-Path $PSScriptRoot 'Test-InstallerContainment.ps1') -Installer (Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe')
     & (Join-Path $PSScriptRoot 'Test-ClientJobUpdate.ps1') -Installer (Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe')
     & (Join-Path $PSScriptRoot 'Test-ClientJobNotice.ps1')
@@ -36,4 +79,6 @@ if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Ru
     & (Join-Path $PSScriptRoot 'Test-NotifyFailure.ps1') -Installer (Join-Path $ArtifactRoot 'installer\KillerMCP-Setup.exe')
 }
 
+# Manual desktop checks: Test-StandaloneWindows.ps1, Test-StandaloneFocus.ps1 and
+# Test-InstallerUpdateChoice.ps1 open windows. Run those on the disposable lab desktop.
 Write-Output 'All KillerMCP checks passed.'

@@ -33,7 +33,7 @@ jobs:
           }
           # Pinned so a new module release cannot change what runs here without a commit.
           Install-Module Microsoft.WinGet.Client -RequiredVersion 1.29.380 -Scope CurrentUser -Force -Repository PSGallery
-          Repair-WinGetPackageManager -Latest
+          Repair-WinGetPackageManager -Version '1.12.350'
           winget --version
         env:
           # Without a token the module's GitHub release lookup is anonymous and shares the
@@ -54,13 +54,21 @@ jobs:
           Add-Content $env:GITHUB_PATH $env:RUNNER_TEMP
         shell: pwsh
 
-      - name: Submit to WinGet
+      - name: Validate WinGet manifest
         run: |
           $manifestDirectory = Join-Path $env:RUNNER_TEMP ("winget-" + [guid]::NewGuid())
           ./scripts/New-WinGetManifest.ps1 -Tag $env:RELEASE_TAG -OutputDirectory $manifestDirectory
           winget validate --manifest $manifestDirectory
           if ($LASTEXITCODE -ne 0) { throw "WinGet manifest validation failed." }
+          "WINGET_MANIFEST_DIRECTORY=$manifestDirectory" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+        shell: pwsh
 
+      - name: Submit to WinGet
+        run: |
+          $manifestDirectory = $env:WINGET_MANIFEST_DIRECTORY
+          if (-not (Test-Path -LiteralPath $manifestDirectory -PathType Container)) { throw 'Validated manifest directory is missing.' }
           # Let the release settle before asking GitHub for a branch. See the header note.
           if ("${{ github.event_name }}" -eq "release") { Start-Sleep -Seconds 90 }
 

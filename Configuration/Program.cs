@@ -8,6 +8,7 @@ if (args.Length != 2 || args[0] is not ("register" or "unregister") || !Path.IsP
 
 try
 {
+    ConfiguratorLifetime.Establish();
     var messages = args[0] == "register" ? ClientConfiguration.RegisterAll(args[1]) : ClientConfiguration.RemoveAll(args[1]);
     foreach (var message in messages) Console.WriteLine(message);
     return 0;
