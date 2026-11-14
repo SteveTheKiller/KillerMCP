@@ -6,6 +6,13 @@ if ($env:CI -ne 'true' -and (!$LabMachine -or $LabMachine -ine $env:COMPUTERNAME
 }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $ArtifactRoot = & (Join-Path $PSScriptRoot 'Get-ArtifactRoot.ps1') -ArtifactRoot $ArtifactRoot
+& (Join-Path $PSScriptRoot 'Test-WorkflowGate.ps1')
+if ($env:CI -ne 'true') {
+    $dirty = @(git -C $root status --porcelain)
+    if ($LASTEXITCODE -ne 0) { throw 'Could not verify the source working tree.' }
+    if ($dirty.Count) { throw 'Commit and push the reviewed source before release validation so GitHub Checks can verify the exact source being tested.' }
+    & (Join-Path $PSScriptRoot 'Test-WorkflowReadiness.ps1')
+}
 & (Join-Path $PSScriptRoot 'Test-PackagingPaths.ps1') -ScratchRoot $ArtifactRoot
 & (Join-Path $PSScriptRoot 'Test-PluginVersion.ps1')
 & (Join-Path $PSScriptRoot 'Test-ReleasePreflight.ps1') -ScratchRoot $ArtifactRoot

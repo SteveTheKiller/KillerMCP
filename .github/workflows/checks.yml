@@ -30,7 +30,9 @@ jobs:
 
       - name: Workflow checks
         shell: pwsh
-        run: ./scripts/Test-Workflows.ps1
+        run: |
+          ./scripts/Test-Workflows.ps1
+          ./scripts/Test-WorkflowGate.ps1
 
       - name: Client checks
         shell: pwsh

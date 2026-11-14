@@ -84,6 +84,8 @@ dotnet build KillerMCP.slnx -c Release
 powershell -NoProfile -File scripts\Test-All.ps1 -LabMachine LAB-VM
 ```
 
+Before release, push the reviewed commit and let its GitHub Checks finish. `Test-All.ps1` verifies that the latest Checks run for that exact commit passed before starting local acceptance. It refuses missing, running, failed or canceled runs, including a newer failure after an older success. GitHub CLI access is required. The release script does not repeat this workflow check or the full test suite.
+
 Build a framework dependent package for the current platform:
 
 ```powershell
