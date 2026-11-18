@@ -26,33 +26,45 @@ namespace KillerMCP.Updates
         }
     }
 
-    // Setup and the update window save each downloaded update as a new file in the temporary folder. A copy
-    // older than an hour belongs to an update that already ran, so it is removed before the next download.
-    // A copy that is still running cannot be deleted and is left for a later download to remove.
+    // Setup and the update window save each downloaded update in a new, empty folder of its own under
+    // %LOCALAPPDATA%\KillerMCP\updates, so nothing another program left in the shared temporary folder sits
+    // beside the setup when it runs. A folder older than an hour belongs to an update that already ran, so it
+    // is removed before the next download. One whose setup is still running cannot be deleted and is left.
     internal static class DownloadedSetups
     {
         private const string Prefix = "KillerMCP-Setup-";
         private static readonly TimeSpan Age = TimeSpan.FromHours(1);
 
-        internal static string NewPath(string folder, string version)
+        internal static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerMCP", "updates");
+
+        internal static string NewPath(string version) => NewPath(Root, version);
+
+        internal static string NewPath(string root, string version)
         {
-            RemoveOld(folder);
-            return Path.Combine(folder, Prefix + version + "-" + Guid.NewGuid().ToString("N") + ".exe");
+            RemoveOld(root);
+            string folder = Path.Combine(root, Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            return Path.Combine(folder, Prefix + version + ".exe");
         }
 
-        private static void RemoveOld(string folder)
+        private static void RemoveOld(string root)
         {
-            string[] files;
-            try { files = Directory.GetFiles(folder, Prefix + "*.exe"); }
+            string[] folders;
+            try { folders = Directory.GetDirectories(root); }
             catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException) { return; }
             DateTime cutoff = DateTime.UtcNow - Age;
-            foreach (string file in files)
+            foreach (string folder in folders)
             {
-                string name = Path.GetFileNameWithoutExtension(file);
-                int separator = name.LastIndexOf('-');
-                if (separator <= Prefix.Length || !Version.TryParse(name.Substring(Prefix.Length, separator - Prefix.Length), out _)
-                    || !Guid.TryParseExact(name.Substring(separator + 1), "N", out _)) continue;
-                try { if (File.GetLastWriteTimeUtc(file) < cutoff) File.Delete(file); }
+                if (!Guid.TryParseExact(Path.GetFileName(folder), "N", out _)) continue;
+                try
+                {
+                    // A junction is never followed; only real folders this class made are emptied.
+                    if ((File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0) continue;
+                    if (Directory.GetLastWriteTimeUtc(folder) >= cutoff) continue;
+                    foreach (string file in Directory.GetFiles(folder))
+                        if (File.GetLastWriteTimeUtc(file) < cutoff) File.Delete(file);
+                    Directory.Delete(folder, false);
+                }
                 catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException) { }
             }
         }

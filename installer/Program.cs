@@ -42,6 +42,7 @@ namespace KillerMCP.Setup
         [STAThread]
         private static int Main(string[] args)
         {
+            KillerMCP.Signing.NativeLoadSafety.Apply();
             KillerFamily.Accessibility.AccessibleControls.Initialize();
             string? testRoot = Environment.GetEnvironmentVariable(TestRootVariable);
             bool isolated = !string.IsNullOrWhiteSpace(testRoot);

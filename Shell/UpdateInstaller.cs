@@ -42,7 +42,7 @@ internal static class UpdateInstaller
         string actual = Sha256Hex(installer);
         if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The update checksum does not match the published release.");
 
-        string path = KillerMCP.Updates.DownloadedSetups.NewPath(Path.GetTempPath(), version);
+        string path = KillerMCP.Updates.DownloadedSetups.NewPath(version);
         using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
             await output.WriteAsync(installer, 0, installer.Length).ConfigureAwait(false);
         if (!KillerMCP.Signing.ReleaseSignature.IsKillerMcpRelease(path) || !IsRelease(path, version))

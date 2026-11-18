@@ -368,21 +368,27 @@ try
         Console.WriteLine("PASS update publisher check");
     }
 
-    // Each update download is a new file in the temporary folder. Copies left by updates that already ran
-    // are removed before the next download; other files are left alone.
+    // Each update download lands alone in a new folder under %LOCALAPPDATA%\KillerMCP\updates, never the
+    // shared temporary folder. Folders left by updates that already ran are removed before the next download;
+    // other folders are left alone.
+    var expectedRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerMCP", "updates");
+    Equal(expectedRoot, KillerMCP.Updates.DownloadedSetups.Root);
     var downloads = Path.Combine(root, "downloads");
     Directory.CreateDirectory(downloads);
     var oldDownload = KillerMCP.Updates.DownloadedSetups.NewPath(downloads, "0.6.0");
-    var recentDownload = Path.Combine(downloads, "KillerMCP-Setup-0.6.1-recent.exe");
-    var otherFile = Path.Combine(downloads, "KillerMCP-Setup-manual-backup.exe");
-    foreach (var file in new[] { oldDownload, recentDownload, otherFile }) File.WriteAllText(file, "fixture");
+    var recentDownload = KillerMCP.Updates.DownloadedSetups.NewPath(downloads, "0.6.1");
+    var otherFolder = Path.Combine(downloads, "manual-backup");
+    Directory.CreateDirectory(otherFolder);
+    foreach (var file in new[] { oldDownload, recentDownload, Path.Combine(otherFolder, "KillerMCP-Setup.exe") }) File.WriteAllText(file, "fixture");
     File.SetLastWriteTimeUtc(oldDownload, DateTime.UtcNow.AddDays(-2));
-    File.SetLastWriteTimeUtc(otherFile, DateTime.UtcNow.AddDays(-2));
+    Directory.SetLastWriteTimeUtc(Path.GetDirectoryName(oldDownload)!, DateTime.UtcNow.AddDays(-2));
+    Directory.SetLastWriteTimeUtc(otherFolder, DateTime.UtcNow.AddDays(-2));
     var nextDownload = KillerMCP.Updates.DownloadedSetups.NewPath(downloads, "0.7.0");
-    Equal(false, File.Exists(oldDownload));
-    Equal(true, File.Exists(recentDownload) && File.Exists(otherFile));
-    Equal(downloads, Path.GetDirectoryName(nextDownload));
-    Equal(true, Path.GetFileName(nextDownload).StartsWith("KillerMCP-Setup-0.7.0-", StringComparison.Ordinal));
+    Equal(false, Directory.Exists(Path.GetDirectoryName(oldDownload)));
+    Equal(true, File.Exists(recentDownload) && Directory.Exists(otherFolder));
+    Equal(downloads, Path.GetDirectoryName(Path.GetDirectoryName(nextDownload)));
+    Equal(0, Directory.GetFileSystemEntries(Path.GetDirectoryName(nextDownload)!).Length);
+    Equal("KillerMCP-Setup-0.7.0.exe", Path.GetFileName(nextDownload));
     Console.WriteLine("PASS downloaded update cleanup");
 
     // A download that a newer notification replaced neither clears the busy state nor acts on its result.

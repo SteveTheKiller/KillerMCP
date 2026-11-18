@@ -20,6 +20,7 @@
   <ItemGroup>
     <Compile Include="..\installer\ReleaseSignature.cs" Link="ReleaseSignature.cs" />
     <Compile Include="..\installer\DownloadedSetups.cs" Link="DownloadedSetups.cs" />
+    <Compile Include="..\installer\NativeLoadSafety.cs" Link="NativeLoadSafety.cs" />
     <Compile Include="..\installer\UpdatePreferences.cs" Link="UpdatePreferences.cs" />
     <Resource Include="Assets\mcp.png" />
     <Resource Include="..\assets\KillerMCP.ico" Link="Assets\app-icon.ico" />

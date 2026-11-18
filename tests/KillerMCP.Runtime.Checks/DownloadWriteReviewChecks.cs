@@ -26,6 +26,21 @@ internal static class DownloadWriteReviewChecks
             Require(File.ReadAllText(path, Encoding.UTF8) == text, "Text round trip changed content.");
             Require(Call("write_text_file_local", new { path, text = "overwrite" }).GetProperty("isError").GetBoolean(), "Existing file accepted.");
             Require(File.ReadAllText(path, Encoding.UTF8) == text, "Existing file changed.");
+            // Every written file carries the Internet zone, so Windows treats it as downloaded.
+            var zone = path + ":Zone.Identifier";
+            Require(File.Exists(zone) && File.ReadAllText(zone).Contains("ZoneId=3"), "Written file has no Internet zone stream.");
+            // Only inert data types can be written, never something Windows runs or follows.
+            foreach (var extension in new[] { ".url", ".lnk", ".dll", ".exe", ".hta", ".library-ms", ".bat", ".ps1", ".js", ".html", ".svg", ".settingcontent-ms", "" })
+            {
+                var risky = Path.Combine(downloads, "killermcp-check-" + Guid.NewGuid().ToString("N") + extension);
+                foreach (var name in new[] { "write_text_file_local", "decode_file_base64_local" })
+                {
+                    object args = name == "write_text_file_local" ? new { path = risky, text = "report" } : (object)new { path = risky, base64 = "cmVwb3J0" };
+                    var refused = Call(name, args);
+                    if (File.Exists(risky)) { File.Delete(risky); throw new Exception(name + " wrote a " + extension + " file."); }
+                    Require(refused.GetProperty("isError").GetBoolean(), name + " accepted a " + extension + " name.");
+                }
+            }
             foreach (var name in new[] { "write_text_file_local", "decode_file_base64_local" })
             {
                 object args = name == "write_text_file_local" ? new { path = outside, text = "report" } : (object)new { path = outside, base64 = "cmVwb3J0" };

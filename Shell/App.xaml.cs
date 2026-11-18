@@ -16,6 +16,9 @@ public partial class App : Application
     private UpdateWindow? _update;
     private TrayIcon? _tray;
 
+    // Runs when the generated Main creates the app, before any window or native library loads.
+    static App() => KillerMCP.Signing.NativeLoadSafety.Apply();
+
     protected override void OnStartup(StartupEventArgs e)
     {
         KillerFamily.Accessibility.AccessibleControls.Initialize();

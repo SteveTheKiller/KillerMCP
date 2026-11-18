@@ -7,6 +7,13 @@ namespace KillerMCP.Features.Tools;
 internal static class DownloadFiles
 {
     private const int MaximumBytes = 4 * 1024 * 1024;
+
+    // Data types Windows opens in a viewer. Anything it runs, follows or renders with script is refused.
+    private static readonly HashSet<string> InertExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".txt", ".md", ".csv", ".tsv", ".json", ".xml", ".yaml", ".yml", ".log", ".ini", ".toml", ".ics", ".vcf",
+        ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tif", ".tiff", ".pem", ".cer", ".crt",
+    };
     internal static string DownloadsFolder
     {
         get
@@ -32,6 +39,8 @@ internal static class DownloadFiles
         if (bytes.Length > MaximumBytes) throw new ToolCallException("File content exceeds 4 MiB.");
         if (!Path.IsPathFullyQualified(path) || path.Replace('/', '\\').IndexOf(':', 2) >= 0)
             throw new ToolCallException("Choose a fully qualified path for a new file in Downloads.");
+        if (!InertExtensions.Contains(Path.GetExtension(path)))
+            throw new ToolCallException("Choose a data file name, such as .txt, .md, .csv, .json or .pdf. Programs, shortcuts and web pages cannot be saved.");
         string? temporary = null;
         try
         {
@@ -48,6 +57,8 @@ internal static class DownloadFiles
                 stream.Write(bytes);
                 stream.Flush(true);
             }
+            // The Internet zone travels with the file, so Windows warns before anything opens it as trusted.
+            File.WriteAllText(temporary + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=3\r\n", Encoding.ASCII);
             File.Move(temporary, target, false);
             temporary = null;
             return new { path = target, bytes = bytes.Length };
