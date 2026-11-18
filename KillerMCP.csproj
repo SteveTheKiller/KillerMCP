@@ -8,6 +8,11 @@
     <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
     <!-- The host also runs as the elevated repair helper, so DOTNET_STARTUP_HOOKS must never load code into it. -->
     <StartupHookSupport>false</StartupHookSupport>
+    <!-- The regular package publishes as one file, which turns this analyzer on and adds its package.
+         Turning it on for every build keeps the build and the publish on one locked package set. -->
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+    <!-- Both shipping runtimes are restored every time, so the lock file also covers each package's publish. -->
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <DefaultItemExcludes>$(DefaultItemExcludes);**\bin\**;**\obj\**;artifacts\**;dist\**;**\node_modules\**;**\.git</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
