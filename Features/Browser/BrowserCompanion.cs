@@ -46,9 +46,15 @@ sealed class BrowserCompanion
 
     // Each connection runs on its own task with a time limit, and only a few run at once, so a
     // connection that never finishes its request cannot hold up the page or tie up the host.
+    // A connection proves the token in its request line before it takes one of the working slots, so
+    // sockets that never send a request, or send a wrong token, only occupy the wider and shorter
+    // header pool and cannot lock the page out of its own companion.
     private const int MaximumConnections = 16;
+    private const int MaximumPendingHeaders = 256;
+    private static readonly TimeSpan HeaderTime = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RequestTime = TimeSpan.FromSeconds(5);
     private readonly SemaphoreSlim connections = new(MaximumConnections, MaximumConnections);
+    private readonly SemaphoreSlim pendingHeaders = new(MaximumPendingHeaders, MaximumPendingHeaders);
 
     private async Task AcceptLoopAsync()
     {
@@ -68,28 +74,31 @@ sealed class BrowserCompanion
             {
                 return;
             }
-            if (!connections.Wait(0))
+            if (!pendingHeaders.Wait(0))
             {
                 client.Dispose();
                 continue;
             }
-            _ = Task.Run(async () =>
-            {
-                try { await HandleAsync(client).ConfigureAwait(false); }
-                finally { connections.Release(); }
-            });
+            _ = Task.Run(() => HandleAsync(client));
         }
     }
 
     private async Task HandleAsync(TcpClient client)
     {
+        var headerSlot = true;
+        var workingSlot = false;
         using (client)
         {
             using var deadline = new CancellationTokenSource(RequestTime);
             try
             {
                 using var stream = client.GetStream();
-                var headerText = await ReadHeadersAsync(stream, deadline.Token).ConfigureAwait(false);
+                string headerText;
+                using (var headerDeadline = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token))
+                {
+                    headerDeadline.CancelAfter(HeaderTime);
+                    headerText = await ReadHeadersAsync(stream, headerDeadline.Token).ConfigureAwait(false);
+                }
                 var lines = headerText.Split("\r\n", StringSplitOptions.None);
                 var requestLine = lines[0].Split(' ', 3);
                 if (requestLine.Length != 3 || !Uri.TryCreate($"http://127.0.0.1{requestLine[1]}", UriKind.Absolute, out var url))
@@ -98,11 +107,19 @@ sealed class BrowserCompanion
                     return;
                 }
                 var headers = lines.Skip(1).Where(line => line.Contains(':')).Select(line => line.Split(':', 2)).ToDictionary(parts => parts[0], parts => parts[1].Trim(), StringComparer.OrdinalIgnoreCase);
-                if (!headers.TryGetValue("Host", out var host) || host != $"127.0.0.1:{port}" || QueryToken(url.Query) != token)
+                if (!headers.TryGetValue("Host", out var host) || host != $"127.0.0.1:{port}" || !TokenMatches(QueryToken(url.Query)))
                 {
                     await RespondAsync(stream, 403, "Forbidden").ConfigureAwait(false);
                     return;
                 }
+                pendingHeaders.Release();
+                headerSlot = false;
+                if (!connections.Wait(0))
+                {
+                    await RespondAsync(stream, 503, "Busy").ConfigureAwait(false);
+                    return;
+                }
+                workingSlot = true;
                 if (requestLine[0] == "GET" && url.AbsolutePath == "/")
                 {
                     await RespondAsync(stream, 200, page, "text/html; charset=utf-8").ConfigureAwait(false);
@@ -135,8 +152,16 @@ sealed class BrowserCompanion
             {
                 try { await RespondAsync(client.GetStream(), 400, "Invalid request").ConfigureAwait(false); } catch { }
             }
+            finally
+            {
+                if (headerSlot) pendingHeaders.Release();
+                if (workingSlot) connections.Release();
+            }
         }
     }
+
+    private bool TokenMatches(string? candidate) => candidate is not null
+        && CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(candidate), Encoding.ASCII.GetBytes(token));
 
     private static async Task<string> ReadHeadersAsync(NetworkStream stream, CancellationToken cancellationToken)
     {
@@ -158,7 +183,7 @@ sealed class BrowserCompanion
     private static async Task RespondAsync(NetworkStream stream, int status, string body, string contentType = "text/plain; charset=utf-8")
     {
         var payload = Encoding.UTF8.GetBytes(body);
-        var reason = status switch { 200 => "OK", 204 => "No Content", 400 => "Bad Request", 403 => "Forbidden", 404 => "Not Found", 413 => "Payload Too Large", _ => "Error" };
+        var reason = status switch { 200 => "OK", 204 => "No Content", 400 => "Bad Request", 403 => "Forbidden", 404 => "Not Found", 413 => "Payload Too Large", 503 => "Service Unavailable", _ => "Error" };
         var headers = Encoding.ASCII.GetBytes($"HTTP/1.1 {status} {reason}\r\nContent-Type: {contentType}\r\nContent-Length: {payload.Length}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n");
         await stream.WriteAsync(headers).ConfigureAwait(false);
         if (payload.Length > 0) await stream.WriteAsync(payload).ConfigureAwait(false);

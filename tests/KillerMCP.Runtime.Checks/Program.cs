@@ -11,6 +11,7 @@ if (ChildInputReviewChecks.Serve(args)) return;
 if (ReleaseGapReviewChecks.Serve(args)) return;
 if (args.SequenceEqual(["--review-release-gaps"])) { await ReleaseGapReviewChecks.RunAsync(); return; }
 if (args.SequenceEqual(["--review-update-flavor"])) { await UpdateFlavorReviewChecks.RunAsync(); return; }
+if (args.SequenceEqual(["--review-open-questions"])) { await OpenQuestionReviewChecks.RunAsync(); return; }
 if (NotesBridgeReviewChecks.Serve(args)) return;
 if (NotesWorkflowReviewChecks.Serve(args)) return;
 if (args.SequenceEqual(["--review-notes-staging"])) { await NotesStagingReviewChecks.RunAsync(); return; }
