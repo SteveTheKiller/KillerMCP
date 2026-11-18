@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "KillerMCP": {
-      "command": "powershell.exe",
+      "command": "${SystemRoot:-C:\\Windows}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       "args": [
         "-NoProfile",
         "-NonInteractive",

@@ -30,6 +30,9 @@ jobs:
           $releaseTag = $env:RELEASE_TAG
           if ($releaseTag -cnotmatch '^v[0-9]+\.[0-9]+\.[0-9]+\z') { throw "Release tag '$releaseTag' is not a version tag such as v1.2.3." }
           $version = $releaseTag.TrimStart('v')
+          # A signed prerelease or draft must never become the stable Chocolatey package.
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/SteveTheKiller/KillerMCP/releases/tags/$releaseTag" -Headers @{ Accept = 'application/vnd.github+json' }
+          if ($release.draft -or $release.prerelease) { throw "Release $releaseTag is a draft or prerelease, so it is not published to Chocolatey." }
           $exeUrl  = "https://github.com/SteveTheKiller/KillerMCP/releases/download/$releaseTag/KillerMCP-Setup.exe"
 
           # Download release installer and compute hash
@@ -43,9 +46,11 @@ jobs:
           # Stamp version and hash into package files
           $nuspec  = "choco\killermcp.nuspec"
           $install = "choco\tools\chocolateyInstall.ps1"
+          $uninstall = "choco\tools\chocolateyUninstall.ps1"
 
-          (Get-Content $nuspec)  -replace 'REPLACE_VERSION', $version | Set-Content $nuspec
-          (Get-Content $install) -replace 'REPLACE_HASH',    $hash    | Set-Content $install
+          (Get-Content $nuspec)    -replace 'REPLACE_VERSION', $version | Set-Content $nuspec
+          (Get-Content $install)   -replace 'REPLACE_HASH',    $hash    | Set-Content $install
+          (Get-Content $uninstall) -replace 'REPLACE_HASH',    $hash    | Set-Content $uninstall
 
           # Chocolatey moderation rejects links it cannot use, so check them before submitting.
           # A 403 or 429 from this runner is not a broken link: Cloudflare in front of our own sites
@@ -76,7 +81,10 @@ jobs:
           choco pack choco\killermcp.nuspec --out "$env:RUNNER_TEMP"
           if ($LASTEXITCODE -ne 0) { throw "choco pack failed." }
           $package = "$env:RUNNER_TEMP\killermcp.$version.nupkg"
-          choco push $package --source https://push.chocolatey.org --api-key $env:CHOCO_API_KEY
+          # The key goes into choco's own encrypted config once, so the push command line never carries it.
+          choco apikey add --source https://push.chocolatey.org --key $env:CHOCO_API_KEY | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "choco apikey failed." }
+          choco push $package --source https://push.chocolatey.org
           if ($LASTEXITCODE -ne 0) {
               # Chocolatey answers most rejections with a bare 403, so report what the package page shows.
               $page = "https://community.chocolatey.org/packages/killermcp"

@@ -20,7 +20,9 @@ if ($LASTEXITCODE -ne 0) {
 $failed = $false
 Push-Location -LiteralPath $Repository
 try {
-    gh release create $Tag @Assets --title "KillerMCP $Tag" --notes-file $NotesFile --verify-tag
+    # gh is resolved to the program itself, so a gh function or alias in the session cannot stand in for it.
+    $gh = (Get-Command -Name 'gh.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    & $gh release create $Tag @Assets --title "KillerMCP $Tag" --notes-file $NotesFile --verify-tag
     $failed = $LASTEXITCODE -ne 0
 }
 catch {

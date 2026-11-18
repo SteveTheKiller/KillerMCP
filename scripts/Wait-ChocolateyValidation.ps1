@@ -27,7 +27,8 @@ if (-not $ReadState) {
 }
 if (-not $Push) {
     $Push = {
-        choco push $Package --source https://push.chocolatey.org --api-key $env:CHOCO_API_KEY
+        # The push step stored the key in choco's config, so the re-push names no key on its command line.
+        choco push $Package --source https://push.chocolatey.org
         if ($LASTEXITCODE -ne 0) { throw 'Re-push to Chocolatey failed.' }
     }.GetNewClosure()
 }

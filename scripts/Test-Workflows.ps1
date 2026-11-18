@@ -40,6 +40,22 @@ foreach ($workflow in Get-ChildItem -LiteralPath $folder -Filter '*.yml') {
 
 if ((Get-Content -LiteralPath (Join-Path $PSScriptRoot 'New-WinGetManifest.ps1') -Raw) -notmatch 'Assert-ReleaseInstaller') { $problems.Add('New-WinGetManifest.ps1 submits an installer without checking its signature.') }
 
+# The Chocolatey package runs only the setup copy it verified, never a path from the user's registry, and
+# never publishes a prerelease or passes its API key on a command line.
+if (-not $WorkflowFolder) {
+    $chocoUninstall = Get-Content -LiteralPath (Join-Path $root 'choco\tools\chocolateyUninstall.ps1') -Raw
+    if ($chocoUninstall -match 'InstallLocation|HKCU:|Uninstall\\KillerMCP') { $problems.Add('chocolateyUninstall.ps1 runs a setup path read from the registry.') }
+    if ($chocoUninstall -notmatch "Get-FileHash" -or $chocoUninstall -notmatch "REPLACE_HASH") { $problems.Add('chocolateyUninstall.ps1 runs its setup copy without checking the pinned hash.') }
+    $chocoWorkflow = Get-Content -LiteralPath (Join-Path $folder 'chocolatey-release.yml') -Raw
+    if ($chocoWorkflow -notmatch 'prerelease') { $problems.Add('chocolatey-release.yml publishes without refusing drafts and prereleases.') }
+    if ($chocoWorkflow -match '--api-key' -or (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Wait-ChocolateyValidation.ps1') -Raw) -match '--api-key') { $problems.Add('The Chocolatey push passes its API key on a command line.') }
+    if ($chocoWorkflow -notmatch '\$uninstall\s*=\s*"choco\\tools\\chocolateyUninstall\.ps1"' -or $chocoWorkflow -notmatch '\$uninstall\)\s+-replace\s+''REPLACE_HASH''') { $problems.Add('chocolatey-release.yml does not stamp the setup hash into the uninstall script.') }
+    $plugin = Get-Content -LiteralPath (Join-Path $root 'claude-plugin\.mcp.json') -Raw | ConvertFrom-Json
+    foreach ($server in $plugin.mcpServers.PSObject.Properties) {
+        if ($server.Value.command -notmatch '^(\$\{SystemRoot(:-C:\\Windows)?\}|[A-Za-z]:)\\') { $problems.Add("The Claude plugin starts $($server.Name) by a bare program name.") }
+    }
+}
+
 if ($problems.Count -gt 0) {
     if ($LintOnly) { return $problems }
     $problems | ForEach-Object { Write-Host $_ }
