@@ -121,15 +121,9 @@ $vulnerablePackages = @(foreach ($reportProject in @($vulnerabilityData.projects
 })
 if ($vulnerablePackages.Count) { Fail "Vulnerable dependencies were found:`n$($vulnerablePackages -join "`n")" }
 
-Step 'Building KillerMCP Setup'
-Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Build-WindowsInstaller.ps1 -ArtifactRoot $ArtifactRoot } 'KillerMCP installer build failed.'
-Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Build-WindowsInstaller.ps1 -ArtifactRoot $ArtifactRoot -Store } 'KillerMCP Store installer build failed.'
-foreach ($setup in $setups) { if (-not (Test-Path -LiteralPath $setup -PathType Leaf)) { Fail "Installer was not produced: $setup" } }
-
-if ($SkipSign) {
-    Write-Host 'WARNING: The installer is unsigned and cannot be published.' -ForegroundColor Red
-} else {
-    Step 'Signing KillerMCP Setup'
+$signArgs = @()
+if (-not $SkipSign) {
+    Step 'Finding the signing tools'
     if (-not (Get-Process -Name 'SimplySignDesktop' -ErrorAction SilentlyContinue)) {
         Fail 'SimplySign Desktop is not running. Start it, sign in, and run the release again.'
     }
@@ -145,6 +139,20 @@ if ($SkipSign) {
     }
     if (-not $signtool) { Fail 'signtool.exe was not found. Install the Windows SDK.' }
     $certArgs = if ($CertThumbprint) { @('/sha1', $CertThumbprint) } else { @('/n', $CertName) }
+    # The installers' payloads carry KillerMCP.exe, the configurator and the notifier, which are signed
+    # inside the build before their hashes go into the package manifest.
+    $signArgs = @('-SignTool', $signtool) + $(if ($CertThumbprint) { @('-CertThumbprint', $CertThumbprint) } else { @('-CertName', $CertName) })
+}
+
+Step 'Building KillerMCP Setup'
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Build-WindowsInstaller.ps1 -ArtifactRoot $ArtifactRoot @signArgs } 'KillerMCP installer build failed.'
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Build-WindowsInstaller.ps1 -ArtifactRoot $ArtifactRoot -Store @signArgs } 'KillerMCP Store installer build failed.'
+foreach ($setup in $setups) { if (-not (Test-Path -LiteralPath $setup -PathType Leaf)) { Fail "Installer was not produced: $setup" } }
+
+if ($SkipSign) {
+    Write-Host 'WARNING: The installer is unsigned and cannot be published.' -ForegroundColor Red
+} else {
+    Step 'Signing KillerMCP Setup'
     foreach ($setup in $setups) {
         $signed = $false
         foreach ($timestampServer in @('http://timestamp.digicert.com', 'http://timestamp.sectigo.com', 'http://ts.ssl.com')) {
@@ -159,6 +167,10 @@ if ($SkipSign) {
         if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate) {
             Fail "$(Split-Path -Leaf $setup) does not have a valid timestamped signature."
         }
+        # A valid signature from the wrong certificate must never ship, so both setups have to carry the
+        # pinned KillerMCP publisher key that setup itself trusts for updates.
+        try { & (Join-Path $PSScriptRoot 'scripts\Assert-ReleaseInstaller.ps1') -Path $setup }
+        catch { Fail "$(Split-Path -Leaf $setup) is not signed by the pinned KillerMCP publisher: $($_.Exception.Message)" }
     }
 }
 
@@ -186,8 +198,9 @@ if (-not $DryRun) {
         Write-Host 'Microsoft Store submission skipped. Add the published installer package manually when ready.' -ForegroundColor Yellow
     } else {
         Step 'Submitting to Microsoft Store'
-        try { & $storeScript @storeArgs }
-        catch { Fail "GitHub release is published, but Microsoft Store submission failed: $($_.Exception.Message). Retry with: & '$storeScript' -ProductId $($storeArgs.ProductId) -PackageUrl $($storeArgs.PackageUrl)" }
+        $storeHash = (Get-FileHash -LiteralPath $storeInstaller -Algorithm SHA256).Hash
+        try { & $storeScript @storeArgs -ExpectedSha256 $storeHash }
+        catch { Fail "GitHub release is published, but Microsoft Store submission failed: $($_.Exception.Message). Retry with: & '$storeScript' -ProductId $($storeArgs.ProductId) -PackageUrl $($storeArgs.PackageUrl) -ExpectedSha256 $storeHash" }
     }
 } else {
     Write-Host ''

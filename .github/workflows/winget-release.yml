@@ -3,6 +3,10 @@
 # created" or a CreateRef permission error even though the token is fine, so the submit step
 # settles first and retries with backoff. Re-running this workflow with the tag is the manual
 # retry path and needs no re-release.
+#
+# Validation runs in its own job with no publishing secret, because it installs a PowerShell Gallery
+# module and bootstraps the WinGet client. Only the checked manifest reaches the submit job, which runs
+# in the protected release environment and holds the WinGet token.
 
 name: WinGet Release
 
@@ -16,13 +20,24 @@ on:
         required: true
 
 jobs:
-  submit:
+  validate:
     runs-on: windows-latest
     permissions:
       contents: read
     steps:
+      - name: Check the release tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+        run: |
+          # The tag comes from the release or from whoever runs the workflow, so it has to be a version
+          # tag before the checkout uses it. The checkout then reads the pinned scripts from that tag.
+          if ($env:RELEASE_TAG -cnotmatch '^v[0-9]+\.[0-9]+\.[0-9]+\z') { throw "Release tag '$env:RELEASE_TAG' is not a version tag such as v1.2.3." }
+          "RELEASE_REF=refs/tags/$env:RELEASE_TAG" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          ref: ${{ env.RELEASE_REF }}
           persist-credentials: false
 
       - name: Update WinGet validator
@@ -40,6 +55,35 @@ jobs:
           # hosted runner's IP rate limit, which fails the job before anything is submitted.
           GITHUB_TOKEN: ${{ github.token }}
 
+      - name: Validate WinGet manifest
+        run: |
+          $manifestDirectory = Join-Path $env:RUNNER_TEMP 'winget-manifest'
+          ./scripts/New-WinGetManifest.ps1 -Tag $env:RELEASE_TAG -OutputDirectory $manifestDirectory
+          winget validate --manifest $manifestDirectory
+          if ($LASTEXITCODE -ne 0) { throw "WinGet manifest validation failed." }
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+        shell: pwsh
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: winget-manifest
+          path: ${{ runner.temp }}/winget-manifest
+          if-no-files-found: error
+          retention-days: 1
+
+  submit:
+    needs: validate
+    runs-on: windows-latest
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: winget-manifest
+          path: ${{ runner.temp }}/winget-manifest
+
       - name: Install Komac
         run: |
           # Komac gets the WinGet token, so the exact release is pinned and checked by hash.
@@ -54,23 +98,12 @@ jobs:
           Add-Content $env:GITHUB_PATH $env:RUNNER_TEMP
         shell: pwsh
 
-      - name: Validate WinGet manifest
-        run: |
-          $manifestDirectory = Join-Path $env:RUNNER_TEMP ("winget-" + [guid]::NewGuid())
-          ./scripts/New-WinGetManifest.ps1 -Tag $env:RELEASE_TAG -OutputDirectory $manifestDirectory
-          winget validate --manifest $manifestDirectory
-          if ($LASTEXITCODE -ne 0) { throw "WinGet manifest validation failed." }
-          "WINGET_MANIFEST_DIRECTORY=$manifestDirectory" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        env:
-          RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
-        shell: pwsh
-
       - name: Submit to WinGet
         run: |
-          $manifestDirectory = $env:WINGET_MANIFEST_DIRECTORY
+          $manifestDirectory = Join-Path $env:RUNNER_TEMP 'winget-manifest'
           if (-not (Test-Path -LiteralPath $manifestDirectory -PathType Container)) { throw 'Validated manifest directory is missing.' }
           # Let the release settle before asking GitHub for a branch. See the header note.
-          if ("${{ github.event_name }}" -eq "release") { Start-Sleep -Seconds 90 }
+          if ($env:EVENT_NAME -eq "release") { Start-Sleep -Seconds 90 }
 
           # komac picks a fresh branch name every run, so a retry never collides with a
           # half-finished attempt.
@@ -86,5 +119,5 @@ jobs:
           exit 1
         env:
           GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
-          RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+          EVENT_NAME: ${{ github.event_name }}
         shell: pwsh

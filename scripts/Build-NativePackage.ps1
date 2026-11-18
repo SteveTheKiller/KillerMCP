@@ -4,7 +4,11 @@ param(
     [switch]$SkipTest,
     # The Microsoft Store package carries its own .NET runtime; every other package uses the installed one.
     [switch]$SelfContained,
-    [string]$ArtifactRoot = ''
+    [string]$ArtifactRoot = '',
+    # A release build signs the three KillerMCP programs before they are hashed into the package manifest.
+    [string]$SignTool = '',
+    [string]$CertThumbprint = '',
+    [string]$CertName = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,6 +42,12 @@ if ($RuntimeIdentifier.StartsWith('win-', [StringComparison]::Ordinal)) {
     # The update notifier runs on .NET Framework 4.8, which ships with Windows, so it carries no runtime.
     dotnet publish (Join-Path $root 'Shell\KillerMCP.Notify.csproj') -c Release -p:DebugType=None -p:DebugSymbols=false -o $staging
     if ($LASTEXITCODE -ne 0) { throw 'KillerMCP update notifier publish failed.' }
+}
+if ($SignTool) {
+    # The installed programs carry the same publisher signature as setup, so Windows and security tools
+    # can tell a genuine KillerMCP.exe from a replacement. Signing comes before the manifest hashes them.
+    $programs = @('KillerMCP.exe', 'KillerMCP.Configure.exe', 'KillerMCP.Notify.exe') | ForEach-Object { Join-Path $staging $_ }
+    & (Join-Path $PSScriptRoot 'Sign-KillerFiles.ps1') -SignTool $SignTool -CertThumbprint $CertThumbprint -CertName $CertName -Path $programs
 }
 
 foreach ($name in 'SQL-FORMATTER-LICENSE.txt', 'OUI-DATA-LICENSE.txt') {

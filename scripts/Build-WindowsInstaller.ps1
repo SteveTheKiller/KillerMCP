@@ -2,14 +2,17 @@ param(
     [string]$ArtifactRoot = '',
     # Builds KillerMCP-Store.exe, the Microsoft Store setup whose payload carries its own .NET runtime,
     # instead of the regular KillerMCP-Setup.exe that uses the installed .NET 10 runtime.
-    [switch]$Store
+    [switch]$Store,
+    [string]$SignTool = '',
+    [string]$CertThumbprint = '',
+    [string]$CertName = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
 $ArtifactRoot = & (Join-Path $PSScriptRoot 'Get-ArtifactRoot.ps1') -ArtifactRoot $ArtifactRoot
-& (Join-Path $PSScriptRoot 'Build-NativePackage.ps1') -RuntimeIdentifier win-x64 -ArtifactRoot $ArtifactRoot -SelfContained:$Store
+& (Join-Path $PSScriptRoot 'Build-NativePackage.ps1') -RuntimeIdentifier win-x64 -ArtifactRoot $ArtifactRoot -SelfContained:$Store -SignTool $SignTool -CertThumbprint $CertThumbprint -CertName $CertName
 $package = if ($Store) { Join-Path $ArtifactRoot 'packages\win-x64-store\KillerMCP-win-x64.zip' } else { Join-Path $ArtifactRoot 'packages\win-x64\KillerMCP-win-x64.zip' }
 if (-not (Test-Path -LiteralPath $package -PathType Leaf)) { throw 'The verified native Windows package is missing.' }
 

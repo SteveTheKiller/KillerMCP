@@ -582,7 +582,8 @@ try
     await Bench("killerbench_repair_execute", new { token = safeToken }, true);
 
     var privacy = Finished(await Bench("killerbench_repair_preview", new { action = "privacy_setting", options = new { key = "camera-access", state = "off" } }));
-    Equal("Completed", Finished(await Bench("killerbench_repair_execute", new { token = privacy.GetProperty("token").GetString() })).GetProperty("outcome").GetString());
+    var privacyRun = Finished(await Bench("killerbench_repair_execute", new { token = privacy.GetProperty("token").GetString() }));
+    Equal("Completed", privacyRun.GetProperty("outcome").GetString() + (privacyRun.TryGetProperty("detail", out var privacyDetail) ? ": " + privacyDetail.GetString() : ""));
     Equal(1, elevated.Count);
     Equal(2, confirmations.Count);
 

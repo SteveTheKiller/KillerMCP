@@ -9,8 +9,9 @@
     for the Store to fetch the installer, creates the submission and confirms certification
     started. Certification itself takes up to three business days and is not waited for.
 
-    Credentials come from user environment variables: KILLER_STORE_TENANT_ID,
-    KILLER_STORE_CLIENT_ID, KILLER_STORE_CLIENT_SECRET and KILLER_STORE_SELLER_ID.
+    The tenant, client and seller IDs come from user environment variables KILLER_STORE_TENANT_ID,
+    KILLER_STORE_CLIENT_ID and KILLER_STORE_SELLER_ID. The client secret comes from Windows
+    Credential Manager as the generic credential KillerTools.StoreClientSecret.
 
 .PARAMETER ProductId
     The Store ID of the product (for example XP8JR4WJK03BJP).
@@ -31,12 +32,53 @@ param(
     [Parameter(Mandatory)][string]$PackageUrl,
     [switch]$DryRun,
     [switch]$PreflightOnly,
+    # SHA-256 of the signed KillerMCP-Store.exe this release built. The hosted file must match it before
+    # the Store package is pointed at the URL.
+    [string]$ExpectedSha256 = '',
     [int]$UploadTimeoutMinutes = 30
 )
 $ErrorActionPreference = 'Stop'
 $api = "https://api.store.microsoft.com/submission/v1/product/$ProductId"
 
+# The client secret lives in Windows Credential Manager as KillerTools.StoreClientSecret, never in the
+# environment that every process, agent clients included, inherits.
+function Read-StoreSecret {
+    if (-not ('KillerMCP.StoreSecret' -as [type])) {
+        Add-Type -Namespace KillerMCP -Name StoreSecret -MemberDefinition @'
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+private struct CREDENTIAL
+{
+    public int Flags; public int Type; public System.IntPtr TargetName; public System.IntPtr Comment;
+    public long LastWritten; public int CredentialBlobSize; public System.IntPtr CredentialBlob;
+    public int Persist; public int AttributeCount; public System.IntPtr Attributes;
+    public System.IntPtr TargetAlias; public System.IntPtr UserName;
+}
+[System.Runtime.InteropServices.DllImport("advapi32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+private static extern bool CredReadW(string target, int type, int flags, out System.IntPtr credential);
+[System.Runtime.InteropServices.DllImport("advapi32.dll")]
+private static extern void CredFree(System.IntPtr credential);
+public static string Read(string target)
+{
+    System.IntPtr handle;
+    if (!CredReadW(target, 1, 0, out handle)) return null;
+    try
+    {
+        var credential = (CREDENTIAL)System.Runtime.InteropServices.Marshal.PtrToStructure(handle, typeof(CREDENTIAL));
+        var bytes = new byte[credential.CredentialBlobSize];
+        System.Runtime.InteropServices.Marshal.Copy(credential.CredentialBlob, bytes, 0, bytes.Length);
+        return System.Text.Encoding.Unicode.GetString(bytes);
+    }
+    finally { CredFree(handle); }
+}
+'@
+    }
+    $secret = [KillerMCP.StoreSecret]::Read('KillerTools.StoreClientSecret')
+    if (-not $secret) { throw 'The Store client secret is not in Credential Manager as KillerTools.StoreClientSecret. See the release notes in the harness for setup.' }
+    return $secret
+}
+
 function Get-Setting([string]$Name) {
+    if ($Name -eq 'KILLER_STORE_CLIENT_SECRET') { return Read-StoreSecret }
     $value = [Environment]::GetEnvironmentVariable($Name, 'Process')
     if (-not $value) { $value = [Environment]::GetEnvironmentVariable($Name, 'User') }
     if (-not $value) { throw "Store credential $Name is not set. See the release notes in the harness for setup." }
@@ -65,6 +107,7 @@ function Invoke-Store([string]$Method, [string]$Path, $Body = $null) {
 }
 
 if ($PackageUrl -notmatch '^https://') { throw "PackageUrl must be an https URL: $PackageUrl" }
+if (-not $PreflightOnly -and $ExpectedSha256 -notmatch '^[0-9A-Fa-f]{64}$') { throw 'Pass -ExpectedSha256 with the hash of the signed KillerMCP-Store.exe this release built.' }
 
 Write-Host "==> Signing in to the Microsoft Store submission API"
 $tenant = Get-Setting 'KILLER_STORE_TENANT_ID'
@@ -82,6 +125,20 @@ if (-not $PreflightOnly) {
     try { $head = Invoke-WebRequest -Uri $PackageUrl -Method Head -UseBasicParsing }
     catch { throw "The installer URL does not load: $PackageUrl ($($_.Exception.Message))" }
     Write-Host "  $PackageUrl ($($head.Headers['Content-Length']) bytes)"
+
+    # The Store installs whatever the URL serves, so the hosted file has to be the exact signed build and
+    # carry the pinned KillerMCP publisher signature before the package is pointed at it.
+    Write-Host "==> Checking the hosted installer is the signed build"
+    $hostedFolder = Join-Path ([IO.Path]::GetTempPath()) ('killermcp-store-check-' + [guid]::NewGuid().ToString('N'))
+    [IO.Directory]::CreateDirectory($hostedFolder) | Out-Null
+    try {
+        $hosted = Join-Path $hostedFolder 'KillerMCP-Store.exe'
+        Invoke-WebRequest -Uri $PackageUrl -OutFile $hosted -UseBasicParsing
+        $hostedHash = (Get-FileHash -LiteralPath $hosted -Algorithm SHA256).Hash
+        if ($hostedHash -ne $ExpectedSha256.ToUpperInvariant()) { throw "The hosted installer at $PackageUrl does not match the signed build ($hostedHash, expected $($ExpectedSha256.ToUpperInvariant()))." }
+        & (Join-Path $PSScriptRoot '..\scripts\Assert-ReleaseInstaller.ps1') -Path $hosted
+    }
+    finally { Remove-Item -LiteralPath $hostedFolder -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
 Write-Host "==> Reading the current draft"
@@ -102,6 +159,11 @@ if ($PreflightOnly) { Write-Host "  Store preflight OK."; return }
 # Sync translated listings before submitting the installer, including newly added languages.
 $listingScript = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'KillerHarness\scripts\StoreUpdate.ps1'
 if (-not (Test-Path -LiteralPath $listingScript)) { throw "Store listing updater is missing: $listingScript" }
+# The updater lives outside this repo and runs with the Store credentials, so it runs only while it is the
+# reviewed version pinned in StoreUpdate.sha256. A deliberate harness change updates the pin.
+$listingPin = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'StoreUpdate.sha256') -Raw).Trim()
+$listingHash = (Get-FileHash -LiteralPath $listingScript -Algorithm SHA256).Hash
+if ($listingHash -ne $listingPin) { throw "The Store listing updater changed since it was pinned ($listingHash). Review $listingScript, then put its hash in store\StoreUpdate.sha256." }
 $listingArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $listingScript,
     '-App', 'KillerMCP', '-ListingsOnly', '-StoreProductId', $ProductId, '-StoreDirectory', $PSScriptRoot)
 if (-not $DryRun) { $listingArgs += '-DraftOnly' }

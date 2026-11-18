@@ -11,9 +11,20 @@ $problems = New-Object System.Collections.Generic.List[string]
 
 foreach ($workflow in Get-ChildItem -LiteralPath $folder -Filter '*.yml') {
     $text = Get-Content -LiteralPath $workflow.FullName -Raw
-    if ($text -notmatch '(?m)^\s*permissions:') { $problems.Add("$($workflow.Name) does not limit its token with permissions.") }
+    $topPermissions = $text -match '(?m)^permissions:'
+    $jobsText = ([regex]::Match($text, '(?ms)^jobs:\s*\r?\n(.*)\z')).Groups[1].Value
+    foreach ($job in [regex]::Matches($jobsText, '(?ms)^  (?<name>[A-Za-z0-9_-]+):\s*\r?\n(?<body>.*?)(?=^  [A-Za-z0-9_-]+:\s*$|\z)')) {
+        $jobName = $job.Groups['name'].Value
+        $body = $job.Groups['body'].Value
+        if (-not $topPermissions -and $body -notmatch '(?m)^    permissions:') { $problems.Add("$($workflow.Name) job $jobName does not limit its token with permissions.") }
+        # A job that holds a publishing secret waits on the protected environment and builds from the validated tag.
+        if ($body -match '\$\{\{\s*secrets\.') {
+            if ($body -notmatch '(?m)^    environment:\s*release\s*$') { $problems.Add("$($workflow.Name) job $jobName holds a secret outside the release environment.") }
+            if ($body -match 'actions/checkout@' -and $body -notmatch 'ref:\s*\$\{\{\s*env\.RELEASE_REF\s*\}\}') { $problems.Add("$($workflow.Name) job $jobName checks out a branch instead of the validated tag.") }
+        }
+    }
     foreach ($line in ($text -split '\r?\n')) {
-        if ($line -match '\$\{\{\s*(github\.event\.|inputs\.)' -and $line -notmatch '^\s*(?!(run|script|shell)\s*:)[A-Za-z_][A-Za-z0-9_]*:\s*\$\{\{[^}]*\}\}\s*$') { $problems.Add("$($workflow.Name) expands event data inside a script; pass it through env: $($line.Trim())") }
+        if ($line -match '\$\{\{[^}]*(github\.event\.|inputs\.|github\.head_ref|github\.ref_name|steps\.[^}]*\.outputs|needs\.[^}]*\.outputs)' -and $line -notmatch '^\s*(?!(run|script|shell)\s*:)[A-Za-z_][A-Za-z0-9_]*:\s*\$\{\{[^}]*\}\}\s*$') { $problems.Add("$($workflow.Name) expands event data inside a script; pass it through env: $($line.Trim())") }
         if ($line -match '^\s*-?\s*uses:\s*(?<action>[^@\s]+)@(?<ref>\S+)' -and $Matches['ref'] -notmatch '^[0-9a-f]{40}$') { $problems.Add("$($workflow.Name) uses $($Matches['action']) by tag instead of by commit.") }
         if ($line -match '(?<![\w-])-i?(not)?match\s+''\^v') { $problems.Add("$($workflow.Name) checks a version tag without case sensitivity; use -cmatch or -cnotmatch: $($line.Trim())") }
     }
