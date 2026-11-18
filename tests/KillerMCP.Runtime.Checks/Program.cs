@@ -654,7 +654,9 @@ try
         await Task.Delay(1000);
         closing.Cancel();
         var accepted = JsonDocument.Parse((await call).Text).RootElement.Clone();
-        Equal("running", accepted.GetProperty("status").GetString());
+        // A slow helper start can still be at the consent step when the request is cancelled; either way the repair keeps going.
+        var acceptedStatus = accepted.GetProperty("status").GetString();
+        if (acceptedStatus is not ("running" or "waiting for Windows administrator approval")) throw new InvalidOperationException("Expected an accepted repair, received " + acceptedStatus);
         Equal(true, KillerBenchRepairJobs.WaitForRunning(TimeSpan.FromSeconds(30)));
         using var repairPoll = JsonDocument.Parse(JsonSerializer.Serialize(new { jobId = accepted.GetProperty("jobId").GetString() }));
         var unattendedResult = JsonDocument.Parse((await benchByName["killerbench_job"].CallAsync(repairPoll.RootElement, CancellationToken.None)).Text).RootElement.Clone();
