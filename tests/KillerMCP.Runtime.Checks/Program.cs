@@ -799,8 +799,11 @@ try
         using var benchScan = JsonDocument.Parse("{\"scopes\":[\"PrintingReadiness\"]}");
         var benchJob = JsonDocument.Parse((await benchNotes["killerbench_scan"].CallAsync(benchScan.RootElement, CancellationToken.None)).Text).RootElement.GetProperty("jobId").GetString();
         using var saveRequest = JsonDocument.Parse(JsonSerializer.Serialize(new { jobId = benchJob, title = "Bench" }));
-        Equal(false, (await benchNotes["killerbench_save_scan_note"].CallAsync(saveRequest.RootElement, CancellationToken.None)).IsError);
-        Equal(false, (await benchNotes["killerbench_save_scan_note"].CallAsync(saveRequest.RootElement, CancellationToken.None)).IsError);
+        foreach (var attempt in new[] { 1, 2 })
+        {
+            var scanNote = await benchNotes["killerbench_save_scan_note"].CallAsync(saveRequest.RootElement, CancellationToken.None);
+            Equal("saved", scanNote.IsError ? "error: " + scanNote.Text : "saved");
+        }
         Equal(true, File.ReadAllText(notesLog).Contains("--content-file", StringComparison.Ordinal));
     }
     finally

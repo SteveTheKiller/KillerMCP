@@ -82,7 +82,9 @@ internal static class NotesContent
     internal static async Task<(string[] Arguments, string? Folder, string? Error)> ArgumentsAsync(string notes, string content, CancellationToken token, IEnumerable<string>? otherArguments = null)
     {
         if (content.Length > NoteLimit) return ([], null, "The note text is longer than the 500,000 characters a KillerNotes note holds");
-        var accepts = await SupportsFileAsync(notes, token).ConfigureAwait(false);
+        // A help request can fail once while KillerNotes starts, so it is asked again before the save is refused.
+        var accepts = await SupportsFileAsync(notes, token).ConfigureAwait(false)
+            ?? await SupportsFileAsync(notes, token).ConfigureAwait(false);
         // Without an answer the text never falls back to the command line, where other programs can read it.
         if (accepts is null) return ([], null, ProbeRefusal);
         if (accepts == false)
