@@ -13,7 +13,7 @@ internal static class InstallerLifecycleReviewChecks
         _program = Assembly.LoadFrom(setup).GetType("KillerMCP.Setup.Program", true)!;
         // The install lease is a lock file in this account's own KillerMCP folder. A second setup of the same
         // account waits its turn, and the machine-wide name another account could hold no longer matters.
-        using (var lease = (IDisposable)Invoke("AcquireInstallLease", null)!)
+        using (var lease = (IDisposable)Invoke("AcquireInstallLease", (object?)null)!)
         {
             try
             {
