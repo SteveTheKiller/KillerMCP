@@ -13,6 +13,7 @@ if (args.SequenceEqual(["--review-release-gaps"])) { await ReleaseGapReviewCheck
 if (args.SequenceEqual(["--review-update-flavor"])) { await UpdateFlavorReviewChecks.RunAsync(); return; }
 if (NotesBridgeReviewChecks.Serve(args)) return;
 if (NotesWorkflowReviewChecks.Serve(args)) return;
+if (args.SequenceEqual(["--review-notes-staging"])) { await NotesStagingReviewChecks.RunAsync(); return; }
 if (args.SequenceEqual(["--review-notes-bridge"])) { await NotesBridgeReviewChecks.RunAsync(); return; }
 if (args.SequenceEqual(["--review-notes-workflows"])) { await NotesWorkflowReviewChecks.RunAsync(); return; }
 if (ElevatedOutputReviewChecks.Serve(args)) return;

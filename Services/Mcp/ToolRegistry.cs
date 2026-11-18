@@ -6,6 +6,8 @@ namespace KillerMCP.Services.Mcp;
 
 internal static class ToolRegistry
 {
+    internal const string UnexpectedFailure = "The tool failed unexpectedly. The details are in the agent client's KillerMCP server log.";
+
     private static IReadOnlyDictionary<string, AppAdapter> Adapters = new Dictionary<string, AppAdapter>();
     private static readonly HashSet<string> CoreToolNames = new(BuiltInTools.Definitions.Select(tool =>
         (string)tool.GetType().GetProperty("name")!.GetValue(tool)!), StringComparer.Ordinal);
@@ -140,8 +142,10 @@ internal static class ToolRegistry
         catch (Exception exception)
         {
             ToolCallLog.Record(loggedName, "error", stopwatch.ElapsedMilliseconds);
-            var message = exception.Message.Length <= 1024 ? exception.Message : exception.Message[..1024];
-            return new { content = new[] { new { type = "text", text = "The tool failed: " + message } }, isError = true };
+            // An unexpected exception can name local paths, so the agent gets fixed text and the detail goes
+            // to standard error, which the client keeps in its local server log.
+            Console.Error.WriteLine("KillerMCP " + loggedName + " failed: " + exception.GetType().Name + ": " + exception.Message);
+            return new { content = new[] { new { type = "text", text = UnexpectedFailure } }, isError = true };
         }
     }
 }

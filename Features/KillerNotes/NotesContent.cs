@@ -59,33 +59,43 @@ internal static class NotesContent
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool WaitNamedPipe(string name, uint timeout);
 
-    internal static async Task<bool> SupportsFileAsync(string notes, CancellationToken token)
+    // True or false once KillerNotes has answered its help request, and null when it did not answer.
+    internal static async Task<bool?> SupportsFileAsync(string notes, CancellationToken token)
     {
         if (FileSupport.TryGetValue(notes, out var known)) return known;
         var help = await ProcessRunner.RunAsync(notes, Prefix(notes).Concat(["--help"]), TimeSpan.FromSeconds(15), 65536, token).ConfigureAwait(false);
-        // Only an answer KillerNotes gave is remembered. A failed request is asked again next time instead of
-        // sending every later note on the command line.
-        if (help.ExitCode != 0) return false;
+        // Only an answer KillerNotes gave is remembered. A failed request is asked again next time.
+        if (help.ExitCode != 0) return null;
         var supported = AcceptsFile(help.StandardOutput);
         FileSupport[notes] = supported;
         return supported;
     }
+
+    internal const string ProbeRefusal = "KillerNotes did not answer how it accepts note text, so the note was not sent. Try again, or open KillerNotes once and retry.";
+
+    // Note text waits for KillerNotes in its own folder inside KillerMCP's settings folder, which agents
+    // cannot read, with access for this account only. A folder left by a crash is removed on a later save.
+    internal static string StagingRoot => Path.Combine(KillerBenchSettings.Folder, "note-staging");
 
     // The arguments that carry the note text, and the temporary folder to delete afterward when
     // the text went into a file. Error is set when KillerNotes cannot take text this long.
     internal static async Task<(string[] Arguments, string? Folder, string? Error)> ArgumentsAsync(string notes, string content, CancellationToken token, IEnumerable<string>? otherArguments = null)
     {
         if (content.Length > NoteLimit) return ([], null, "The note text is longer than the 500,000 characters a KillerNotes note holds");
-        if (!await SupportsFileAsync(notes, token).ConfigureAwait(false))
+        var accepts = await SupportsFileAsync(notes, token).ConfigureAwait(false);
+        // Without an answer the text never falls back to the command line, where other programs can read it.
+        if (accepts is null) return ([], null, ProbeRefusal);
+        if (accepts == false)
         {
             if (content.Length <= CommandLineLimit && ProcessRunner.FitsCommandLine(notes, Prefix(notes).Concat(otherArguments ?? []).Concat(["--content", content])))
                 return (["--content", content], null, null);
             return ([], null, "This note is too large for a command line; update KillerNotes to save it from a file");
         }
-        var folder = Path.Combine(Path.GetTempPath(), "killermcp-note-" + Guid.NewGuid().ToString("N"));
+        RemoveStale();
+        var folder = Path.Combine(StagingRoot, Guid.NewGuid().ToString("N"));
         try
         {
-            Directory.CreateDirectory(folder);
+            CreatePrivateFolder(folder);
             var file = Path.Combine(folder, "note.md");
             await File.WriteAllTextAsync(file, content, new UTF8Encoding(false), token).ConfigureAwait(false);
             return (["--content-file", file], folder, null);
@@ -94,6 +104,31 @@ internal static class NotesContent
         {
             Delete(folder);
             throw;
+        }
+    }
+
+    private static void CreatePrivateFolder(string folder)
+    {
+        Directory.CreateDirectory(StagingRoot);
+        if (!OperatingSystem.IsWindows()) { Directory.CreateDirectory(folder); return; }
+        var security = new System.Security.AccessControl.DirectorySecurity();
+        security.SetAccessRuleProtection(true, false);
+        security.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(System.Security.Principal.WindowsIdentity.GetCurrent().User!,
+            System.Security.AccessControl.FileSystemRights.FullControl, System.Security.AccessControl.InheritanceFlags.ContainerInherit | System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+            System.Security.AccessControl.PropagationFlags.None, System.Security.AccessControl.AccessControlType.Allow));
+        new DirectoryInfo(folder).Create(security);
+    }
+
+    private static void RemoveStale()
+    {
+        string[] folders;
+        try { folders = Directory.GetDirectories(StagingRoot); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { return; }
+        foreach (var folder in folders)
+        {
+            if (!Guid.TryParseExact(Path.GetFileName(folder), "N", out _)) continue;
+            try { if (Directory.GetCreationTimeUtc(folder) < DateTime.UtcNow.AddHours(-1)) Directory.Delete(folder, true); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
         }
     }
 

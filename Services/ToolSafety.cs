@@ -64,7 +64,7 @@ internal static class ToolSafety
     private static readonly HashSet<string> ReadOnlyBenchTools = new(StringComparer.Ordinal)
     {
         "killerbench_code_lookup", "killerbench_diagnostic_scopes", "killerbench_check", "killerbench_scan",
-        "killerbench_job", "killerbench_repair_actions", "killerbench_repair_preview", "killerbench_repair_recover",
+        "killerbench_job", "killerbench_repair_actions", "killerbench_repair_preview",
         "killerbench_evidence", "killerbench_knowledge", "killerbench_review", "killerbench_catalog",
     };
 
@@ -123,7 +123,8 @@ internal static class ToolSafety
         || ReadOnlyShotTools.Contains(name) || ReadOnlyAppTools.Contains(name) || ReadOnlyCoreTools.Contains(name);
 
     private static bool IsKnownAdditive(string name) =>
-        name is "killer_create_pdf" or "killendar_create_appointment"
+        // Recover archives finished repair journal records, so it writes local state without removing any.
+        name is "killer_create_pdf" or "killendar_create_appointment" or "killerbench_repair_recover"
         or "killernotes_create" or "killernotes_create_group" or "killernotes_import_image"
         or "killernotes_export" or "killernotes_export_pdf" or "killendar_export_agenda_pdf"
         or "killendar_save_agenda_note" or "killerscan_export_report_pdf"

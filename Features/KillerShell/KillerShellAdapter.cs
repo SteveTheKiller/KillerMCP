@@ -284,7 +284,19 @@ public static class KillerShellAdapter
             {
                 return InvalidResponse();
             }
-            return new AppCallResult(document.RootElement.GetRawText());
+            // Matches inside credential stores and .env files are dropped, so a search cannot quote them.
+            var root2 = JsonNode.Parse(document.RootElement.GetRawText())!.AsObject();
+            var kept = new JsonArray();
+            foreach (var row in root2["results"]!.AsArray().ToArray())
+            {
+                var hit = row is JsonObject item && item["path"] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+                bool hidden;
+                try { hidden = hit is not null && AgentPaths.IsCredentialLocation(hit); }
+                catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException) { hidden = true; }
+                if (!hidden) kept.Add(row?.DeepClone());
+            }
+            root2["results"] = kept;
+            return new AppCallResult(root2.ToJsonString());
         }
         catch (Exception exception) when (exception is JsonException or TimeoutException or InvalidOperationException)
         {
@@ -335,7 +347,45 @@ public static class KillerShellAdapter
         if (input.ValueKind != JsonValueKind.Object || input.EnumerateObject().Any(item => item.Name is not ("path" or "limit"))
             || !ReadString(input, "path", 1024, out var key) || !ReadOptionalLimit(input, 100, 100, out var limit))
             return Task.FromResult(new AppCallResult("Expected a registry key path and an optional limit from 1 to 100", true));
+        if (ProtectedRegistryKey(key!)) return Task.FromResult(new AppCallResult(RegistryRefusal, true));
         return ProtectReadResult(RunJsonAsync(path, ["registry", key!, "--limit", limit.ToString(CultureInfo.InvariantCulture)], "values", JsonValueKind.Array, 524288, cancellationToken));
+    }
+
+    private const string RegistryRefusal = "Agents cannot read registry keys that hold recent files and commands, saved remote sessions, or Windows account secrets.";
+
+    // Keys whose values are recent paths, saved remote sessions or machine secrets, under any value name.
+    private static readonly string[] ProtectedUserKeys =
+    [
+        @"Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU", @"Software\Microsoft\Windows\CurrentVersion\Explorer\TypedPaths",
+        @"Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs", @"Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32",
+        @"Software\Microsoft\Windows\CurrentVersion\Explorer\WordWheelQuery", @"Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist",
+        @"Software\Microsoft\Terminal Server Client", @"Software\SimonTatham\PuTTY\Sessions", @"Software\Martin Prikryl\WinSCP 2\Sessions",
+        @"Software\Microsoft\Protected Storage System Provider", @"Software\Microsoft\Credentials",
+    ];
+
+    private static readonly string[] ProtectedMachineKeys = [@"SAM", @"SECURITY", @"SYSTEM\CurrentControlSet\Control\Lsa", @"SYSTEM\ControlSet001\Control\Lsa"];
+
+    internal static bool ProtectedRegistryKey(string key)
+    {
+        var path = key.Replace('/', '\\').Trim().Trim('\\');
+        while (path.Contains(@"\\", StringComparison.Ordinal)) path = path.Replace(@"\\", @"\", StringComparison.Ordinal);
+        var split = path.IndexOf('\\');
+        var hive = (split < 0 ? path : path[..split]).ToUpperInvariant();
+        var rest = split < 0 ? string.Empty : path[(split + 1)..];
+        if (hive is "HKEY_USERS" or "HKU")
+        {
+            // HKEY_USERS\<SID>\... is the same tree as HKEY_CURRENT_USER for that account.
+            var next = rest.IndexOf('\\');
+            hive = "HKCU";
+            rest = next < 0 ? string.Empty : rest[(next + 1)..];
+        }
+        static bool Under(string value, string root) => value.Equals(root, StringComparison.OrdinalIgnoreCase) || value.StartsWith(root + @"\", StringComparison.OrdinalIgnoreCase);
+        return hive switch
+        {
+            "HKEY_CURRENT_USER" or "HKCU" => ProtectedUserKeys.Any(root => Under(rest, root)),
+            "HKEY_LOCAL_MACHINE" or "HKLM" => ProtectedMachineKeys.Any(root => Under(rest, root)),
+            _ => false,
+        };
     }
 
     private static bool SecretName(string name) => new[] { "password", "passwd", "pwd", "token", "secret", "apikey", "api_key", "api-key", "accountkey", "sharedaccesskey", "credential" }

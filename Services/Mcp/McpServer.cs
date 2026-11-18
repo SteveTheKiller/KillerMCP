@@ -50,9 +50,11 @@ internal static class McpServer
         }
         object Failure(JsonElement id, Exception exception)
         {
+            // Only protocol errors KillerMCP wrote go back as they are; anything else can name local paths.
+            if (exception is not McpRequestException) Console.Error.WriteLine("KillerMCP request failed: " + exception.GetType().Name + ": " + exception.Message);
             var (code, message) = exception is McpRequestException known
                 ? (known.Code, known.Message)
-                : (-32603, "Internal error: " + (exception.Message.Length <= 1024 ? exception.Message : exception.Message[..1024]));
+                : (-32603, "Internal error. The details are in the agent client's KillerMCP server log.");
             return new { jsonrpc = "2.0", id, error = new { code, message } };
         }
         using var input = new BoundedLineReader(Console.OpenStandardInput(), MaximumMessageBytes);

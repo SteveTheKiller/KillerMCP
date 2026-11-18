@@ -245,6 +245,46 @@ public static class AgentPaths
 
     private static IEnumerable<string> ProtectedFolders => [KillerBenchSettings.Folder, KillerBenchSettings.BenchFolder];
 
+    public const string CredentialMessage = "Agents cannot read SSH keys, cloud and developer credentials, browser profiles, Windows credential stores, agent sign-in files or .env files.";
+
+    // Credential stores no tool may read. There is deliberately no setting to allow them: an agent that
+    // needs a secret should be given it, not sent to find it.
+    private static IEnumerable<string> CredentialFolders()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        foreach (var name in new[] { ".ssh", ".aws", ".azure", ".kube", ".docker", ".gnupg", Path.Combine(".config", "gcloud"), Path.Combine(".config", "gh") })
+            yield return Path.Combine(home, name);
+        foreach (var root in new[] { roaming, local })
+            foreach (var name in new[] { "Credentials", "Protect", "Vault" })
+                yield return Path.Combine(root, "Microsoft", name);
+        foreach (var name in new[] { Path.Combine("Google", "Chrome", "User Data"), Path.Combine("Microsoft", "Edge", "User Data"), Path.Combine("BraveSoftware", "Brave-Browser", "User Data"), Path.Combine("Vivaldi", "User Data"), Path.Combine("Chromium", "User Data") })
+            yield return Path.Combine(local, name);
+        yield return Path.Combine(roaming, "Mozilla", "Firefox", "Profiles");
+        yield return Path.Combine(roaming, "Opera Software");
+    }
+
+    private static IEnumerable<string> CredentialFiles()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        foreach (var name in new[] { ".git-credentials", ".netrc", "_netrc", ".npmrc", ".pypirc", Path.Combine(".claude", ".credentials.json"), Path.Combine(".codex", "auth.json"), Path.Combine(".gemini", "oauth_creds.json") })
+            yield return Path.Combine(home, name);
+    }
+
+    /// <summary>True for a path in a well-known credential store or a .env file. Search results inside
+    /// these are dropped as well, so a content search cannot quote them.</summary>
+    public static bool IsCredentialLocation(string path)
+    {
+        var full = Path.GetFullPath(path).TrimEnd('\\');
+        var name = Path.GetFileName(full);
+        if (name.Equals(".env", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith(".env.", StringComparison.OrdinalIgnoreCase) && !(name.EndsWith(".example", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".sample", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".template", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        if (CredentialFiles().Any(file => full.Equals(file, StringComparison.OrdinalIgnoreCase))) return true;
+        return CredentialFolders().Any(folder => IsInside(full, folder));
+    }
+
     public static string? ReadRefusal(string path)
     {
         if (AccessRefusal(path) is { } access) return access;
@@ -254,6 +294,7 @@ public static class AgentPaths
             foreach (var folder in ProtectedFolders)
                 if (IsInside(target, Path.GetFullPath(folder)) || IsInside(target, Resolve(folder)))
                     return "Agents cannot read the KillerMCP or KillerBench settings folders.";
+            if (IsCredentialLocation(Path.GetFullPath(path)) || IsCredentialLocation(target)) return CredentialMessage;
             return null;
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)

@@ -27,7 +27,7 @@ internal static class AdapterSafetyReviewChecks
         if (args[0] == "registry") { Console.Write("{\"values\":[{\"name\":\"ApiToken\",\"data\":\"registry-secret\"},{\"name\":\"Connection\",\"data\":\"Password=connection-secret; ordinary\"}]}"); return true; }
         if (args[0] == "capture") { Console.Write(JsonSerializer.Serialize(new { path = @"C:\fixture.png", arguments = args })); return true; }
         if (args[0] == "hash") { Thread.Sleep(11000); Console.Write("{\"hash\":\"fixture-sha256\"}"); return true; }
-        if (args[0] == "search") { Console.Write(JsonSerializer.Serialize(new { results = new[] { new { path = args[1] + @"\match.txt" } }, stoppedEarly = args.Contains("--max-seconds") })); return true; }
+        if (args[0] == "search") { Console.Write(JsonSerializer.Serialize(new { results = new[] { new { path = args[1] + @"\match.txt" }, new { path = args[1] + @"\app\.env" } }, stoppedEarly = args.Contains("--max-seconds") })); return true; }
         if (args.SequenceEqual(["/help"]))
         {
             Console.Write("killerscan network killerscan locations /scan [targets] /probe <IPv4> /vendor <MAC> /ping <target> /trace <target> /diagnose <target> /watch <targets> /location <name|id> /max-seconds <n>");
@@ -102,7 +102,20 @@ internal static class AdapterSafetyReviewChecks
             if (events.IsError || registry.IsError || events.Text.Contains("events-secret") || registry.Text.Contains("registry-secret") || registry.Text.Contains("connection-secret"))
                 throw new InvalidOperationException("Registry or event output disclosed likely secrets.");
             if (!events.Text.Contains("ordinary") || !registry.Text.Contains("ordinary")) throw new InvalidOperationException("Masking removed ordinary result text.");
-            Console.WriteLine("PASS registry and event secret masking");
+            // Keys that hold saved sessions, recent paths and machine secrets are refused before KillerShell runs.
+            foreach (var key in new[]
+            {
+                @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU", @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\TypedPaths",
+                @"hkcu/software/microsoft/windows/currentversion/explorer/RecentDocs", @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\OpenSavePidlMRU",
+                @"HKCU\Software\Microsoft\Terminal Server Client\Servers", @"HKCU\Software\SimonTatham\PuTTY\Sessions\prod", @"HKCU\Software\Martin Prikryl\WinSCP 2\Sessions",
+                @"HKLM\SAM", @"HKEY_LOCAL_MACHINE\SECURITY\Policy", @"HKLM\SYSTEM\CurrentControlSet\Control\Lsa", @"HKEY_USERS\S-1-5-21-1-2-3-1001\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU",
+            })
+            {
+                var refused = await Call(shell, "killershell_read_registry_key", new { path = key });
+                if (!refused.IsError || refused.Text.Contains("Fixture") || refused.Text.Contains("ordinary")) throw new InvalidOperationException("Registry read accepted the protected key " + key + ".");
+            }
+            if ((await Call(shell, "killershell_read_registry_key", new { path = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" })).IsError) throw new InvalidOperationException("Registry read refused an ordinary Explorer key.");
+            Console.WriteLine("PASS registry and event secret masking and protected registry keys");
             var shot = await KillerShotAdapter.CreateAsync(Environment.ProcessPath!);
             var capture = await Call(shot, "killershot_capture_monitor", new { });
             if (capture.IsError || capture.Text.Contains("--no-shutter")) throw new InvalidOperationException("Agent capture forced the shutter off.");
@@ -113,6 +126,8 @@ internal static class AdapterSafetyReviewChecks
             foreach (var name in new[] { "killerpdf_set_metadata", "killerpdf_set_bookmarks", "killerpdf_add_comment", "killerpdf_delete_comments", "killerpdf_crop" })
                 if (JsonSerializer.SerializeToElement(ToolSafety.For(name)).GetProperty("destructiveHint").GetBoolean()) throw new InvalidOperationException(name + " is incorrectly destructive.");
             if (!JsonSerializer.SerializeToElement(ToolSafety.For("killershot_recording_control")).GetProperty("destructiveHint").GetBoolean()) throw new InvalidOperationException("Recording discard is not marked destructive.");
+            var recover = JsonSerializer.SerializeToElement(ToolSafety.For("killerbench_repair_recover"));
+            if (recover.GetProperty("readOnlyHint").GetBoolean() || recover.GetProperty("destructiveHint").GetBoolean()) throw new InvalidOperationException("Repair recover, which archives journal records, is not marked as a non-destructive write.");
             var rejected = false;
             try { ToolSafety.For("unregistered_review_tool"); }
             catch (InvalidOperationException) { rejected = true; }
@@ -137,6 +152,8 @@ internal static class AdapterSafetyReviewChecks
             Console.WriteLine("PASS file-size-aware hashing deadline");
             var search = await Call(shell, "killershell_search_files", new { root, content = "needle" });
             if (search.IsError || !JsonDocument.Parse(search.Text).RootElement.GetProperty("stoppedEarly").GetBoolean()) throw new InvalidOperationException("The search adapter did not request or preserve bounded partial results.");
+            var hits = JsonDocument.Parse(search.Text).RootElement.GetProperty("results");
+            if (hits.GetArrayLength() != 1 || hits[0].GetProperty("path").GetString()!.EndsWith(".env", StringComparison.Ordinal)) throw new InvalidOperationException("Search returned a match inside a .env file.");
             var maximalWatch = await Call(tools, "killerscan_watch_hosts", new { targets = Enumerable.Range(1, 16).Select(i => "192.168.1." + i).ToArray(), count = 20, interval = 10 });
             using var watchResult = JsonDocument.Parse(maximalWatch.Text);
             var arguments = watchResult.RootElement.GetProperty("arguments").EnumerateArray().Select(value => value.GetString()).ToArray();
