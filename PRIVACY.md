@@ -18,7 +18,8 @@ KillerMCP contacts a service only when it checks for updates or when a tool you 
 - **Domain lookups:** DNS lookups go to Cloudflare DNS over HTTPS. Registration lookups go to IANA's RDAP bootstrap file and the public RDAP server for the domain.
 - **CVE lookups:** Your search text goes to the KillerTools NVD proxy, which queries the National Vulnerability Database.
 - **GIF search:** Your search text goes to the KillerTools GIF proxy, which queries a GIF search provider.
-- **KillerScan:** KillerScan contacts the hosts and networks you ask it to probe. Its speed test exchanges test data with Cloudflare's speed test and the KillerScan speed test server. It can refresh its MAC vendor list from the public Nmap and Wireshark data files.
+- **Timestamp servers:** When you sign a PDF with a trusted timestamp, KillerPDF sends a hash of the signature to the timestamp server, either its default or the public `https` server you name. The document itself is not sent.
+- **KillerScan:** KillerScan contacts the hosts and networks you ask it to probe. Ping, trace route and watch can reach public hosts. Scans, probes and diagnose stay on this PC and private networks unless a scan target is in a saved Location. Its speed test exchanges test data with Cloudflare's speed test and the KillerScan speed test server. It can refresh its MAC vendor list from the public Nmap and Wireshark data files.
 
 Each of these services receives your IP address with the request, as any web request does, and handles it under its own policy.
 

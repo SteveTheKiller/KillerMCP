@@ -171,6 +171,7 @@ PDF creation uses the installed Microsoft Edge print engine in a private session
 - Merge 2 to 1,000 local PDF files into one new PDF while preserving the requested order.
 - Extract selected pages into a new PDF or split every page into separate PDFs.
 - Remove encryption into a new PDF, using a supplied password when required.
+- Sign a PDF into a new PDF, optionally with a trusted timestamp. A chosen timestamp server must be an `https` address on a public host name, and it receives the signature hash.
 - Render selected pages as PNG or JPEG images.
 - Flatten a PDF into a new uneditable raster PDF.
 - Print selected pages to a named or default printer.
@@ -196,10 +197,10 @@ PDF creation uses the installed Microsoft Edge print engine in a private session
 - With KillerScan 1.9.0 or later, use a saved Location by name or ID. A scan records the run and its devices there and reports whether that saved, plus any baseline or new-device notes. A probe uses the Location's device names and types and records no run. Without a Location nothing is saved.
 - With KillerScan 1.9.0 or later, turn off named checks and send every probe from one connected adapter.
 - Look up a MAC address manufacturer in KillerScan's offline OUI database.
-- Ping one IPv4 address or hostname and report latency and packet loss.
-- Trace the route to one IPv4 address or hostname.
-- Diagnose DNS, ping, route selection, and selected TCP ports for one target.
-- Watch up to 16 IPv4 addresses for bounded availability and latency samples.
+- Ping one IPv4 address or hostname and report latency and packet loss. Public hosts are contacted directly from this PC.
+- Trace the route to one IPv4 address or hostname. Public hosts are contacted directly from this PC.
+- Diagnose DNS, ping, route selection, and selected TCP ports for this PC or one private, link-local or carrier-grade NAT target. A hostname must resolve only to such addresses, and public hosts are refused.
+- Watch up to 16 IPv4 addresses for bounded availability and latency samples. Public addresses are contacted directly from this PC.
 - Run KillerScan's native KillerSpeed test when explicitly requested.
 - Return no more than 100 discovered devices.
 

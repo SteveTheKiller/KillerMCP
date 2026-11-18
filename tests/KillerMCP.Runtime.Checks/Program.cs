@@ -1028,6 +1028,12 @@ try
     Equal(true, (await Pdf("killerpdf_edit_attachment", new { path = sourceOne, output = NewPdf("edited-attachment-dotted"), name = "notes.txt", mime = "text/c" + (char)0x130 })).IsError);
     Equal(true, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed-space"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, timestampServer = "https://a" + (char)0xA0 + "b" })).IsError);
     Equal(true, (await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed-bom"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, timestampServer = "https://a" + (char)0xFEFF + "b" })).IsError);
+    // The timestamp request leaves this PC, so it never goes to plain http, an address, this PC or a private host.
+    foreach (var server in new[] { "http://timestamp.digicert.com", "https://127.0.0.1/tsa", "https://169.254.169.254/latest", "https://localhost/tsa", "https://[::1]/tsa", "https://10.0.0.5/tsa", "https://tsa.local/", "https://intranet/tsa", "https://user@timestamp.digicert.com/" })
+    {
+        var refused = await Pdf("killerpdf_sign", new { path = sourceOne, output = NewPdf("signed-tsa"), pfx = certificateFile, pfxPassword = "pw", timestamp = true, timestampServer = server });
+        if (!refused.IsError) throw new Exception("Accepted timestamp server " + server);
+    }
     Equal(false, (await Pdf("killerpdf_repair_links", new { path = sourceOne, output = NewPdf("links"), @unsafe = true })).IsError);
     Equal(false, (await Pdf("killerpdf_table_of_contents", new { path = sourceOne, output = NewPdf("contents"), title = "Contents", depth = 2 })).IsError);
     Equal(false, (await Pdf("killerpdf_page_labels", new { path = sourceOne, output = NewPdf("labels"), ranges = "1:lower-roman,3:decimal" })).IsError);
@@ -1240,7 +1246,8 @@ try
     using var target = JsonDocument.Parse("{\"target\":\"example.com\"}");
     Equal(false, (await scanByName["killerscan_ping"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
     Equal(false, (await scanByName["killerscan_trace_route"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
-    Equal(false, (await scanByName["killerscan_diagnose_host"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
+    Equal(true, (await scanByName["killerscan_diagnose_host"].CallAsync(target.RootElement, CancellationToken.None)).IsError);
+    Equal(false, (await scanByName["killerscan_diagnose_host"].CallAsync(probe.RootElement, CancellationToken.None)).IsError);
     using var targets = JsonDocument.Parse("{\"targets\":[\"192.168.50.20\"]}");
     Equal(false, (await scanByName["killerscan_watch_hosts"].CallAsync(targets.RootElement, CancellationToken.None)).IsError);
     Equal(false, (await scanByName["killerscan_speed_test"].CallAsync(empty.RootElement, CancellationToken.None)).IsError);

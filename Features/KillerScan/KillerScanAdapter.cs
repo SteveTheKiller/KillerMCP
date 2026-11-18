@@ -23,10 +23,10 @@ public static partial class KillerScanAdapter
         Add(help, ["/scan [targets]", "killerscan scan [targets]"], adapters, Tool("killerscan_scan_network", "Scan the active local IPv4 network, an IPv4 host, or a CIDR of at most 1,024 addresses with KillerScan and return the scanned range, its address count and the discovered devices as JSON. Omit target for requests such as \"killerscan my network\"; a local network larger than 1,024 addresses needs a target inside it. Runs quick discovery by default; set full for fingerprinting and port checks. Scanning sends network probes." + options.ScanText, ScanSchema(options)), (input, token) => Scan(path!, options, input, token));
         Add(help, ["/probe <IPv4>", "killerscan probe <IPv4>"], adapters, Tool("killerscan_probe_host", "Deep probe one IPv4 host with KillerScan, including ports 1 through 1024, and return its device details as JSON. Probing sends network traffic to the selected host." + options.ProbeText, ProbeSchema(options)), (input, token) => Probe(path!, options, input, token));
         Add(help, ["/vendor <MAC>", "killerscan vendor <MAC>"], adapters, Tool("killerscan_mac_vendor", "Look up the manufacturer of a MAC address in KillerScan's bundled offline OUI database.", VendorSchema()), (input, token) => Vendor(path!, input, token));
-        Add(help, ["/ping <target>", "killerscan ping <target>"], adapters, Tool("killerscan_ping", "Send a bounded set of ICMP checks to one IPv4 address or hostname with KillerScan and return latency and packet loss as JSON.", TargetIntegerSchema("count", 1, 20, 4)), (input, token) => Ping(path!, input, token));
-        Add(help, ["/trace <target>", "killerscan trace <target>"], adapters, Tool("killerscan_trace_route", "Trace the network path to one IPv4 address or hostname with KillerScan and return up to 64 hops as JSON.", TargetIntegerSchema("maxHops", 1, 64, 30)), (input, token) => Trace(path!, input, token));
-        Add(help, ["/diagnose <target>", "killerscan diagnose <target>"], adapters, Tool("killerscan_diagnose_host", "Check DNS, ping, route selection, and selected TCP ports for one IPv4 address or hostname with KillerScan.", DiagnoseSchema()), (input, token) => Diagnose(path!, input, token));
-        Add(help, ["/watch <targets>", "killerscan watch <targets>"], adapters, Tool("killerscan_watch_hosts", "Sample availability and latency for 1 to 16 IPv4 addresses with KillerScan. Sends repeated ICMP checks for the requested bounded interval. The deadline includes every target and sample, up to ten minutes; versions advertising /max-seconds return collected samples with stoppedEarly if their deadline expires.", WatchSchema()), (input, token) => Watch(path!, input, help.StandardOutput.Contains("/max-seconds <n>", StringComparison.Ordinal), token));
+        Add(help, ["/ping <target>", "killerscan ping <target>"], adapters, Tool("killerscan_ping", "Send a bounded set of ICMP checks to one IPv4 address or hostname with KillerScan and return latency and packet loss as JSON. Public hosts are contacted directly from this PC.", TargetIntegerSchema("count", 1, 20, 4)), (input, token) => Ping(path!, input, token));
+        Add(help, ["/trace <target>", "killerscan trace <target>"], adapters, Tool("killerscan_trace_route", "Trace the network path to one IPv4 address or hostname with KillerScan and return up to 64 hops as JSON. Public hosts are contacted directly from this PC.", TargetIntegerSchema("maxHops", 1, 64, 30)), (input, token) => Trace(path!, input, token));
+        Add(help, ["/diagnose <target>", "killerscan diagnose <target>"], adapters, Tool("killerscan_diagnose_host", "Check DNS, ping, route selection, and selected TCP ports for this PC or one private, link-local or CGNAT IPv4 address or hostname with KillerScan. Public hosts are refused.", DiagnoseSchema()), (input, token) => Diagnose(path!, input, token));
+        Add(help, ["/watch <targets>", "killerscan watch <targets>"], adapters, Tool("killerscan_watch_hosts", "Sample availability and latency for 1 to 16 IPv4 addresses with KillerScan. Public addresses are contacted directly from this PC. Sends repeated ICMP checks for the requested bounded interval. The deadline includes every target and sample, up to ten minutes; versions advertising /max-seconds return collected samples with stoppedEarly if their deadline expires.", WatchSchema()), (input, token) => Watch(path!, input, help.StandardOutput.Contains("/max-seconds <n>", StringComparison.Ordinal), token));
         Add(help, ["/speedtest", "killerscan speedtest "], adapters, Tool("killerscan_speed_test", "Run KillerScan's native KillerSpeed test. This contacts speed.killerscan.net and can transfer up to 6 GiB of generated test data plus network overhead.", EmptySchema()), (input, token) => JsonCommand(path!, input, [], ["/speedtest", "/json"], 120, _ => null, token));
         return adapters;
     }
@@ -254,17 +254,22 @@ public static partial class KillerScanAdapter
         return JsonCommand(path, input, ["target", property], [command, target!, flag, value.ToString(), "/json"], timeout, _ => null, token, CompletedNetworkResults);
     }
 
-    private static Task<AppCallResult> Diagnose(string path, JsonElement input, CancellationToken token)
+    private const string DiagnoseTargetRefusal = "Diagnose checks TCP ports, so it only accepts this PC and private, link-local or CGNAT addresses, or a hostname that resolves only to them. Use ping or trace route for public hosts.";
+
+    private static async Task<AppCallResult> Diagnose(string path, JsonElement input, CancellationToken token)
     {
-        if (!ObjectWith(input, "target", "ports") || !RequiredString(input, "target", out var target) || !ValidTarget(target!)) return Task.FromResult(Error("Target must be one IPv4 address or hostname"));
+        if (!ObjectWith(input, "target", "ports") || !RequiredString(input, "target", out var target) || !ValidTarget(target!)) return Error("Target must be one IPv4 address or hostname");
         var args = new List<string> { "/diagnose", target! };
         if (input.TryGetProperty("ports", out var ports))
         {
-            if (ports.ValueKind != JsonValueKind.Array || ports.GetArrayLength() > 32 || ports.EnumerateArray().Any(port => port.ValueKind != JsonValueKind.Number || !port.TryGetInt32(out var number) || number is < 1 or > 65535)) return Task.FromResult(Error("Ports must contain up to 32 port numbers from 1 to 65535"));
+            if (ports.ValueKind != JsonValueKind.Array || ports.GetArrayLength() > 32 || ports.EnumerateArray().Any(port => port.ValueKind != JsonValueKind.Number || !port.TryGetInt32(out var number) || number is < 1 or > 65535)) return Error("Ports must contain up to 32 port numbers from 1 to 65535");
             if (ports.GetArrayLength() > 0) args.AddRange(["/ports", string.Join(',', ports.EnumerateArray().Select(port => port.GetInt32()))]);
         }
+        // KillerScan resolves the name again itself, so a name whose answer changes between the two lookups
+        // could still reach another address; the check stops every ordinary public target.
+        if (!await AgentPaths.ResolvesOnlyLocalAsync(target!, token).ConfigureAwait(false)) return Error(DiagnoseTargetRefusal);
         args.Add("/json");
-        return JsonCommand(path, input, ["target", "ports"], args, 120, _ => null, token, CompletedNetworkResults);
+        return await JsonCommand(path, input, ["target", "ports"], args, 120, _ => null, token, CompletedNetworkResults).ConfigureAwait(false);
     }
 
     private static Task<AppCallResult> Watch(string path, JsonElement input, bool timeLimit, CancellationToken token)

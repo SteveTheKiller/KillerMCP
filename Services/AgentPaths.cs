@@ -174,6 +174,47 @@ public static class AgentPaths
     }
 
     /// <summary>Loopback, private (RFC 1918), link-local and IPv6 unique local or site-local addresses.</summary>
+    /// <summary>True when every address the host names is on this PC or a private, link-local or CGNAT
+    /// network. A host that does not resolve within five seconds counts as not local.</summary>
+    public static async Task<bool> ResolvesOnlyLocalAsync(string host, CancellationToken token)
+    {
+        var addresses = await ResolveAsync(host, token).ConfigureAwait(false);
+        return addresses is { Length: > 0 } && addresses.All(IsPrivateReach);
+    }
+
+    /// <summary>True when the host is a DNS name, not an address or this PC, and every address it resolves
+    /// to is public. Used for servers KillerMCP sends a request to on the user's behalf.</summary>
+    public static async Task<bool> IsPublicHostAsync(string host, CancellationToken token)
+    {
+        var name = host.Trim('[', ']').TrimEnd('.');
+        if (name.Length == 0 || IPAddress.TryParse(name, out _) || !name.Contains('.') || IsThisMachine(name)) return false;
+        foreach (var suffix in new[] { ".local", ".lan", ".home", ".internal", ".intranet", ".corp", ".home.arpa", ".localdomain" })
+            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return false;
+        var addresses = await ResolveAsync(name, token).ConfigureAwait(false);
+        return addresses is { Length: > 0 } && !addresses.Any(IsPrivateReach);
+    }
+
+    private static async Task<IPAddress[]?> ResolveAsync(string host, CancellationToken token)
+    {
+        var name = host.Trim('[', ']').TrimEnd('.');
+        if (IPAddress.TryParse(name, out var literal)) return [literal];
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
+        limit.CancelAfter(TimeSpan.FromSeconds(5));
+        try { return await Dns.GetHostAddressesAsync(name, limit.Token).ConfigureAwait(false); }
+        catch (Exception exception) when (exception is System.Net.Sockets.SocketException or ArgumentException or OperationCanceledException && !token.IsCancellationRequested) { return null; }
+    }
+
+    // Loopback, private, link-local, CGNAT, unspecified, multicast and IPv6 unique-local addresses.
+    private static bool IsPrivateReach(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+        if (IsLocalNetwork(address) || address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any)) return true;
+        var bytes = address.GetAddressBytes();
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+            return bytes[0] == 0 || bytes[0] == 100 && (bytes[1] & 0xC0) == 64 || bytes[0] >= 224;
+        return address.IsIPv6Multicast || address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || (bytes[0] & 0xFE) == 0xFC;
+    }
+
     public static bool IsLocalNetwork(IPAddress address)
     {
         if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();

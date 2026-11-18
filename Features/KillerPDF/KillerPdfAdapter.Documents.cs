@@ -207,7 +207,7 @@ public static partial class KillerPdfAdapter
                 ["path"] = PdfPath(), ["output"] = NewPdf(), ["pfx"] = FilePath("Absolute path to a .pfx or .p12 certificate file"), ["pfxPassword"] = Password(),
                 ["certificate"] = Text(256, null, "Thumbprint or name of a signing certificate in the Windows personal store"),
                 ["reason"] = Text(256), ["location"] = Text(256), ["contact"] = Text(256), ["timestamp"] = Boolean(false),
-                ["timestampServer"] = Text(512, "^https?://[!-~]+$", "RFC 3161 timestamp server address in ASCII, with an international host name in its xn-- form"),
+                ["timestampServer"] = Text(512, "^https://[!-~]+$", "RFC 3161 timestamp server https address on a public host name in ASCII, with an international host name in its xn-- form. KillerPDF sends the signature hash to this server."),
                 ["appearancePage"] = Integer(1, 100000), ["appearanceCorner"] = Choice("bottom-left", "bottom-right", "top-left", "top-right"),
                 ["appearanceText"] = Text(1024, null, "Visible signature text; {name}, {date}, {reason} and {location} are filled in"),
                 ["width"] = Range(72, 14400), ["height"] = Range(36, 14400), ["fontSize"] = Range(6, 72),
@@ -256,8 +256,17 @@ public static partial class KillerPdfAdapter
         return schema;
     }
 
+    private const string TimestampServerRefusal = "The timestamp server must be an https address on a public host name, not an IP address, this PC or a private network.";
+
     private static List<string> SignArguments(JsonElement input, string output)
     {
+        // The signing request goes out from this PC, so a timestamp server can never point it at a local service.
+        if (input.TryGetProperty("timestampServer", out var server) && server.ValueKind == JsonValueKind.String)
+        {
+            if (!Uri.TryCreate(server.GetString(), UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps || address.UserInfo.Length > 0
+                || !AgentPaths.IsPublicHostAsync(address.IdnHost, CancellationToken.None).GetAwaiter().GetResult())
+                throw new InvalidOperationException(TimestampServerRefusal);
+        }
         var args = Options(["--sign", String(input, "path"), output], input, ("pfx", "--pfx"), ("pfxPassword", PfxPasswordOption), ("certificate", "--cert"),
             ("reason", "--reason"), ("location", "--location"), ("contact", "--contact"), ("timestamp", "--timestamp"), ("timestampServer", "--timestamp-server"),
             ("appearanceText", "--appearance-text"), ("width", "--width"), ("height", "--height"), ("fontSize", "--font-size"));

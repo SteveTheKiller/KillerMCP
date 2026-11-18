@@ -48,6 +48,13 @@ internal static class PathPolicyReviewChecks
             || !Path.GetFileName(folder).StartsWith("KillerMCP-run-", StringComparison.Ordinal))
             failures.Add("An app process started in the client's working folder: " + folder);
         else if (Directory.Exists(folder)) failures.Add("An app working folder was left behind: " + folder);
+        // Servers KillerMCP contacts for the user must be public names, never this PC or a private network.
+        foreach (var host in new[] { "127.0.0.1", "169.254.169.254", "10.0.0.5", "[::1]", "localhost", "tsa.local", "intranet", Environment.MachineName, "8.8.8.8" })
+            if (AgentPaths.IsPublicHostAsync(host, CancellationToken.None).GetAwaiter().GetResult()) failures.Add("Public host check accepted " + host);
+        foreach (var host in new[] { "8.8.8.8", "203.0.113.7", "1.1.1.1" })
+            if (AgentPaths.ResolvesOnlyLocalAsync(host, CancellationToken.None).GetAwaiter().GetResult()) failures.Add("Local host check accepted " + host);
+        foreach (var host in new[] { "127.0.0.1", "192.168.1.1", "100.64.0.1", "localhost" })
+            if (!AgentPaths.ResolvesOnlyLocalAsync(host, CancellationToken.None).GetAwaiter().GetResult()) failures.Add("Local host check refused " + host);
         if (failures.Count > 0) throw new Exception(string.Join(Environment.NewLine, failures));
         Console.WriteLine("PASS: absolute paths, alternate streams, startup/install writes, unlisted UNC names, paths back to this PC and unreadable components.");
     }

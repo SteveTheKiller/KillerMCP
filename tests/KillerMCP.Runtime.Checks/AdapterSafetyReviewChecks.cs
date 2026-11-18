@@ -57,9 +57,16 @@ internal static class AdapterSafetyReviewChecks
         try
         {
             var tools = await KillerScanAdapter.CreateAsync(Environment.ProcessPath!);
-            foreach (var name in new[] { "killerscan_ping", "killerscan_trace_route", "killerscan_diagnose_host" })
+            // Diagnose opens TCP connections, so it keeps to private, link-local, CGNAT and loopback hosts,
+            // including a hostname that resolves to a public address.
+            foreach (var target in new[] { "8.8.8.8", "203.0.113.7", "example.com", "dns.google" })
+                if (!(await Call(tools, "killerscan_diagnose_host", new { target })).IsError) throw new InvalidOperationException("Diagnose accepted the public target " + target + ".");
+            foreach (var target in new[] { "10.0.0.1", "192.168.1.1", "100.64.0.1", "127.0.0.1", "localhost" })
+                if ((await Call(tools, "killerscan_diagnose_host", new { target })).IsError) throw new InvalidOperationException("Diagnose refused the local target " + target + ".");
+            Console.WriteLine("PASS diagnose keeps to private and local hosts");
+            foreach (var (name, down) in new[] { ("killerscan_ping", "8.8.8.8"), ("killerscan_trace_route", "8.8.8.8"), ("killerscan_diagnose_host", "192.168.1.1") })
             {
-                var result = await Call(tools, name, new { target = "8.8.8.8" });
+                var result = await Call(tools, name, new { target = down });
                 if (result.IsError || !result.Text.Contains("false")) throw new InvalidOperationException(name + " discarded the down-target JSON.");
             }
             var watch = await Call(tools, "killerscan_watch_hosts", new { targets = new[] { "8.8.8.8" } });
