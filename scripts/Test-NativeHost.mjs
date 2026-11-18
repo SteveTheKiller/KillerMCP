@@ -407,7 +407,7 @@ const directory = await mkdtemp(join(updateDirectory, 'files-'));
 const downloadsProbe = spawnSync(fixtureExecutable, ['--review-downloads-folder'], { encoding: 'utf8' });
 assert.equal(downloadsProbe.status, 0, downloadsProbe.stderr);
 assert.ok(isAbsolute(downloadsProbe.stdout.trim()), 'The fixture did not return the actual Downloads folder.');
-const destination = join(downloadsProbe.stdout.trim(), `killermcp-native-${process.pid}-${Date.now()}.bin`);
+const destination = join(downloadsProbe.stdout.trim(), `killermcp-native-${process.pid}-${Date.now()}.txt`);
 let decodedCreated = false;
 try {
   const source = join(directory, 'source.bin');
@@ -421,6 +421,8 @@ try {
   assert.deepEqual(await readFile(destination), Buffer.from([0, 1, 2, 254, 255]));
   const overwrite = await request('tools/call', { name: 'decode_file_base64_local', arguments: { path: destination, base64: 'AAEC/v8=' } });
   assert.equal(overwrite.isError, true);
+  const program = await request('tools/call', { name: 'decode_file_base64_local', arguments: { path: destination.replace(/\.txt$/, '.exe'), base64: 'AAEC/v8=' } });
+  assert.equal(program.isError, true);
   // Agents must not write the files that decide what KillerMCP and KillerBench let them do,
   // whether the path names the folder directly, takes a detour or goes through a link.
   await mkdir(join(benchState, 'nested'), { recursive: true });
