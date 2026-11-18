@@ -54,11 +54,29 @@ internal static class ProcessRunner
     // appear on a command line, where other programs and process logs can read it.
     public static async Task<ProcessResult> RunAsync(string executable, IEnumerable<string> arguments, TimeSpan timeout, int maximumCharacters, CancellationToken cancellationToken = default, string? standardInput = null, IReadOnlyDictionary<string, string?>? environment = null)
     {
+        // Each app starts in its own empty folder, so a bare file name an agent passes can never resolve
+        // against the agent client's working folder.
+        var workingFolder = Path.Combine(Path.GetTempPath(), "KillerMCP-run-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workingFolder);
+        try
+        {
+            return await RunInAsync(workingFolder, executable, arguments, timeout, maximumCharacters, cancellationToken, standardInput, environment).ConfigureAwait(false);
+        }
+        finally
+        {
+            try { Directory.Delete(workingFolder, true); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    private static async Task<ProcessResult> RunInAsync(string workingFolder, string executable, IEnumerable<string> arguments, TimeSpan timeout, int maximumCharacters, CancellationToken cancellationToken, string? standardInput, IReadOnlyDictionary<string, string?>? environment)
+    {
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = executable,
+                WorkingDirectory = workingFolder,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,

@@ -390,8 +390,25 @@ public static partial class IntegrationAdapter
         finally { await DeleteAsync(temp).ConfigureAwait(false); }
     }
 
+    /// <summary>
+    /// Checks the destination again right before a staged result is published. The first check ran before
+    /// the app started, and a folder on the way can be swapped for a link while the app works.
+    /// </summary>
+    internal static void RecheckDestination(string output)
+    {
+        if (AgentPaths.WriteRefusal(output) is { } refusal) throw new UnauthorizedAccessException(refusal);
+    }
+
+    /// <summary>Publishes a staged output folder after checking the destination again.</summary>
+    internal static void PublishFolder(string staged, string output)
+    {
+        RecheckDestination(output);
+        Directory.Move(staged, output);
+    }
+
     internal static async Task PublishPdf(string source, string output, CancellationToken token, Func<Stream, Stream, CancellationToken, Task>? copy = null)
     {
+        RecheckDestination(output);
         var sibling = Path.Combine(Path.GetDirectoryName(output)!, ".killermcp-pdf-" + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
@@ -403,6 +420,7 @@ public static partial class IntegrationAdapter
                 await destination.FlushAsync(token).ConfigureAwait(false);
             }
             token.ThrowIfCancellationRequested();
+            RecheckDestination(output);
             // Both paths share a directory, so this publishes a completed file in one move.
             // A destination created during rendering is preserved by the non-overwriting move.
             File.Move(sibling, output, false);

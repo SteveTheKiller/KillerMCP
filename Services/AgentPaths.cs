@@ -88,9 +88,14 @@ public static class AgentPaths
             {
                 attributes = File.GetAttributes(current);
             }
+            catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+            {
+                // Nothing below a missing part exists yet, so nothing below it can be a link.
+                return null;
+            }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                return null;
+                return "The path could not be checked.";
             }
             if (!attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
             FileSystemInfo link = attributes.HasFlag(FileAttributes.Directory) ? new DirectoryInfo(current) : new FileInfo(current);
@@ -110,10 +115,45 @@ public static class AgentPaths
         // WebDAV paths name the server as host@SSL or host@port.
         var host = server.Split('@', 2)[0];
         if (host.Length == 0) return NetworkMessage;
+        // A share on this PC reaches the local disk under another name and would skip every folder guard.
+        if (IsThisMachine(host)) return SelfMessage;
         if (Allowlisted(server) || Allowlisted(host)) return null;
         if (IPAddress.TryParse(host.Trim('[', ']'), out var literal)) return IsLocalNetwork(literal) ? null : NetworkMessage;
         // Names must be explicitly trusted because a second DNS answer could name a different server.
         return NetworkMessage;
+    }
+
+    public const string SelfMessage = "Network paths back to this PC are not accepted. Use the local drive path instead.";
+
+    internal static bool IsThisMachine(string host)
+    {
+        var name = host.Trim('[', ']').TrimEnd('.');
+        if (name.Length == 0) return true;
+        if (name.Equals("localhost", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase)) return true;
+        foreach (var own in new[] { Environment.MachineName, SafeHostName() })
+            if (own.Length > 0 && (name.Equals(own, StringComparison.OrdinalIgnoreCase) || name.StartsWith(own + ".", StringComparison.OrdinalIgnoreCase)))
+                return true;
+        if (!IPAddress.TryParse(name, out var address)) return false;
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+        if (IPAddress.IsLoopback(address) || address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any)) return true;
+        try
+        {
+            return System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                .SelectMany(item => item.GetIPProperties().UnicastAddresses)
+                .Any(item => item.Address.Equals(address) || item.Address.IsIPv6LinkLocal && address.IsIPv6LinkLocal
+                    && item.Address.GetAddressBytes().AsSpan().SequenceEqual(address.GetAddressBytes()));
+        }
+        catch (System.Net.NetworkInformation.NetworkInformationException)
+        {
+            // Without the address list the PC cannot rule itself out, so the address is treated as this PC.
+            return true;
+        }
+
+        static string SafeHostName()
+        {
+            try { return Dns.GetHostName(); }
+            catch (SocketException) { return string.Empty; }
+        }
     }
 
     private static bool Allowlisted(string server)

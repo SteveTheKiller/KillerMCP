@@ -341,7 +341,7 @@ public static partial class KillerPdfAdapter
             var destination = definition.Kind == OutputKind.File ? String(input, "output") : String(input, "outputFolder");
             if (definition.Kind == OutputKind.File && Path.GetExtension(staged).Equals(".pdf", StringComparison.OrdinalIgnoreCase) && new FileInfo(staged).Length > MaxPdfBytes)
                 return Error("The resulting PDF exceeds the 512 MiB tool limit. Use fewer pages or lower image resolution.");
-            if (definition.Kind == OutputKind.File) await IntegrationAdapter.PublishPdf(staged, destination, token).ConfigureAwait(false); else Directory.Move(staged, destination);
+            if (definition.Kind == OutputKind.File) await IntegrationAdapter.PublishPdf(staged, destination, token).ConfigureAwait(false); else IntegrationAdapter.PublishFolder(staged, destination);
             var created = definition.Kind == OutputKind.File ? 1 : Directory.EnumerateFileSystemEntries(destination).Count();
             // Whatever KillerPDF printed while it worked, such as a warning that a fallback dropped bookmarks
             // or form fields, goes back with the result.

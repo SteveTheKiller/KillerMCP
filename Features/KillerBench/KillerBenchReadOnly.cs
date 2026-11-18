@@ -238,7 +238,9 @@ public static partial class KillerBenchAdapter
         if (field.Kind is "file" or "directory" or "activeDirectory")
         {
             if (!Path.IsPathFullyQualified(text)) return (null, "use a fully qualified path");
-            var refusal = AgentPaths.AccessRefusal(text);
+            // The KillerBench CLI opens these paths, so they get the full read guard, and folders it walks
+            // may not contain the settings folders either.
+            var refusal = field.Kind == "file" ? AgentPaths.ReadRefusal(text) : AgentPaths.RecursiveReadRefusal(text);
             if (refusal is not null) return (null, refusal);
             try
             {
@@ -260,7 +262,7 @@ public static partial class KillerBenchAdapter
 
     private static string? NestedRefusal(string path)
     {
-        var refusal = AgentPaths.AccessRefusal(path);
+        var refusal = AgentPaths.ReadRefusal(path);
         if (refusal is not null) return refusal;
         // Refuse redirected ancestors even if their current target is allowed. The CLI follows references later.
         for (var current = Path.GetFullPath(path); !string.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))

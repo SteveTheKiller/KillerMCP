@@ -115,6 +115,19 @@ internal static class BenchReadOnlyChecks
         await Call("killerbench_review", new { operation = "profiles", days = 0 }, true);
         await Call("killerbench_review", new { operation = "profiles", dependencies = "true" }, true);
         await Call("killerbench_review", new { operation = "large_files", root = scratch, maxFiles = 10001 }, true);
+        // KillerBench path fields reach the settings folders through the KillerBench CLI, so they get the same read guard.
+        var guarded = scratch + "-guard";
+        using (KillerBenchSettings.UseTestFolders(Path.Combine(guarded, "state"), Path.Combine(guarded, "bench")))
+        {
+            Directory.CreateDirectory(KillerBenchSettings.Folder);
+            var settingsFile = Path.Combine(KillerBenchSettings.Folder, "pack.json");
+            File.WriteAllText(settingsFile, "{}");
+            await Call("killerbench_knowledge", new { operation = "info", pack = settingsFile }, true);
+            await Call("killerbench_evidence", new { operation = "task_journal", path = file, completion = settingsFile }, true);
+            await Call("killerbench_review", new { operation = "large_files", root = guarded }, true);
+            await Call("killerbench_review", new { operation = "large_files", root = KillerBenchSettings.Folder }, true);
+        }
+        Directory.Delete(guarded, true);
         await Call("killerbench_review", new { operation = "task_plan", path = file, inspectExecutable = true }, true);
         await Call("killerbench_review", new { operation = "services", names = new[] { "--execute" } }, true);
         await Call("killerbench_review", new { operation = "msi_product", productCode = "foo;calc" }, true);
