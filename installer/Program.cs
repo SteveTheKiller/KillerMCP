@@ -621,7 +621,8 @@ namespace KillerMCP.Setup
             using (var stream = File.OpenRead(path))
             using (var algorithm = SHA256.Create()) return BitConverter.ToString(algorithm.ComputeHash(stream)).Replace("-", string.Empty);
         }
-        internal static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
+        // Reuses the parser-exact quoting, so a value ending in a backslash cannot swallow the closing quote.
+        internal static string Quote(string value) => ClientJobEscape.Argument(value);
 
         private sealed class Manifest { public Dictionary<string, ManifestFile>? files { get; set; } }
         private sealed class ManifestFile { public long bytes { get; set; } public string? sha256 { get; set; } }

@@ -69,7 +69,7 @@ internal static class DetachedProcess
         if (result != 0) throw new InvalidOperationException($"The program could not start outside the agent client (WMI result {result}).");
     }
 
-    private static string Quote(string value) => '"' + value.Replace("\"", "\\\"", StringComparison.Ordinal) + '"';
+    private static string Quote(string value) => ProcessText.Quote(value);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct StartupInfo

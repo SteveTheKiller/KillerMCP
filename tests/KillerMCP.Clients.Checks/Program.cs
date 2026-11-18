@@ -122,7 +122,6 @@ try
         var path = Path.Combine(root, name, "settings.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var legacyRegistration = new JsonObject { ["command"] = legacyCommand, ["args"] = new JsonArray(legacyScript) };
-        legacyRegistration["env"] = new JsonObject { ["PREFERENCE"] = "custom" };
         if (name == "CLAUDE") legacyRegistration["type"] = "stdio";
         File.WriteAllText(path, new JsonObject { ["preservedSetting"] = "keep", ["mcpServers"] = new JsonObject { ["killermcp"] = legacyRegistration } }.ToJsonString());
         environment[$"KILLERMCP_TEST_{name}_CONFIG"] = path;
@@ -136,7 +135,6 @@ try
         Equal("keep", Read(path)["preservedSetting"]!.GetValue<string>());
         var serverName = name == "CLAUDE_DESKTOP" ? "KillerMCP" : "killermcp";
         Equal(executable, Read(path)["mcpServers"]![serverName]!["command"]!.GetValue<string>());
-        Equal("custom", Read(path)["mcpServers"]![serverName]!["env"]?["PREFERENCE"]?.GetValue<string>());
         if (name == "CLAUDE_DESKTOP") Equal(false, Read(path)["mcpServers"]!.AsObject().ContainsKey("killermcp"));
     }
     Equal(7, ClientConfiguration.RemoveAll(executable, environment).Count);
@@ -148,15 +146,34 @@ try
     string ConfigPath(string name) => environment[$"KILLERMCP_TEST_{name}_CONFIG"]!;
     foreach (var name in clientNames) File.WriteAllText(ConfigPath(name), new JsonObject { ["preservedSetting"] = "keep" }.ToJsonString());
     File.WriteAllText(ConfigPath("CURSOR"), new JsonObject { ["mcpServers"] = new JsonObject { ["killermcp"] = new JsonObject { ["command"] = Path.Combine(root, "different-host"), ["args"] = new JsonArray() } } }.ToJsonString());
-    var untouched = clientNames.ToDictionary(name => name, name => File.ReadAllText(ConfigPath(name)));
-    Throws<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, environment));
-    foreach (var name in clientNames) Equal(untouched[name], File.ReadAllText(ConfigPath(name)));
-    Equal(false, File.Exists(codexState));
+    // One client KillerMCP cannot change is a warning, not a failed install: the other clients still get
+    // the connection, so a broken settings file never strands someone on an old version.
+    var conflicted = File.ReadAllText(ConfigPath("CURSOR"));
+    var skipped = ClientConfiguration.RegisterAll(executable, environment);
+    Equal(1, skipped.Count(message => message.StartsWith("Warning: ", StringComparison.Ordinal) && message.Contains("Cursor", StringComparison.Ordinal)));
+    Equal(conflicted, File.ReadAllText(ConfigPath("CURSOR")));
+    Equal(executable, Read(ConfigPath("CLAUDE"))["mcpServers"]!["killermcp"]!["command"]!.GetValue<string>());
+    File.WriteAllText(ConfigPath("GEMINI"), "{ not json");
+    Equal(1, ClientConfiguration.RegisterAll(executable, environment).Count(message => message.StartsWith("Warning: Gemini CLI", StringComparison.Ordinal)));
+    Equal("{ not json", File.ReadAllText(ConfigPath("GEMINI")));
+    // An entry that carries env, cwd or any other extra key is a different connection, never a match to keep.
+    var tamperedEntry = new JsonObject { ["command"] = executable, ["args"] = new JsonArray(), ["env"] = new JsonObject { ["NODE_OPTIONS"] = "--require evil.js" } };
+    Equal(false, ClientRegistration.Matches(tamperedEntry, executable));
+    var tamperedLegacy = new JsonObject { ["command"] = legacyCommand, ["args"] = new JsonArray(legacyScript), ["cwd"] = root };
+    Equal(false, ClientRegistration.MatchesLegacy(tamperedLegacy, executable));
+    File.WriteAllText(ConfigPath("CURSOR"), new JsonObject { ["mcpServers"] = new JsonObject { ["killermcp"] = tamperedEntry } }.ToJsonString());
+    var tamperedText = File.ReadAllText(ConfigPath("CURSOR"));
+    Equal(1, ClientConfiguration.RegisterAll(executable, environment).Count(message => message.StartsWith("Warning: ", StringComparison.Ordinal) && message.Contains("Cursor", StringComparison.Ordinal)));
+    Equal(tamperedText, File.ReadAllText(ConfigPath("CURSOR")));
     File.WriteAllText(ConfigPath("CURSOR"), new JsonObject { ["preservedSetting"] = "keep" }.ToJsonString());
+    File.WriteAllText(ConfigPath("GEMINI"), new JsonObject { ["preservedSetting"] = "keep" }.ToJsonString());
+    ClientConfiguration.RemoveAll(executable, environment);
+    foreach (var name in clientNames) File.WriteAllText(ConfigPath(name), new JsonObject { ["preservedSetting"] = "keep" }.ToJsonString());
+    Equal(false, File.Exists(codexState));
     var windsurf = ConfigPath("WINDSURF");
     File.Delete(windsurf);
     Directory.CreateDirectory(windsurf);
-    untouched = clientNames.Where(name => name != "WINDSURF").ToDictionary(name => name, name => File.ReadAllText(ConfigPath(name)));
+    var untouched = clientNames.Where(name => name != "WINDSURF").ToDictionary(name => name, name => File.ReadAllText(ConfigPath(name)));
     var partialFailure = Caught<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, environment));
     Equal(true, partialFailure.Message.Contains(ConfigPath("CLAUDE"), StringComparison.Ordinal));
     Equal(executable, Read(ConfigPath("CLAUDE"))["mcpServers"]!["killermcp"]!["command"]!.GetValue<string>());
@@ -434,6 +451,10 @@ try
     Equal("https://github.com/SteveTheKiller/KillerMCP/releases/download/v1.2.3/KillerMCP-Setup.exe", KillerMCP.Notify.UpdateInstaller.ReleaseFile("1.2.3", "KillerMCP-Setup.exe"));
     foreach (var badVersion in new[] { "latest", "1.2", "1.2.3/../../x", "1.2.3?x", " 1.2.3" })
         Caught<InvalidDataException>(() => KillerMCP.Notify.UpdateInstaller.ReleaseFile(badVersion, "KillerMCP-Setup.exe"));
+    const string releasePage = "https://github.com/SteveTheKiller/KillerMCP/releases/latest";
+    foreach (var planted in new[] { @"C:\Windows\System32\calc.exe", "http://github.com/SteveTheKiller/KillerMCP/releases", "https://github.com.evil.example/SteveTheKiller/KillerMCP/", "https://github.com/someone/else/", "file:///C:/x" })
+        Equal(releasePage, KillerMCP.Notify.UpdateInstaller.SafeReleaseUrl(planted));
+    Equal("https://github.com/SteveTheKiller/KillerMCP/releases/tag/v0.9.5", KillerMCP.Notify.UpdateInstaller.SafeReleaseUrl("https://github.com/SteveTheKiller/KillerMCP/releases/tag/v0.9.5"));
     // An installation carrying its own runtime came from the Store setup and updates with it.
     string assetFolder = Path.Combine(Path.GetTempPath(), "KillerMCP-asset-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(assetFolder);

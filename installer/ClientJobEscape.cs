@@ -90,7 +90,7 @@ namespace KillerMCP.Setup
         }
 
         // Quotes an argument the way the command line parser reads it back.
-        private static string Argument(string value)
+        internal static string Argument(string value)
         {
             if (value.Length > 0 && value.IndexOfAny(new[] { ' ', '\t', '"' }) < 0) return value;
             var quoted = new StringBuilder("\"");

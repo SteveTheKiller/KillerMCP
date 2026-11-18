@@ -13,6 +13,7 @@ public static class ClientRegistration
     internal sealed record Change(string Path);
     private const string ServerName = "killermcp";
     private const int Attempts = 3;
+    private const long MaxSettingsBytes = 16 * 1024 * 1024;
     // The settings belong to other apps, so text in their entries is written back as it was instead of escaped.
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
@@ -123,7 +124,8 @@ public static class ClientRegistration
             || registration["command"]?.GetValue<string>() is not string command
             || registration["args"] is not JsonArray args
             || args.Count != 0
-            || !PathEquals(command, executablePath))
+            || !PathEquals(command, executablePath)
+            || HasExtraKeys(registration))
         {
             return false;
         }
@@ -140,12 +142,18 @@ public static class ClientRegistration
             || args.Count != 1
             || args[0]?.GetValue<string>() is not string script
             || !PathEquals(command, Path.Combine(directory, OperatingSystem.IsWindows() ? "node.exe" : "node"))
-            || !PathEquals(script, Path.Combine(directory, "killermcp.mjs")))
+            || !PathEquals(script, Path.Combine(directory, "killermcp.mjs"))
+            || HasExtraKeys(registration))
         {
             return false;
         }
         return !includeStdioType || registration["type"]?.GetValue<string>() == "stdio";
     }
+
+    // KillerMCP writes only command, args and type. An entry with env, cwd or anything else was changed by
+    // someone else, so it is a different connection rather than one to keep or carry into an upgrade.
+    private static bool HasExtraKeys(JsonObject registration) =>
+        registration.Any(property => property.Key is not ("command" or "args" or "type"));
 
     private static JsonObject Registration(string executablePath, bool includeStdioType)
     {
@@ -170,6 +178,7 @@ public static class ClientRegistration
         commented = false;
         original = null;
         if (!File.Exists(path)) return new JsonObject();
+        if (new FileInfo(path).Length > MaxSettingsBytes) throw new InvalidDataException($"{clientName} MCP configuration at {path} is too large to be a settings file.");
         var text = File.ReadAllText(path);
         original = text;
         if (string.IsNullOrWhiteSpace(text)) return new JsonObject();

@@ -89,7 +89,7 @@ public partial class UpdateWindow : Window
         _latestVersion = Value(args, "--latest") ?? Value(args, "--version");
         // --installer names the latest release's installer for older notifiers. The window downloads the
         // installer of the exact version it offers instead, so it is no longer read.
-        _releaseUrl = Value(args, "--release") ?? "https://github.com/SteveTheKiller/KillerMCP/releases/latest";
+        _releaseUrl = SafeReleaseUrl(Value(args, "--release"));
         _behavior = Value(args, "--behavior") ?? "check";
         _updated = Has(args, "--updated");
         if (!_updated && !UpdateInstaller.IsNewerRelease(_latestVersion, _installedVersion)) _latestVersion = null;
@@ -321,8 +321,11 @@ public partial class UpdateWindow : Window
         base.OnClosing(e);
     }
 
+    private static string SafeReleaseUrl(string? value) => UpdateInstaller.SafeReleaseUrl(value);
+
     private static bool OpenUrl(string url)
     {
+        url = SafeReleaseUrl(url);
         try
         {
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });

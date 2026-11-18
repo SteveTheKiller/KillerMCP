@@ -8,6 +8,19 @@ namespace KillerMCP.Notify;
 
 internal static class UpdateInstaller
 {
+    private const string ReleasePage = "https://github.com/SteveTheKiller/KillerMCP/releases/latest";
+
+    // The update window shell-opens the release link, so only a KillerMCP page on github.com over https is
+    // accepted. Anything else, such as a program path or another site, falls back to the latest release page.
+    internal static string SafeReleaseUrl(string? value)
+    {
+        if (value is null || !Uri.TryCreate(value, UriKind.Absolute, out Uri? uri)) return ReleasePage;
+        return uri.Scheme == Uri.UriSchemeHttps && uri.IsDefaultPort && string.IsNullOrEmpty(uri.UserInfo)
+            && uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
+            && uri.AbsolutePath.StartsWith("/SteveTheKiller/KillerMCP/", StringComparison.OrdinalIgnoreCase)
+            ? uri.AbsoluteUri : ReleasePage;
+    }
+
     // The installer is far smaller than this; a larger download is refused instead of filling memory.
     internal const long MaximumInstallerBytes = 512L * 1024 * 1024;
     private const long MaximumChecksumBytes = 64 * 1024;

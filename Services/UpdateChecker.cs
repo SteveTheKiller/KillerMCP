@@ -21,8 +21,8 @@ internal static class UpdateChecker
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromHours(1);
     private static readonly TimeSpan FailedCacheLifetime = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan NotificationLifetime = TimeSpan.FromDays(1);
-    private const string NotificationMutexName = @"Local\KillerMCP-UpdateNotification";
-    private const string NoticeOpenedEventName = @"Local\KillerMCP-UpdateNotice-Opened";
+    private static readonly string NotificationMutexName = ProcessText.LocalName("KillerMCP-UpdateNotification");
+    private static readonly string NoticeOpenedEventName = ProcessText.LocalName("KillerMCP-UpdateNotice-Opened");
     private static readonly TimeSpan NoticeOpenWait = TimeSpan.FromSeconds(20);
     private const int MaximumNotesLength = 20000;
 
@@ -44,7 +44,7 @@ internal static class UpdateChecker
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3), MaxResponseContentBufferSize = 256 * 1024 };
             client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("KillerMCP", currentVersion));
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-            var endpoint = Environment.GetEnvironmentVariable("KILLERMCP_UPDATE_API") ?? ReleaseApi;
+            var endpoint = UpdateEndpoint(ProcessText.TestSeam("KILLERMCP_UPDATE_API"));
             using var response = await client.GetAsync(endpoint).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             await using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
@@ -54,10 +54,12 @@ internal static class UpdateChecker
             string? notes = release.RootElement.TryGetProperty("body", out JsonElement body) && body.ValueKind == JsonValueKind.String
                 ? body.GetString() : null;
             if (notes is { Length: > MaximumNotesLength }) notes = notes[..MaximumNotesLength];
-            if (!TryVersion(latestVersion, out _))
+            if (!TryVersion(latestVersion, out var parsedLatest))
             {
                 throw new InvalidDataException("The release version is invalid.");
             }
+            // Only the canonical form travels on, so odd tag text never reaches a command line or a file name.
+            latestVersion = Canonical(parsedLatest);
 
             var checkedAt = DateTimeOffset.UtcNow;
             await WriteCacheAsync(cachePath, new Cache(latestVersion!, checkedAt, notes)).ConfigureAwait(false);
@@ -114,15 +116,16 @@ internal static class UpdateChecker
         try
         {
             var cache = JsonSerializer.Deserialize<Cache>(await File.ReadAllTextAsync(path).ConfigureAwait(false));
-            if (cache is null || DateTimeOffset.UtcNow - cache.CheckedAt >= (cache.Unavailable ? FailedCacheLifetime : CacheLifetime)
+            if (cache is null || IsExpired(cache.CheckedAt, cache.Unavailable ? FailedCacheLifetime : CacheLifetime)
                 || (!cache.Unavailable && !TryVersion(cache.LatestVersion, out _)))
             {
                 return null;
             }
 
+            TryVersion(cache.LatestVersion, out var cachedLatest);
             return cache.Unavailable
                 ? new UpdateStatus(currentVersion, null, false, cache.CheckedAt, true, InstallerUrl, ReleaseUrl, true)
-                : MakeStatus(currentVersion, cache.LatestVersion!, cache.CheckedAt, true);
+                : MakeStatus(currentVersion, Canonical(cachedLatest), cache.CheckedAt, true);
         }
         catch
         {
@@ -158,11 +161,9 @@ internal static class UpdateChecker
 
     private static string GetCachePath()
     {
-        var configured = Environment.GetEnvironmentVariable("KILLERMCP_UPDATE_CACHE");
-        if (!string.IsNullOrWhiteSpace(configured))
-        {
-            return Path.GetFullPath(configured);
-        }
+        // A test cache must be a fully qualified .json file, so the seam cannot aim the cache write at a
+        // document or program the user owns.
+        if (ProcessText.TestPath("KILLERMCP_UPDATE_CACHE", ".json") is { } configured) return configured;
 
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerMCP", "update-status.json");
     }
@@ -191,7 +192,7 @@ internal static class UpdateChecker
             string statePath = Path.Combine(directory, "update-notification.json");
             NotificationState? state = null;
             try { state = JsonSerializer.Deserialize<NotificationState>(File.ReadAllText(statePath)); } catch { }
-            if (state?.LatestVersion == status.LatestVersion && DateTimeOffset.UtcNow - state.ShownAt < NotificationLifetime) return;
+            if (state?.LatestVersion == status.LatestVersion && !IsExpired(state.ShownAt, NotificationLifetime)) return;
 
             // The update window signals once it has taken the notice. Only then does the notice
             // count as shown; one that closed before opening is offered again by the next check.
@@ -212,10 +213,32 @@ internal static class UpdateChecker
     }
 
     private static TimeSpan OpenWait() =>
-        int.TryParse(Environment.GetEnvironmentVariable("KILLERMCP_NOTICE_WAIT_MS"), out int milliseconds) && milliseconds > 0
+        int.TryParse(ProcessText.TestSeam("KILLERMCP_NOTICE_WAIT_MS"), out int milliseconds) && milliseconds is > 0 and <= 60000
             ? TimeSpan.FromMilliseconds(milliseconds) : NoticeOpenWait;
 
-    private static string Quote(string value) => '"' + value.Replace("\"", "\\\"", StringComparison.Ordinal) + '"';
+    private static string Quote(string value) => ProcessText.Quote(value);
+
+    // A timestamp from the future, from a clock that was wrong and then corrected, counts as expired, so
+    // update checks and notices never freeze until that date comes around.
+    internal static bool IsExpired(DateTimeOffset stamp, TimeSpan lifetime)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return stamp > now + FutureSkew || now - stamp >= lifetime;
+    }
+
+    private static readonly TimeSpan FutureSkew = TimeSpan.FromMinutes(5);
+
+    // The release API is GitHub over https. A test may point at its own loopback server; anything else is
+    // ignored in favor of the real endpoint.
+    internal static string UpdateEndpoint(string? configured)
+    {
+        if (configured is null || !Uri.TryCreate(configured, UriKind.Absolute, out var uri) || !string.IsNullOrEmpty(uri.UserInfo)) return ReleaseApi;
+        if (uri.Scheme == Uri.UriSchemeHttps && uri.Host.Equals("api.github.com", StringComparison.OrdinalIgnoreCase)) return configured;
+        if ((uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) && uri.IsLoopback) return configured;
+        return ReleaseApi;
+    }
+
+    internal static string Canonical(Version version) => new Version(version.Major, version.Minor, Math.Max(version.Build, 0)).ToString(3);
 
     private static string ReadBehavior()
     {

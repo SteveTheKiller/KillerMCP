@@ -7,7 +7,7 @@ internal static class ToolCallLog
     private const long MaximumBytes = 5 * 1024 * 1024;
     private const int Attempts = 5;
     private static readonly object Gate = new();
-    private static readonly string Path = Environment.GetEnvironmentVariable("KILLERMCP_TOOL_CALL_LOG")
+    private static readonly string Path = ProcessText.TestPath("KILLERMCP_TOOL_CALL_LOG", ".jsonl")
         ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "KillerMCP", "tool-calls.jsonl");
 

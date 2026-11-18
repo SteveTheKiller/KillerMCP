@@ -6,10 +6,13 @@ namespace KillerMCP.Notify;
 
 public partial class App : Application
 {
-    private const string InstanceName = @"Local\KillerMCP-UpdateWindow";
-    private const string WakeName = @"Local\KillerMCP-UpdateWindow-Wake";
-    private const string HandoffLockName = @"Local\KillerMCP-UpdateWindow-Handoff";
-    private const string NoticeOpenedName = @"Local\KillerMCP-UpdateNotice-Opened";
+    // Session-local names carry the account SID, matching the host, so another program in the session
+    // cannot take a name first and suppress or hijack the update window.
+    private static readonly string Sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
+    private static readonly string InstanceName = @"Local\KillerMCP-UpdateWindow-" + Sid;
+    private static readonly string WakeName = @"Local\KillerMCP-UpdateWindow-Wake-" + Sid;
+    private static readonly string HandoffLockName = @"Local\KillerMCP-UpdateWindow-Handoff-" + Sid;
+    private static readonly string NoticeOpenedName = @"Local\KillerMCP-UpdateNotice-Opened-" + Sid;
     private Mutex? _instance;
     private EventWaitHandle? _wake;
     private RegisteredWaitHandle? _wakeWait;

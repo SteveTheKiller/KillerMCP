@@ -46,6 +46,12 @@ public static class ClientConfiguration
                 // Comments would be lost on rewrite, so the user adds the entry and the other clients go ahead.
                 messages.Add("Warning: " + exception.Message);
             }
+            catch (Exception exception) when (exception is IOException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException)
+            {
+                // One client's broken, conflicting or interrupted settings skip that client only, so the
+                // install and its security fixes still land for everything else.
+                messages.Add($"Warning: {client.Name} was skipped. {exception.Message}");
+            }
         }
         if (codex is not null) CheckCodex(codex, executablePath);
         var changed = new List<ClientRegistration.Change>();

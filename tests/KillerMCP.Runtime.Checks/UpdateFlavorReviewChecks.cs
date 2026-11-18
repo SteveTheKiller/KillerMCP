@@ -58,6 +58,25 @@ internal static class UpdateFlavorReviewChecks
             if (!oversized.Unavailable || oversized.UpdateAvailable)
                 throw new InvalidOperationException("Oversized release metadata was accepted.");
             Console.WriteLine($"PASS public update status flavor and response bounds ({actualAsset}, 10 selected regressions)");
+            // A cache stamped in the future is expired, so a corrected clock never freezes update checks.
+            File.WriteAllText(cache, JsonSerializer.Serialize(new { LatestVersion = "99.0.0", CheckedAt = DateTimeOffset.UtcNow.AddDays(30) }));
+            var futureResponse = ReplyAsync(listener, "fixture");
+            var future = await UpdateChecker.CheckForUpdateAsync("0.9.4");
+            await futureResponse.WaitAsync(TimeSpan.FromSeconds(5));
+            if (future.Cached) throw new InvalidOperationException("A future CheckedAt was trusted instead of checking again.");
+            if (!UpdateChecker.IsExpired(DateTimeOffset.UtcNow.AddHours(2), TimeSpan.FromDays(1)) || UpdateChecker.IsExpired(DateTimeOffset.UtcNow, TimeSpan.FromDays(1)))
+                throw new InvalidOperationException("Future notice stamps did not expire.");
+            const string real = "https://api.github.com/repos/SteveTheKiller/KillerMCP/releases/latest";
+            foreach (var planted in new[] { "http://updates.example.com/latest", "https://evil.example/latest", "https://user@api.github.com/x", "file:///C:/x.json" })
+                if (UpdateChecker.UpdateEndpoint(planted) != real) throw new InvalidOperationException("A planted update endpoint was honored: " + planted);
+            if (UpdateChecker.UpdateEndpoint("http://127.0.0.1:9/x") != "http://127.0.0.1:9/x") throw new InvalidOperationException("The loopback test endpoint was refused.");
+            if (UpdateChecker.Canonical(new Version("1.2")) != "1.2.0" || UpdateChecker.Canonical(new Version("1.2.3.4")) != "1.2.3")
+                throw new InvalidOperationException("Release versions are not canonical.");
+            Environment.SetEnvironmentVariable("KILLERMCP_UPDATE_CACHE", Path.Combine(root, "notes.txt"));
+            if (ProcessText.TestPath("KILLERMCP_UPDATE_CACHE", ".json") is not null) throw new InvalidOperationException("A non-json update cache seam was honored.");
+            if (ProcessText.Quote(@"C:\Has Space\") != "\"C:\\Has Space\\\\\"" || ProcessText.Quote("a\"b") != "\"a\\\"b\"")
+                throw new InvalidOperationException("Command line quoting mishandles a trailing backslash or quote.");
+            Console.WriteLine("PASS update seams are pinned, future stamps expire, versions are canonical and quoting survives a trailing backslash (13 selected regressions)");
         }
         finally
         {

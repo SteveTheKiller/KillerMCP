@@ -17,7 +17,7 @@ foreach ($name in $variables) { $previous[$name] = [Environment]::GetEnvironment
 
 function New-StandIn([string]$Path, [bool]$Opens) {
     # Records each start. One that opens signals the host the way the update window does and stays up.
-    $body = if ($Opens) { 'using (var opened = System.Threading.EventWaitHandle.OpenExisting(@"Local\KillerMCP-UpdateNotice-Opened")) opened.Set(); System.Threading.Thread.Sleep(30000);' } else { '' }
+    $body = if ($Opens) { 'using (var opened = System.Threading.EventWaitHandle.OpenExisting(@"Local\KillerMCP-UpdateNotice-Opened-" + System.Security.Principal.WindowsIdentity.GetCurrent().User.Value)) opened.Set(); System.Threading.Thread.Sleep(30000);' } else { '' }
     Add-Type -OutputType WindowsApplication -OutputAssembly $Path -TypeDefinition @"
 public static class NoticeStandIn {
     public static void Main(string[] args) {

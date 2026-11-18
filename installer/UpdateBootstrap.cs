@@ -41,6 +41,8 @@ namespace KillerMCP.Setup
             }
         }
 
+        internal static string Canonical(Version version) => new Version(version.Major, version.Minor, Math.Max(version.Build, 0)).ToString(3);
+
         internal static int Check(string destination)
         {
             bool isolated = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("KILLERMCP_TEST_INSTALL_ROOT"));
@@ -56,7 +58,8 @@ namespace KillerMCP.Setup
             {
                 using (var client = Client(TimeSpan.FromSeconds(8)))
                 {
-                    string endpoint = Environment.GetEnvironmentVariable("KILLERMCP_TEST_UPDATE_API") ?? ReleaseApi;
+                    // Only an isolated test install may point the check at its own server.
+                    string endpoint = (isolated ? Environment.GetEnvironmentVariable("KILLERMCP_TEST_UPDATE_API") : null) ?? ReleaseApi;
                     client.MaxResponseContentBufferSize = 256 * 1024;
                     string json = client.GetStringAsync(endpoint).GetAwaiter().GetResult();
                     var release = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json);
@@ -65,6 +68,9 @@ namespace KillerMCP.Setup
             }
             catch { return 0; }
             if (!Version.TryParse(latestText, out Version? latest) || latest <= current) return 0;
+            // Only canonical version text reaches the notifier's command line and the download URLs.
+            currentText = Canonical(current);
+            latestText = Canonical(latest);
             try
             {
                 string asset = KillerMCP.Updates.SetupAsset.For(destination);
