@@ -50,7 +50,7 @@ public static class KillendarAdapter
     {
         if (!IsFile(path) || !AppVersion.IsAtLeast(path!, MinimumVersion)) return null;
         var help = await RunAsync(path!, ["--help"], TimeSpan.FromSeconds(8), 8192, cancellationToken).ConfigureAwait(false);
-        if (help.ExitCode != 0 || !help.StandardOutput.Contains("create <json>", StringComparison.Ordinal)) return null;
+        if (help.ExitCode != 0 || !help.StandardOutput.Contains("appointment-request-id-v1", StringComparison.Ordinal)) return null;
 
         var schema = new JsonObject
         {
@@ -58,6 +58,7 @@ public static class KillendarAdapter
             ["properties"] = new JsonObject
             {
                 ["title"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 200 },
+                ["requestId"] = new JsonObject { ["type"] = "string", ["format"] = "uuid", ["description"] = "Generate one nonzero UUID for this appointment. Reuse it unchanged for every retry." },
                 ["start"] = new JsonObject { ["type"] = "string", ["description"] = "Local start time in YYYY-MM-DDTHH:MM format, or YYYY-MM-DD for an all-day appointment" },
                 ["end"] = new JsonObject { ["type"] = "string", ["description"] = "Local end time, or the exclusive end date for an all-day appointment" },
                 ["allDay"] = new JsonObject { ["type"] = "boolean", ["default"] = false },
@@ -65,7 +66,7 @@ public static class KillendarAdapter
                 ["description"] = new JsonObject { ["type"] = "string", ["maxLength"] = 4000 },
                 ["categories"] = new JsonObject { ["type"] = "string", ["maxLength"] = 500 },
             },
-            ["required"] = new JsonArray("title", "start", "end"),
+            ["required"] = new JsonArray("requestId", "title", "start", "end"),
             ["additionalProperties"] = false,
         };
         return new AppAdapter(new RuntimeTool("killendar_create_appointment",
@@ -75,9 +76,9 @@ public static class KillendarAdapter
 
     private static async Task<AppCallResult> CreateAppointmentCallAsync(JsonElement input, CancellationToken token)
     {
-        if (!ValidAppointment(input)) return new AppCallResult("Provide a title and valid local start and end times", true);
+        if (!ValidAppointment(input)) return new AppCallResult("Provide a nonzero requestId UUID, title, and valid local start and end times", true);
         if (CalendarPipeMissing()) return new AppCallResult("Open and unlock Killendar before using calendar commands", true);
-        const string uncertain = "Killendar appointment outcome unknown. Check the agenda before retrying.";
+        const string uncertain = "Killendar appointment outcome unknown. Retry with the same requestId and appointment details.";
         bool dispatched = false;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(20));
@@ -120,7 +121,9 @@ public static class KillendarAdapter
     private static bool ValidAppointment(JsonElement input)
     {
         if (input.ValueKind != JsonValueKind.Object || input.EnumerateObject().Any(property =>
-                property.Name is not ("title" or "start" or "end" or "allDay" or "location" or "description" or "categories")) ||
+                property.Name is not ("requestId" or "title" or "start" or "end" or "allDay" or "location" or "description" or "categories")) ||
+            !input.TryGetProperty("requestId", out var key) || key.ValueKind != JsonValueKind.String ||
+            !Guid.TryParseExact(key.GetString(), "D", out var requestId) || requestId == Guid.Empty ||
             !BoundedText(input, "title", 200, true) || !BoundedText(input, "start", 19, true) ||
             !BoundedText(input, "end", 19, true) || !BoundedText(input, "location", 500, false) ||
             !BoundedText(input, "description", 4000, false) || !BoundedText(input, "categories", 500, false)) return false;

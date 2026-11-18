@@ -523,7 +523,7 @@ const notes = await request('tools/call', { name: 'killernotes_search', argument
 assert.equal(JSON.parse(notes.content[0].text)[0].title, 'Subnet plans');
 const agenda = await request('tools/call', { name: 'killendar_agenda', arguments: { date: '2026-09-28', days: 7, limit: 5 } });
 assert.equal(JSON.parse(agenda.content[0].text)[0].title, 'Field visit');
-const appointment = await request('tools/call', { name: 'killendar_create_appointment', arguments: { title: 'Field visit', start: '2026-09-28T09:00', end: '2026-09-28T10:00' } });
+const appointment = await request('tools/call', { name: 'killendar_create_appointment', arguments: { requestId: '591231b9-7268-4714-a352-803822b07104', title: 'Field visit', start: '2026-09-28T09:00', end: '2026-09-28T10:00' } });
 assert.equal(JSON.parse(appointment.content[0].text).title, 'Field visit');
 const files = await request('tools/call', { name: 'killershell_search_files', arguments: { root: resolve('.'), name: '*.txt', limit: 2 } });
 assert.equal(JSON.parse(files.content[0].text).results.length, 1);

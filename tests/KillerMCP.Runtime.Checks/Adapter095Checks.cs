@@ -70,7 +70,7 @@ internal static class Adapter095Checks
         using var server = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
         var tool = await KillendarAdapter.CreateAppointmentAsync(Environment.ProcessPath) ?? throw new Exception("Missing calendar adapter");
         var serve = RespondAsync(server, dropResponse);
-        var result = await tool.CallAsync(JsonSerializer.SerializeToElement(new { title = "Site visit", start = "2026-10-01T09:00", end = "2026-10-01T10:00" }), CancellationToken.None);
+        var result = await tool.CallAsync(JsonSerializer.SerializeToElement(new { requestId = Guid.NewGuid(), title = "Site visit", start = "2026-10-01T09:00", end = "2026-10-01T10:00" }), CancellationToken.None);
         if (!serve.IsCompleted && !server.IsConnected) throw new Exception("Calendar create did not use the private pipe");
         await serve;
         if (result.IsError != dropResponse || !result.Text.Contains(dropResponse ? "outcome unknown" : "Site visit", StringComparison.OrdinalIgnoreCase))

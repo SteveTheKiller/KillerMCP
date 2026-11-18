@@ -13,7 +13,7 @@ internal static class NotesBridgeReviewChecks
     {
         if (Environment.GetEnvironmentVariable("KILLERMCP_NOTES_BRIDGE_FIXTURE") != "1") return false;
         if (args.SequenceEqual(["--help"]) && Environment.GetEnvironmentVariable("KILLERMCP_CALENDAR_BRIDGE_FIXTURE") == "1")
-        { Console.Write("agenda <yyyy-MM-dd>\ncreate <json>\napp-pipe-v1"); return true; }
+        { Console.Write("agenda <yyyy-MM-dd>\ncreate <json> appointment-request-id-v1\napp-pipe-v1"); return true; }
         if (args.SequenceEqual(["--help"])) Console.Write("create --title title --content-file path\n" + (Environment.GetEnvironmentVariable("KILLERMCP_NOTES_BRIDGE_SLOW") == "1" ? "" : "app-pipe-v1\n") + "search <query>\n" +
             (Environment.GetEnvironmentVariable("KILLERMCP_NOTES_BRIDGE_EXTRA") == "1" ? "templates trash-list version-get tag-definitions create-from-template today restore pin unpin version-restore rename-group create-tag rename-tag set-tag-color template-group daily-group" : ""));
         else

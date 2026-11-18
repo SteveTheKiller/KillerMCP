@@ -214,7 +214,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
         // KILLERMCP_FAKE_PDF_SECRETS=0 stands in for a KillerPDF from before passwords moved to standard input.
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_PDF_SECRETS") != "0") Console.WriteLine("  --secrets-stdin    read passwords from standard input as one JSON object");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_NOTES") == "1") Console.WriteLine("search <query>\ncreate --title title (--content markdown | --content-file absolute.md)");
-        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>\ncreate <json>");
+        if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR") == "1") Console.WriteLine("agenda <yyyy-MM-dd>\ncreate <json> appointment-request-id-v1");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHELL") == "1") Console.WriteLine("search <folder>\nlist <folder>\ninfo <path>\nread <file>\nprocesses [--limit] [--detail] [--filter <text>]\nservices [--limit] [--detail] [--filter <text>]\nstorage <folder> [--limit]\nevents <log>\nregistry <key>\ndrives\nhash <file>");
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1")
         {
