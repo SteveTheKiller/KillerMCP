@@ -18,6 +18,17 @@ File.WriteAllText(Path.Combine(installed, "sub", "a.dll"), "fixture");
 File.WriteAllText(Path.Combine(outside, "secret.txt"), "outside");
 try
 {
+    // The repair approval shows what the agent chose: the target, the tier and the exact command.
+    var approval = KillerMCP.Notify.RepairApprovalText.Parse(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(new JavaScriptSerializer().Serialize(new Dictionary<string, object>
+    {
+        ["Action"] = "cleanup", ["Title"] = "Permanently remove selected temporary files and caches", ["Tier"] = "Disruptive",
+        ["Effects"] = "Permanently deletes files.", ["Target"] = "recycle_bin, user_temp", ["Command"] = "killerbench-cli cleanup --recycle-bin --execute",
+    }))));
+    Equal("recycle_bin, user_temp", approval?.Target);
+    Equal("Disruptive", approval?.Tier);
+    Equal("killerbench-cli cleanup --recycle-bin --execute", approval?.Command);
+    Equal<object?>(null, KillerMCP.Notify.RepairApprovalText.Parse(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("{\"Title\":\"x\",\"Command\":\"y\"}"))));
+
     Equal(Path.Combine(installed, "KillerMCP.exe"), ManifestPaths.Resolve(installed, "KillerMCP.exe"));
     Equal(Path.Combine(installed, "sub", "a.dll"), ManifestPaths.Resolve(installed, "sub/a.dll"));
     // Windows drops trailing dots and spaces from a name, so "a." would reach "a"; such names are refused.

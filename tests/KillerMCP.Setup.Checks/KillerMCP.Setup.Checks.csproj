@@ -12,5 +12,6 @@
     <Reference Include="System.Web.Extensions" />
     <Compile Include="../../installer/ManifestPaths.cs" Link="ManifestPaths.cs" />
     <Compile Include="../../installer/UpdatePreferences.cs" Link="UpdatePreferences.cs" />
+    <Compile Include="../../Shell/RepairApprovalText.cs" Link="RepairApprovalText.cs" />
   </ItemGroup>
 </Project>

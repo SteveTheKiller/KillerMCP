@@ -281,7 +281,7 @@ Every repair follows the same steps:
 
 1. `killerbench_repair_preview` runs KillerBench's own preview. Nothing changes. When repairs are allowed and KillerBench finds something to fix, the result includes a token that works once and expires after 10 minutes.
 2. `killerbench_repair_execute` takes only that token, so the client cannot change the command after the preview.
-3. Disruptive repairs show a KillerMCP window describing the change. So does the first repair in each host session and after a repair setting changes. Continue opens Windows administrator approval through UAC; Cancel leaves the PC unchanged. The review window closes without approval after four and a half minutes. Windows Hello is not required. Agents cannot read or write the KillerMCP or KillerBench settings folders through any KillerMCP tool.
+3. Disruptive repairs show a KillerMCP window describing the change, what it applies to, whether it is safe or disruptive, and the exact command. So does the first repair in each host session and after a repair setting changes. This window is a review step that runs with normal rights, so other programs running as the same user could click it. The security boundary is the Windows administrator approval that follows. Continue opens Windows administrator approval through UAC; Cancel leaves the PC unchanged. The review window closes without approval after four and a half minutes. Windows Hello is not required. Agents cannot read or write the KillerMCP or KillerBench settings folders through any KillerMCP tool.
 4. Windows asks for administrator approval. Privacy changes run as the current user instead, so they apply to the right account.
 5. KillerBench checks the PC again before it changes anything and verifies the result.
 

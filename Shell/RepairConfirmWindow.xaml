@@ -110,8 +110,16 @@
                             <TextBlock Text="Allow this repair?" FontFamily="{StaticResource BrandSans}" FontSize="20" TextOptions.TextFormattingMode="Ideal" Margin="0,0,28,0" TextWrapping="Wrap"/>
                             <StackPanel Grid.Row="1" Margin="0,8,0,12">
                                 <TextBlock x:Name="TitleText" FontSize="14" Foreground="{DynamicResource OutlineBtnBrush}" TextWrapping="Wrap"/>
-                                <TextBlock x:Name="EffectsText" Margin="0,6,0,0" Foreground="{DynamicResource MutedTextBrush}" LineHeight="19" TextWrapping="Wrap"/>
-                                <Expander Header="Technical details" Margin="0,12,0,0" Foreground="{DynamicResource MutedTextBrush}" FontFamily="{StaticResource UiFont}">
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                    <TextBlock Text="Applies to" Margin="0,0,10,0" FontFamily="{StaticResource UiFont}" Foreground="{DynamicResource DimTextBrush}"/>
+                                    <TextBlock x:Name="TargetText" Grid.Column="1" Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"/>
+                                    <TextBlock Grid.Row="1" Text="Kind" Margin="0,4,10,0" FontFamily="{StaticResource UiFont}" Foreground="{DynamicResource DimTextBrush}"/>
+                                    <TextBlock x:Name="TierText" Grid.Row="1" Grid.Column="1" Margin="0,4,0,0" Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"/>
+                                </Grid>
+                                <TextBlock x:Name="EffectsText" Margin="0,8,0,0" Foreground="{DynamicResource MutedTextBrush}" LineHeight="19" TextWrapping="Wrap"/>
+                                <Expander Header="Exact command" IsExpanded="True" Margin="0,12,0,0" Foreground="{DynamicResource MutedTextBrush}" FontFamily="{StaticResource UiFont}">
                                 <Border Margin="0,6,0,0" Padding="11,9" Background="{DynamicResource PaneBrush}" BorderBrush="{DynamicResource InputBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource SmallCornerRadius}">
                                     <TextBlock x:Name="CommandText" FontFamily="Consolas" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap"/>
                                 </Border>
