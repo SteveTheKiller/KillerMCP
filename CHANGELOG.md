@@ -6,20 +6,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ## [0.9.5] - Unreleased
 
-0.9.5 catches the KillerPDF tools up with KillerPDF 1.9.5.
+0.9.5 catches the KillerPDF tools up with KillerPDF 1.9.5 and closes the findings from a full security review of the host, setup and release pipeline.
+
+### Security
+
+- Rebuild elevated repairs from the catalog, run only the KillerBench CLI in Program Files, and show the target, kind and exact command in the approval window.
+- Refuse paths that lead back to this PC, unreadable path components, moved destinations, credential stores and secret registry keys.
+- Save only inert file types with the Internet zone, load native code from System32, and start apps in an empty folder.
+- Keep host diagnosis on local hosts, require public https timestamp servers, and say what each tool sends to the network.
+- Refuse to run setup or the configurator as administrator, take a per-user install lease, and register only the bundled KillerMCP.exe.
+- Treat altered client entries as different, accept update endpoints and release links only from GitHub, expire stamps from the future, quote arguments exactly and scope notice names to the signed-in account.
+- Check the browser companion token in constant time and before a connection takes a working slot, so idle local connections cannot lock out the page.
+- Download updates into their own folder and stage notes privately.
+- Sign the programs inside the installer, check the Store download hash and publisher before submission, and publish WinGet and Chocolatey packages only from a protected release environment and the validated tag.
+- Run only the verified Chocolatey setup copy on uninstall, refuse prerelease packages, and keep publishing keys off command lines.
+- Lock NuGet packages so a changed package fails the build.
+
+### Fixed
+
+- Skip one client whose settings cannot be read instead of failing setup.
+- Preserve client configuration during migration, bound startup requests and update responses, and avoid deleting unrelated installer files.
+- Send calendar appointment details through the local app pipe and warn before retrying an uncertain save.
+- Bundle the SQL formatter, MAC vendor data, and font notices with Windows installers.
 
 ### Changed
 
+- The Chocolatey package installs per user and refuses to run from an elevated shell.
 - Hidden-data removal and the `keepHidden` option require KillerPDF 1.9.5. Redaction fails when marked content requires rasterization and rasterization is disabled.
 - Explain where browser capture data goes and bound camera recordings before transfer.
 - Require standard 128-bit entropy for the host's 12-word BIP39 tool.
 - Use authenticated encryption and support all standard BIP39 lengths with the updated engine. Continue to read legacy CryptoJS ciphertext.
-
-### Fixed
-
-- Preserve client configuration during migration, bound startup requests and update responses, and avoid deleting unrelated installer files.
-- Send calendar appointment details through the local app pipe and warn before retrying an uncertain save.
-- Bundle the SQL formatter, MAC vendor data, and font notices with Windows installers.
 
 ### Added
 
