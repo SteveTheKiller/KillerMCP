@@ -36,7 +36,13 @@ Write-Output "KillerMCP app, setup, helper and plugin versions match: $appVersio
 if ($env:OS -eq 'Windows_NT') {
     $manifest = Get-Content -LiteralPath (Join-Path $Root 'claude-plugin\.mcp.json') -Raw | ConvertFrom-Json
     $server = $manifest.mcpServers.KillerMCP
-    $start = [Diagnostics.ProcessStartInfo]::new($server.command)
+    # Claude Code expands ${VAR} and ${VAR:-default} in plugin commands, so the check starts what Claude starts.
+    $command = [regex]::Replace($server.command, '\$\{(?<name>[A-Za-z_][A-Za-z0-9_]*)(:-(?<fallback>[^}]*))?\}', {
+        param($match)
+        $value = [Environment]::GetEnvironmentVariable($match.Groups['name'].Value)
+        if ($value) { $value } else { $match.Groups['fallback'].Value }
+    })
+    $start = [Diagnostics.ProcessStartInfo]::new($command)
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
     $start.RedirectStandardError = $true
