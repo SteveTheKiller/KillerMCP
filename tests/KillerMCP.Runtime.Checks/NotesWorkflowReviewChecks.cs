@@ -137,7 +137,7 @@ internal static class NotesWorkflowReviewChecks
             var tool = await PageToolAsync();
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             var call = tool.CallAsync(JsonSerializer.SerializeToElement(new { path = source, pages = "5-6" }), stop.Token);
-            while ((!File.Exists(log) || File.ReadAllLines(log).Length < 2) && !call.IsCompleted) await Task.Delay(10);
+            while (SharedLineCount(log) < 2 && !call.IsCompleted) await Task.Delay(10);
             if (call.IsCompleted) throw new InvalidOperationException("The fake import was not held open.");
             stop.Cancel();
             AppCallResult result;
@@ -147,7 +147,31 @@ internal static class NotesWorkflowReviewChecks
                 throw new InvalidOperationException("Cross-app import must warn before retrying: " + result.Text);
             Console.WriteLine("PASS canceled cross-app Notes import reports unknown outcome (1 selected regression)");
         }
-        finally { Environment.SetEnvironmentVariable("KILLERMCP_NOTES_WORKFLOW", null); Environment.SetEnvironmentVariable("KILLERMCP_NOTES_WORKFLOW_LOG", null); Directory.Delete(root, true); }
+        finally { Environment.SetEnvironmentVariable("KILLERMCP_NOTES_WORKFLOW", null); Environment.SetEnvironmentVariable("KILLERMCP_NOTES_WORKFLOW_LOG", null); await DeleteWhenReleasedAsync(root); }
+    }
+
+    // The fake KillerNotes appends to the log while the check polls it, so reads share the file and a busy moment counts as not yet.
+    private static int SharedLineCount(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            int lines = 0;
+            while (reader.ReadLine() is not null) lines++;
+            return lines;
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException or IOException) { return 0; }
+    }
+
+    // A canceled fake can hold its log for a moment after the call returns.
+    private static async Task DeleteWhenReleasedAsync(string root)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, true); return; }
+            catch (IOException) when (attempt < 50) { await Task.Delay(100); }
+        }
     }
 
     public static async Task LargePdfAsync()
