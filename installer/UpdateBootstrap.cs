@@ -17,13 +17,13 @@ namespace KillerMCP.Setup
         private const string RunValue = "KillerMCP Update Check";
 
         internal static string RunKeyPath(string destination) =>
-            string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("KILLERMCP_TEST_INSTALL_ROOT"))
+            Program.TestRoot() is null
                 ? RunKey
                 : @"Software\KillerMCP\InstallerTests\" + Path.GetFileName(Path.GetDirectoryName(destination)) + @"\Run";
 
         internal static void Register(string destination)
         {
-            string command = Program.Quote(destination + "-Setup.exe") + " /check-update";
+            string command = Program.QuoteProgram(destination + "-Setup.exe") + " /check-update";
             using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKeyPath(destination))
                 ?? throw new InvalidOperationException("Could not register the KillerMCP update check."))
             {
@@ -35,7 +35,7 @@ namespace KillerMCP.Setup
         {
             using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKeyPath(destination), true))
             {
-                string expected = Program.Quote(destination + "-Setup.exe") + " /check-update";
+                string expected = Program.QuoteProgram(destination + "-Setup.exe") + " /check-update";
                 if (string.Equals(key?.GetValue(RunValue) as string, expected, StringComparison.OrdinalIgnoreCase))
                     key!.DeleteValue(RunValue, false);
             }
@@ -45,7 +45,7 @@ namespace KillerMCP.Setup
 
         internal static int Check(string destination)
         {
-            bool isolated = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("KILLERMCP_TEST_INSTALL_ROOT"));
+            bool isolated = Program.TestRoot() is not null;
             string behavior = UpdatePreferences.Read(UpdatePreferences.PathFor(destination, isolated));
             if (behavior == "off") return 0;
             string host = Path.Combine(destination, "KillerMCP.exe");

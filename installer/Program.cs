@@ -44,13 +44,8 @@ namespace KillerMCP.Setup
         {
             KillerMCP.Signing.NativeLoadSafety.Apply();
             KillerFamily.Accessibility.AccessibleControls.Initialize();
-            string? testRoot = Environment.GetEnvironmentVariable(TestRootVariable);
-            // A test root persisted in the user's registry environment also reaches an elevated run, so only one
-            // set for this process counts as isolation. A planted value is ignored and setup refuses as usual.
-            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable(TestRootVariable, EnvironmentVariableTarget.User))
-                || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(TestRootVariable, EnvironmentVariableTarget.Machine)))
-                testRoot = null;
-            bool isolated = !string.IsNullOrWhiteSpace(testRoot);
+            string? testRoot = TestRoot();
+            bool isolated = testRoot is not null;
             string destination = isolated ? ValidateTestRoot(testRoot!) : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "KillerMCP");
             bool silent = args.Any(value => value.Equals("/silent", StringComparison.OrdinalIgnoreCase));
             bool notify = args.Any(value => value.Equals("/notify", StringComparison.OrdinalIgnoreCase));
@@ -334,7 +329,7 @@ namespace KillerMCP.Setup
         // responding reaches it. An isolated test install can shorten it.
         private static int ConfigureTimeout()
         {
-            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(TestRootVariable))
+            if (TestRoot() is not null
                 && int.TryParse(Environment.GetEnvironmentVariable("KILLERMCP_TEST_CONFIGURE_TIMEOUT_MS"), out int test) && test > 0) return test;
             return 150000;
         }
@@ -486,7 +481,20 @@ namespace KillerMCP.Setup
         private static bool ContainsFiles(string folder) => ManifestPaths.Files(folder).Any() || ManifestPaths.Links(folder).Any();
 
         private static string SetupCopyPath(string destination) => destination + "-Setup.exe";
-        private static string RegistryPath(string destination) => string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(TestRootVariable)) ? UninstallRegistryPath : @"Software\KillerMCP\InstallerTests\" + Path.GetFileName(Path.GetDirectoryName(destination));
+        // A test root persisted in the user's registry environment also reaches an elevated run, so only one
+        // set for this process counts as isolation. A planted value is ignored everywhere, so the install,
+        // its uninstall entry and its update check all land in the same real or test place.
+        internal static string? TestRoot()
+        {
+            string? root = Environment.GetEnvironmentVariable(TestRootVariable);
+            if (string.IsNullOrWhiteSpace(root)
+                || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(TestRootVariable, EnvironmentVariableTarget.User))
+                || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(TestRootVariable, EnvironmentVariableTarget.Machine)))
+                return null;
+            return root;
+        }
+
+        private static string RegistryPath(string destination) => TestRoot() is null ? UninstallRegistryPath : @"Software\KillerMCP\InstallerTests\" + Path.GetFileName(Path.GetDirectoryName(destination));
 
         private static void RegisterInstalledApp(string destination)
         {
@@ -500,8 +508,8 @@ namespace KillerMCP.Setup
                 key.SetValue("Publisher", "Steve the Killer");
                 key.SetValue("InstallLocation", destination);
                 key.SetValue("DisplayIcon", setup + ",0");
-                key.SetValue("UninstallString", Quote(setup) + " /uninstall");
-                key.SetValue("QuietUninstallString", Quote(setup) + " /silent /uninstall");
+                key.SetValue("UninstallString", QuoteProgram(setup) + " /uninstall");
+                key.SetValue("QuietUninstallString", QuoteProgram(setup) + " /silent /uninstall");
                 key.SetValue("SetupSha256", Sha256(setup));
                 key.SetValue("NoModify", 1);
                 key.SetValue("NoRepair", 1);
@@ -540,7 +548,7 @@ namespace KillerMCP.Setup
             {
                 string? location = key.GetValue("InstallLocation") as string;
                 if (string.IsNullOrWhiteSpace(location) || !Path.GetFullPath(location).Equals(Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase)) return false;
-                if (!string.Equals(key.GetValue("UninstallString") as string, Quote(setup) + " /uninstall", StringComparison.OrdinalIgnoreCase)) return false;
+                if (!string.Equals(key.GetValue("UninstallString") as string, QuoteProgram(setup) + " /uninstall", StringComparison.OrdinalIgnoreCase)) return false;
                 if (Directory.Exists(destination) && ContainsFiles(destination)) ValidateInstalled(destination, allowLegacy: true, allowMissing: true);
                 return true;
             }
@@ -561,7 +569,7 @@ namespace KillerMCP.Setup
                 if (!string.Equals(information.ProductName, "KillerMCP-Setup", StringComparison.Ordinal)) return false;
                 if (key == null) return legacy;
                 bool sameEntry = Path.GetFullPath(key.GetValue("InstallLocation") as string ?? string.Empty).Equals(Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(key.GetValue("UninstallString") as string, Quote(setup) + " /uninstall", StringComparison.OrdinalIgnoreCase);
+                    && string.Equals(key.GetValue("UninstallString") as string, QuoteProgram(setup) + " /uninstall", StringComparison.OrdinalIgnoreCase);
                 if (!sameEntry
                     || !Version.TryParse(CurrentVersion, out Version? currentVersion)
                     || !Version.TryParse(information.FileVersion, out Version? setupVersion)
@@ -628,6 +636,10 @@ namespace KillerMCP.Setup
         }
         // Reuses the parser-exact quoting, so a value ending in a backslash cannot swallow the closing quote.
         internal static string Quote(string value) => ClientJobEscape.Argument(value);
+
+        // The program at the start of a stored command is always quoted, so Windows never searches shorter
+        // paths for it, and the value matches what earlier versions wrote. Windows paths cannot contain quotes.
+        internal static string QuoteProgram(string path) => "\"" + path + "\"";
 
         private sealed class Manifest { public Dictionary<string, ManifestFile>? files { get; set; } }
         private sealed class ManifestFile { public long bytes { get; set; } public string? sha256 { get; set; } }
