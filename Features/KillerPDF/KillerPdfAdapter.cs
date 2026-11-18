@@ -417,6 +417,9 @@ public static partial class KillerPdfAdapter
                 if (!names.Add(Path.GetFileName(source))) return "Bates inputs must have different file names so every stamped PDF is preserved";
             }
         }
+        if (definition.Tool.Name == "killerpdf_redact" && input.TryGetProperty("sanitize", out _)
+            && input.TryGetProperty("keepHidden", out JsonElement keep) && keep.ValueKind == JsonValueKind.True)
+            return "Use sanitize or keepHidden, not both";
         // KillerPDF lays out EPUB pages itself; a DjVu book keeps its own pages, so it refuses layout options.
         if (definition.Tool.Name == "killerpdf_convert_book" && !String(input, "path").EndsWith(".epub", StringComparison.OrdinalIgnoreCase)
             && BookLayoutInputs.Any(name => input.TryGetProperty(name, out _)))

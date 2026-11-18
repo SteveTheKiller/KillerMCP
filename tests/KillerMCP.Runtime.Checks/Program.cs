@@ -899,6 +899,8 @@ try
         var redactArguments = redacted.GetProperty("args").EnumerateArray().Select(item => item.GetString()).ToArray();
         Equal("--password", redactArguments[Array.IndexOf(redactArguments, "--text") + 1]);
         Equal(false, redactArguments.Contains("--secrets-stdin"));
+        var kept = await Logged("killerpdf_redact", new { path = sourceOne, output = Path.Combine(root, "kept-hidden.pdf"), text = "x", keepHidden = true });
+        Equal(true, kept.GetProperty("args").EnumerateArray().Any(item => item.GetString() == "--no-sanitize"));
         // Password features are offered by KillerPDF version: before 1.9 a password could only go on the command
         // line, so tools for an older KillerPDF have no password inputs, and a call that sends one anyway never
         // starts KillerPDF. The version decides even when the help text says otherwise.
@@ -1055,6 +1057,8 @@ try
     Equal(true, (await Pdf("killerpdf_images_to_pdf", new { images = new[] { sourceOne }, output = NewPdf("not-pictures") })).IsError);
     Equal(true, (await Pdf("killerpdf_export", new { path = sourceOne, output = NewPdf("export-as-pdf") })).IsError);
     Equal(true, (await Pdf("killerpdf_redact", new { path = sourceOne, output = NewPdf("bad-redact"), find = new[] { "passport" } })).IsError);
+    Equal(true, (await Pdf("killerpdf_redact", new { path = sourceOne, output = NewPdf("both-sanitize"), text = "x", sanitize = "all", keepHidden = true })).IsError);
+    Equal(false, (await Pdf("killerpdf_export", new { path = sourceOne, output = Path.Combine(root, "export.epub") })).IsError);
     Equal(true, (await Pdf("killerpdf_bates", new { inputs = new[] { Path.Combine(root, "missing.pdf") }, outputFolder = Path.Combine(root, "bad-bates") })).IsError);
     Equal(true, (await Pdf("killerpdf_compare_structure", new { path = sourceOne, changed = Path.Combine(root, "missing.pdf") })).IsError);
     Equal(true, (await Pdf("killerpdf_replace_text", new { path = sourceOne, output = NewPdf("bad-replace"), find = "--flatten", replace = "x" })).IsError);

@@ -10,7 +10,7 @@ namespace KillerMCP;
 // installed KillerPDF lists its command in --help.
 public static partial class KillerPdfAdapter
 {
-    private static readonly string[] OfficeOutputs = [".docx", ".xlsx", ".pptx", ".html", ".md", ".txt", ".json"];
+    private static readonly string[] OfficeOutputs = [".docx", ".xlsx", ".pptx", ".html", ".md", ".txt", ".json", ".epub"];
     private static readonly string[] FormDataOutputs = [".fdf", ".xfdf", ".json"];
     private static readonly string[] OfficeInputs = [".docx", ".xlsx", ".doc", ".xls"];
     private static readonly string[] BookInputs = [".epub", ".djvu", ".djv"];
@@ -137,24 +137,25 @@ public static partial class KillerPdfAdapter
                 input, ("hideToolbar", "--hide-toolbar"), ("hideMenu", "--hide-menu"), ("hideWindowUi", "--hide-window-ui"), ("fitWindow", "--fit-window"), ("centerWindow", "--center-window"), ("showTitle", "--show-title")));
 
         // ---- Redaction, protection, export and editing ------------------------------------------
-        yield return FileOperation("killerpdf_redact", "--redact <in.pdf>", "Permanently remove text, images and drawings under matches of phrases, a regular expression, email addresses, phone, Social Security, card and IBAN numbers, whole pages, or the redaction marks saved in a local PDF, with verification, in a new PDF. Pages that can only be redacted as images are skipped unless rasterize is true. Never changes the source.",
+        yield return FileOperation("killerpdf_redact", "--redact <in.pdf>", "Permanently remove text, images and drawings under matches of phrases, a regular expression, email addresses, phone, Social Security, card and IBAN numbers, whole pages, or the redaction marks saved in a local PDF, with verification, in a new PDF. Pages that can only be redacted as images are skipped unless rasterize is true. Hidden information (comments, attachments, forms, layers, scripts, links, bookmarks) is removed too unless sanitize narrows it or keepHidden is true, and the call fails if a redacted word survives anywhere in the file. Never changes the source.",
             Schema(new JsonObject
             {
                 ["path"] = PdfPath(), ["output"] = NewPdf(), ["text"] = Text(512), ["terms"] = ListOf(Text(512), 1, 500), ["regex"] = Text(512),
                 ["find"] = ListOf(Choice("email", "phone", "ssn", "card", "iban"), 1, 5), ["wholePages"] = PageRange(), ["marked"] = Boolean(false),
                 ["matchCase"] = Boolean(false), ["fill"] = Text(32, "^(?:#?[0-9A-Fa-f]{6}|[A-Za-z]+)$", "Fill color such as #000000 or white"),
                 ["overlay"] = Text(256, null, "Text drawn in each redacted area, such as a redaction code"), ["rasterize"] = Boolean(false),
-                ["sanitize"] = Text(128, "^(?:all|[a-z]+(?:,[a-z]+)*)$", "all, or any of comments, attachments, forms, layers, scripts, links, bookmarks"),
+                ["sanitize"] = Text(128, "^(?:all|[a-z]+(?:,[a-z]+)*)$", "Hidden information to remove: all (the default), or any of comments, attachments, forms, layers, scripts, links, bookmarks"),
+                ["keepHidden"] = Boolean(false),
             }, "path", "output"),
-            (input, output) => Terms(Options(["--redact", String(input, "path"), output], input, ("text", "--text"), ("regex", "--regex"), ("wholePages", "--whole-pages"), ("marked", "--marked"), ("matchCase", "--match-case"), ("fill", "--fill"), ("overlay", "--overlay"), ("rasterize", "--rasterize"), ("sanitize", "--sanitize"))
+            (input, output) => Terms(Options(["--redact", String(input, "path"), output], input, ("text", "--text"), ("regex", "--regex"), ("wholePages", "--whole-pages"), ("marked", "--marked"), ("matchCase", "--match-case"), ("fill", "--fill"), ("overlay", "--overlay"), ("rasterize", "--rasterize"), ("sanitize", "--sanitize"), ("keepHidden", "--no-sanitize"))
                 .Concat(Joined(input, "find", "--find")).ToList(), input, output), 600);
         yield return FileOperation("killerpdf_protect", "--protect <in.pdf>", "Write an AES-256 encrypted copy of a local PDF protected by passwords with print, copy and edit permissions, or for certificate recipients. Never changes the source.",
             Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewPdf(), ["userPassword"] = Password(), ["ownerPassword"] = Password(), ["allow"] = ListOf(Choice("print", "copy", "edit"), 0, 3), ["recipients"] = ListOf(FilePath("Absolute path to a recipient certificate (.cer)", "^[^,]+$"), 1, 16), ["invalidateSignatures"] = Boolean(false) }, "path", "output"),
             (input, output) => Options(["--protect", String(input, "path"), output], input, ("userPassword", UserPasswordOption), ("ownerPassword", OwnerPasswordOption), ("invalidateSignatures", "--invalidate-signatures"))
                 .Concat(Joined(input, "allow", "--allow")).Concat(Joined(input, "recipients", "--recipients")).ToList())
             with { ExtraFiles = ["recipients"] };
-        yield return FileOperation("killerpdf_export", "--export <in.pdf>", "Export a local PDF to Word, Excel, PowerPoint, HTML, Markdown, plain text or JSON, chosen by the output extension. Never changes the source.",
-            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewFile("Absolute path for a new .docx, .xlsx, .pptx, .html, .md, .txt or .json file"), ["pages"] = PageRange() }, "path", "output"),
+        yield return FileOperation("killerpdf_export", "--export <in.pdf>", "Export a local PDF to Word, Excel, PowerPoint, HTML, Markdown, plain text, JSON or a reflowable EPUB 3 book, chosen by the output extension. Never changes the source.",
+            Schema(new JsonObject { ["path"] = PdfPath(), ["output"] = NewFile("Absolute path for a new .docx, .xlsx, .pptx, .html, .md, .txt, .json or .epub file"), ["pages"] = PageRange() }, "path", "output"),
             (input, output) => Options(["--export", String(input, "path"), output], input, ("pages", "--pages")), 600)
             with { OutputExtensions = OfficeOutputs };
         yield return FileOperation("killerpdf_convert_office", "--convert-office <in.docx", "Convert a local Word or Excel file to a new PDF. Never changes the source.",

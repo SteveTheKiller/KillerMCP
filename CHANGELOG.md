@@ -4,6 +4,18 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.5] - Unreleased
+
+0.9.5 catches the KillerPDF tools up with KillerPDF 1.9.5.
+
+### Changed
+
+- `killerpdf_redact` says that hidden information is removed by default and that the call fails when a redacted word survives anywhere in the file. A new `keepHidden` option keeps that information.
+
+### Added
+
+- `killerpdf_export` writes a reflowable EPUB 3 book when the output ends in `.epub`.
+
 ## [0.9.4] - 2026-11-14
 
 0.9.4 fixes stalled tool calls and encrypted-app workflows, expands data handling, and uses Windows administrator approval for repairs.
