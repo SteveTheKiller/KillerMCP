@@ -10,5 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="KillerMCP.Clients.Checks" />
+    <!-- Pinned so the lock file does not follow the installed SDK's patch level. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.15" PrivateAssets="all" />
   </ItemGroup>
 </Project>

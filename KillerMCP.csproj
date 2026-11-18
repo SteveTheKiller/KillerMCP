@@ -24,5 +24,7 @@
     <ProjectReference Include="dependencies\KillerTools\src\KillerTools.Engine\KillerTools.Engine.csproj" />
     <Compile Include="installer\DownloadedSetups.cs" Link="Services\DownloadedSetups.cs" />
     <InternalsVisibleTo Include="KillerMCP.Runtime.Checks" />
+    <!-- The SDK otherwise picks this version from its own patch level, which would tie the lock file to one SDK. -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="10.0.15" PrivateAssets="all" />
   </ItemGroup>
 </Project>
