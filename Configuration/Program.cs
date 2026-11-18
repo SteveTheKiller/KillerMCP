@@ -14,7 +14,7 @@ bool isolated = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("K
 if (OperatingSystem.IsWindows())
 using (var identity = WindowsIdentity.GetCurrent())
 {
-    if (!isolated && identity.IsSystem || new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))
+    if (!isolated && (identity.IsSystem || new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator)))
     {
         Console.Error.WriteLine("KillerMCP installs for your own Windows account. Run setup again without administrator rights, from your normal account.");
         return 11;
