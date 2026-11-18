@@ -47,6 +47,13 @@ if ($SignTool) {
     # The installed programs carry the same publisher signature as setup, so Windows and security tools
     # can tell a genuine KillerMCP.exe from a replacement. Signing comes before the manifest hashes them.
     $programs = @('KillerMCP.exe', 'KillerMCP.Configure.exe', 'KillerMCP.Notify.exe') | ForEach-Object { Join-Path $staging $_ }
+    # The Store package ships its libraries as loose files instead of inside one program, so every library
+    # that arrives unsigned gets the same signature. The .NET runtime files already carry Microsoft's.
+    if ($SelfContained) {
+        $programs += Get-ChildItem -LiteralPath $staging -File -Recurse -Include '*.dll', '*.exe' |
+            Where-Object { $programs -notcontains $_.FullName -and (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status -ne 'Valid' } |
+            ForEach-Object FullName
+    }
     & (Join-Path $PSScriptRoot 'Sign-KillerFiles.ps1') -SignTool $SignTool -CertThumbprint $CertThumbprint -CertName $CertName -Path $programs
 }
 

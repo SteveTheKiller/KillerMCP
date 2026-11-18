@@ -18,7 +18,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - Treat altered client entries as different, accept update endpoints and release links only from GitHub, expire stamps from the future, quote arguments exactly and scope notice names to the signed-in account.
 - Check the browser companion token in constant time and before a connection takes a working slot, so idle local connections cannot lock out the page.
 - Download updates into their own folder and stage notes privately.
-- Sign the programs inside the installer, check the Store download hash and publisher before submission, and publish WinGet and Chocolatey packages only from a protected release environment and the validated tag.
+- Sign the programs inside the installer and every library in the Store package, check the Store download hash and publisher before submission, and publish WinGet and Chocolatey packages only from a protected release environment and the validated tag.
 - Run only the verified Chocolatey setup copy on uninstall, refuse prerelease packages, and keep publishing keys off command lines.
 - Lock NuGet packages so a changed package fails the build.
 
