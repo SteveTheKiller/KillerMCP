@@ -88,8 +88,13 @@ try {
     $env:CLAUDE_CLI_PATH = Join-Path $scratch 'absent.exe'
     $env:KM_LIFETIME_ROOT = $scratch
     $env:KM_LIFETIME_NORMAL = '0'
-    $env:KM_LIFETIME_HOST = Join-Path $scratch 'OwnedHost.exe'
-    Copy-Item -LiteralPath $fake -Destination $env:KM_LIFETIME_HOST
+    # The configurator registers only the KillerMCP.exe beside it, so the fixture gets its own copy of the
+    # configurator folder with the owned fake host standing in as KillerMCP.exe.
+    $configureCopy = Join-Path $scratch 'configure'
+    Copy-Item -LiteralPath (Split-Path -Parent $configurator) -Destination $configureCopy -Recurse
+    $configurator = Join-Path $configureCopy (Split-Path -Leaf $configurator)
+    $env:KM_LIFETIME_HOST = Join-Path $configureCopy 'KillerMCP.exe'
+    Copy-Item -LiteralPath $fake -Destination $env:KM_LIFETIME_HOST -Force
     foreach ($client in $clients) { [Environment]::SetEnvironmentVariable(('KILLERMCP_TEST_' + $client + '_CONFIG'), (Join-Path $scratch ($client + '.json'))) }
     $unrelated = Start-Owned $fake 'idle'
     $root = Start-Owned $configurator ('register "' + $env:KM_LIFETIME_HOST + '"') $NestedJob.IsPresent

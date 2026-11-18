@@ -51,6 +51,12 @@ namespace KillerMCP.Setup
             bool notify = args.Any(value => value.Equals("/notify", StringComparison.OrdinalIgnoreCase));
             bool uninstall = args.Any(value => value.Equals("/uninstall", StringComparison.OrdinalIgnoreCase));
             bool checkUpdate = args.Any(value => value.Equals("/check-update", StringComparison.OrdinalIgnoreCase));
+            if (ElevationRefusal(IsElevated(), isolated) is { } elevated)
+            {
+                Console.Error.WriteLine(elevated);
+                if (!silent) SetupDialog.ShowFailure(elevated);
+                return ElevatedExitCode;
+            }
             try
             {
                 // An update can inherit the installed host's working directory. Windows keeps
@@ -101,6 +107,22 @@ namespace KillerMCP.Setup
             }
         }
 
+        internal const int ElevatedExitCode = 11;
+
+        // KillerMCP installs for one account. Run as administrator, setup would read that account's files,
+        // client settings and PATH with an administrator token, where anything the account can write could
+        // steer it, so it stops and says how to run it instead. An isolated test install writes only under
+        // its temporary test folder and is allowed.
+        internal static string? ElevationRefusal(bool elevated, bool isolated) => elevated && !isolated
+            ? "KillerMCP installs for your Windows account only, so setup does not run as administrator. Start KillerMCP-Setup.exe normally, without Run as administrator. Package managers that always run installers as administrator, such as Chocolatey, cannot install or remove KillerMCP; use the setup from GitHub, winget or the Microsoft Store instead."
+            : null;
+
+        internal static bool IsElevated()
+        {
+            using (var identity = System.Security.Principal.WindowsIdentity.GetCurrent())
+                return identity.IsSystem || new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+
         internal static bool RuntimeReady(bool isolated) => IsStorePackage || HasRuntime10(isolated);
 
         internal static bool HasRuntime10(bool isolated)
@@ -119,7 +141,7 @@ namespace KillerMCP.Setup
         internal static void Install(string destination, bool allowDowngrade = false, bool enforceVersion = false)
         {
             ManifestPaths.EnsureSafeRoot(destination);
-            using var installLease = KillerFamily.Deployment.InstallerExitCodes.Acquire("KillerMCP");
+            using var installLease = AcquireInstallLease();
             if (enforceVersion) EnsureVersionAllowed(InstalledVersion(destination), CurrentVersion, allowDowngrade);
             using var repairLease = AcquireRepairLease();
             ValidateSetupRegistration(destination);
@@ -182,7 +204,13 @@ namespace KillerMCP.Setup
         internal static IReadOnlyList<string> Uninstall(string destination, bool removeRegistration)
         {
             ManifestPaths.EnsureSafeRoot(destination);
-            using var installLease = KillerFamily.Deployment.InstallerExitCodes.Acquire("KillerMCP");
+            using var installLease = AcquireInstallLease();
+            return UninstallLeased(destination, removeRegistration);
+        }
+
+        private static IReadOnlyList<string> UninstallLeased(string destination, bool removeRegistration)
+        {
+            ManifestPaths.EnsureSafeRoot(destination);
             using var repairLease = AcquireRepairLease();
             var warnings = new List<string>();
             RemoveInterruptedRemovals(destination);
@@ -205,14 +233,29 @@ namespace KillerMCP.Setup
 
         internal static IReadOnlyList<string> UninstallRegistered(string destination)
         {
-            using var installLease = KillerFamily.Deployment.InstallerExitCodes.Acquire("KillerMCP");
-            IReadOnlyList<string> warnings = Uninstall(destination, removeRegistration: true);
+            using var installLease = AcquireInstallLease();
+            IReadOnlyList<string> warnings = UninstallLeased(destination, removeRegistration: true);
             RemoveInstalledApp(destination);
             return warnings;
         }
 
         internal static string ClientWarningText(IReadOnlyList<string> warnings) =>
             "KillerMCP was removed, but these agent clients could not be updated:" + Environment.NewLine + string.Join(Environment.NewLine, warnings.Select(warning => warning.Substring("Warning: ".Length)));
+
+        // KillerMCP installs for one account, so its install lease is a lock file in that account's own
+        // KillerMCP folder. The family's machine-wide mutex name could be created or held by another local
+        // account to block every install, update and uninstall here.
+        internal static IDisposable AcquireInstallLease(string? holdPath = null)
+        {
+            string path = holdPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KillerMCP", "install.lock");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose); }
+            catch (IOException exception) when ((exception.HResult & 0xffff) == 32 || (exception.HResult & 0xffff) == 33)
+            {
+                // Windows supplies this message in the user's language.
+                throw new System.ComponentModel.Win32Exception(KillerFamily.Deployment.InstallerExitCodes.Busy);
+            }
+        }
 
         internal static IDisposable AcquireRepairLease(string? holdPath = null)
         {
