@@ -6,6 +6,8 @@
     <Version>0.9.5</Version>
     <ApplicationIcon>assets\KillerMCP.ico</ApplicationIcon>
     <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+    <!-- The host also runs as the elevated repair helper, so DOTNET_STARTUP_HOOKS must never load code into it. -->
+    <StartupHookSupport>false</StartupHookSupport>
     <DefaultItemExcludes>$(DefaultItemExcludes);**\bin\**;**\obj\**;artifacts\**;dist\**;**\node_modules\**;**\.git</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>

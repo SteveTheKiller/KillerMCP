@@ -437,8 +437,7 @@ public static partial class KillerBenchAdapter
                 }
                 else
                 {
-                    run = await ElevatedRepairBridge.RunAsync(path, plan.ExecuteArguments, TimeSpan.FromSeconds(plan.ExecuteSeconds),
-                        token, ElevatedProcessStartForChecks, plan.Elevate, BeforeCommit).ConfigureAwait(false);
+                    run = await ElevatedRepairBridge.RunAsync(plan, token, ElevatedProcessStartForChecks, BeforeCommit).ConfigureAwait(false);
                 }
                 // The UAC wait is complete. A plain review click never reaches this approval cache.
                 if (CurrentProblem() is null) KillerBenchSettings.Approve(settingsHash!);
@@ -701,11 +700,6 @@ public static partial class KillerBenchAdapter
 
     private static bool NothingToDo(JsonNode? data) => OutcomeOf(data) is "Clear" or "Healthy" or "NotNeeded";
 
-    private static async Task<KillerBenchRun> DefaultElevated(string executable, IReadOnlyList<string> args, TimeSpan timeout, CancellationToken token)
-    {
-        if (!OperatingSystem.IsWindows()) throw new InvalidOperationException("Administrator approval is only available on Windows.");
-        return await ElevatedRepairBridge.RunAsync(executable, args, timeout, token, ElevatedProcessStartForChecks).ConfigureAwait(false);
-    }
 
     private static async Task<bool> DefaultConfirm(string? notifier, KillerBenchConfirmation confirmation, CancellationToken token)
     {

@@ -30,8 +30,9 @@ internal static class ElevatedOutputReviewChecks
         };
         try
         {
-            var method = typeof(KillerBenchAdapter).GetMethod("DefaultElevated", BindingFlags.Static | BindingFlags.NonPublic)!;
-            var run = await (Task<KillerBenchRun>)method.Invoke(null, new object[] { Environment.ProcessPath!, new[] { "--repair-output-fixture" }, TimeSpan.FromSeconds(10), CancellationToken.None })!;
+            using var options = System.Text.Json.JsonDocument.Parse("{\"host\":\"example.com\"}");
+            var (plan, _) = await KillerBenchRepairs.Find("dns_cache_flush")!.Build(options.RootElement, CancellationToken.None);
+            var run = await ElevatedRepairBridge.RunAsync(plan!, CancellationToken.None, KillerBenchAdapter.ElevatedProcessStartForChecks);
             if (File.ReadAllText(victim) != "untouched") throw new Exception("Elevated output followed an attacker-created hard link and overwrote another file.");
             if (!run.Output.Contains("Failed", StringComparison.Ordinal)) throw new Exception("Elevated result content changed.");
             Console.WriteLine("PASS: elevated result cannot be replaced through a user-writable output file.");

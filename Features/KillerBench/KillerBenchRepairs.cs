@@ -23,7 +23,8 @@ public sealed record KillerBenchRepairPlan(
     IReadOnlyList<string>? RecoverArguments,
     int PreviewSeconds,
     int ExecuteSeconds,
-    bool Elevate = true);
+    bool Elevate = true,
+    string Options = "{}");
 
 internal sealed record RepairDefinition(
     string Name,
@@ -262,7 +263,7 @@ internal static partial class KillerBenchRepairs
             if (!Allowed(input, options)) return Task.FromResult<(KillerBenchRepairPlan?, string?)>((null, "Unknown option. Allowed options: " + (options.Length == 0 ? "none" : string.Join(", ", options))));
             var (preview, recover, target, seconds) = build(input);
             if (preview is null) return Task.FromResult<(KillerBenchRepairPlan?, string?)>((null, target));
-            return Task.FromResult<(KillerBenchRepairPlan?, string?)>((new KillerBenchRepairPlan(name, title, tier, effects, target!, preview, [.. preview, "--execute"], recover, Math.Min(seconds ?? 300, 900), seconds ?? 600, !name.StartsWith("privacy_", StringComparison.Ordinal)), null));
+            return Task.FromResult<(KillerBenchRepairPlan?, string?)>((new KillerBenchRepairPlan(name, title, tier, effects, target!, preview, [.. preview, "--execute"], recover, Math.Min(seconds ?? 300, 900), seconds ?? 600, !name.StartsWith("privacy_", StringComparison.Ordinal), input.GetRawText()), null));
         });
 
     private static (string[]? Preview, string[]? Recover, string? Target, int? Seconds) Fail(string message) => (null, null, message, null);

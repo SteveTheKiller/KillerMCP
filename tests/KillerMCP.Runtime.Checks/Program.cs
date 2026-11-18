@@ -37,6 +37,7 @@ if (args.SequenceEqual(["--review-integration-pdf-real"])) { await IntegrationPd
 if (args.SequenceEqual(["--review-download-paths"])) { DownloadWriteReviewChecks.Run(); PathPolicyReviewChecks.Run(); ProtectedReadReviewChecks.Run(); return; }
 if (args.SequenceEqual(["--review-data-moves"])) { DataMoveLimitReviewChecks.Run(); await PdfDataMoveReviewChecks.RunAsync(); return; }
 if (args.SequenceEqual(["--review-repair-trust"])) { RepairTrustReviewChecks.Run(); await ElevatedOutputReviewChecks.RunAsync(); return; }
+if (args.SequenceEqual(["--review-elevated-request"])) { await ElevatedRequestReviewChecks.RunAsync(); return; }
 if (args.SequenceEqual(["--review-async"])) { await McpAsyncReviewChecks.RunAsync(); return; }
 
 if (NetworkPathReviewChecks.Serve(args)) return;

@@ -58,8 +58,8 @@ internal static class UacConsentReviewChecks
                     adminAllowed = true;
             }
             if (!adminAllowed) throw new Exception("Repair pipe does not admit alternate administrators.");
-            if (!elevate && (request.RootElement.GetProperty("Executable").GetString() != "" || request.RootElement.GetProperty("Arguments").GetArrayLength() != 0))
-                throw new Exception("Consent-only request carried an executable.");
+            if (!elevate && (request.RootElement.GetProperty("Action").GetString() != "" || request.RootElement.GetProperty("Options").GetString() != ""))
+                throw new Exception("Consent-only request carried a repair.");
             var ready = new { Kind = args[2] == "bad-ready" ? "Result" : "Ready", Pipe = pipeName, Elevate = elevate, Administrator = true, UserSid = WindowsIdentity.GetCurrent().User!.Value };
             await Write(pipe, ready, deadline.Token);
             using var commit = await Read(pipe, deadline.Token);
@@ -79,12 +79,8 @@ internal static class UacConsentReviewChecks
         RequireGuest(live: true);
         if (!OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess) throw new Exception("Run this fixture normally on the authorized Windows guest.");
         var original = WindowsIdentity.GetCurrent().User!.Value;
-        Console.WriteLine("LIVE: approve two UAC requests. Only token reports and a consent-only exchange will run.");
-        var elevated = await ElevatedRepairBridge.RunAsync(Environment.ProcessPath!, ["--uac-token-fixture"], TimeSpan.FromSeconds(60), CancellationToken.None);
-        using var admin = JsonDocument.Parse(elevated.Output);
-        if (elevated.ExitCode != 0 || !admin.RootElement.GetProperty("Administrator").GetBoolean()) throw new Exception("Elevated token report failed.");
-        Console.WriteLine("PASS LIVE: elevated helper executed harmless token report: " + elevated.Output);
-        var consent = await ElevatedRepairBridge.RunAsync(Environment.ProcessPath!, ["--uac-token-fixture"], TimeSpan.FromSeconds(60), CancellationToken.None, elevate: false);
+        Console.WriteLine("LIVE: approve one UAC request. Only a consent-only exchange will run.");
+        var consent = await ElevatedRepairBridge.RunAsync(await PlanAsync("privacy_setting", "{\"key\":\"camera-access\",\"state\":\"off\"}"), CancellationToken.None);
         using var receipt = JsonDocument.Parse(consent.Output);
         if (consent.ExitCode != 0 || !receipt.RootElement.GetProperty("Administrator").GetBoolean()) throw new Exception("Consent-only helper was not elevated.");
         var user = await ProcessRunner.RunAsync(Environment.ProcessPath!, ["--uac-token-fixture"], TimeSpan.FromSeconds(15), 4096);
@@ -159,7 +155,7 @@ internal static class UacConsentReviewChecks
                 var rejected = false;
                 try
                 {
-                    await ElevatedRepairBridge.RunAsync(Environment.ProcessPath!, ["--uac-token-fixture"], TimeSpan.FromSeconds(8), CancellationToken.None,
+                    await ElevatedRepairBridge.RunAsync(await PlanAsync(), CancellationToken.None,
                         start =>
                         {
                             var launched = StartFixture(start, behavior, marker);
@@ -174,7 +170,7 @@ internal static class UacConsentReviewChecks
             var dispatched = false;
             try
             {
-                await ElevatedRepairBridge.RunAsync(Environment.ProcessPath!, ["--uac-token-fixture"], TimeSpan.FromSeconds(8), CancellationToken.None,
+                await ElevatedRepairBridge.RunAsync(await PlanAsync(), CancellationToken.None,
                     start => StartFixture(start, "missing-result", marker));
             }
             catch (IOException) { dispatched = true; }
@@ -204,6 +200,12 @@ internal static class UacConsentReviewChecks
             Environment.SetEnvironmentVariable("KILLERMCP_FAKE_BENCH", previous);
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
+    }
+
+    private static async Task<KillerBenchRepairPlan> PlanAsync(string action = "dns_cache_flush", string options = "{\"host\":\"example.com\"}")
+    {
+        using var document = JsonDocument.Parse(options);
+        return (await KillerBenchRepairs.Find(action)!.Build(document.RootElement, CancellationToken.None)).Plan!;
     }
 
     private static void RequireGuest(bool live = false)

@@ -11,12 +11,19 @@ internal static class ElevatedRepairBridge
 {
     private const int MaximumFrameBytes = 32 * 1024 * 1024;
     private const int MaximumOutput = 4 * 1024 * 1024;
-    private sealed record Request(string Pipe, int ParentId, string Executable, string[] Arguments, double TimeoutSeconds, bool Elevate = true);
+    private const int MaximumOptionsLength = 16 * 1024;
+    // The elevated side never receives a path, an argument or a timeout. It gets a catalog action name and its
+    // options, rebuilds the plan itself and runs only the admin-owned KillerBench CLI in Program Files.
+    private sealed record Request(string Pipe, int ParentId, string Action, string Options, bool Elevate = true);
     private sealed record Handshake(string Kind, string Pipe, bool Elevate, bool Administrator = false, string? UserSid = null);
 
-    internal static async Task<KillerBenchRun> RunAsync(string executable, IReadOnlyList<string> arguments, TimeSpan timeout,
-        CancellationToken token, Func<ProcessStartInfo, Process?>? startForChecks = null,
-        bool elevate = true, Action? beforeCommit = null)
+    internal static Task<KillerBenchRun> RunAsync(KillerBenchRepairPlan plan, CancellationToken token,
+        Func<ProcessStartInfo, Process?>? startForChecks = null, Action? beforeCommit = null) =>
+        RunAsync(plan.Action, plan.Options, TimeSpan.FromSeconds(plan.ExecuteSeconds), token, startForChecks, plan.Elevate, beforeCommit);
+
+    private static async Task<KillerBenchRun> RunAsync(string action, string options, TimeSpan timeout,
+        CancellationToken token, Func<ProcessStartInfo, Process?>? startForChecks,
+        bool elevate, Action? beforeCommit)
     {
         if (!OperatingSystem.IsWindows()) throw new RepairConsentException("Windows administrator approval is only available on Windows.");
         if (Environment.IsPrivilegedProcess && startForChecks is null)
@@ -27,9 +34,8 @@ internal static class ElevatedRepairBridge
             token.ThrowIfCancellationRequested();
             var name = "KillerMCP-Repair-" + Guid.NewGuid().ToString("N");
             using var pipe = CreatePipe(name);
-            // Consent-only requests carry no executable or arguments, including when the caller supplied them.
-            var request = new Request(name, Environment.ProcessId, elevate ? executable : string.Empty,
-                elevate ? arguments.ToArray() : [], timeout.TotalSeconds, elevate);
+            // Consent-only requests carry no action or options, including when the caller supplied them.
+            var request = new Request(name, Environment.ProcessId, elevate ? action : string.Empty, elevate ? options : string.Empty, elevate);
             var encoded = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(request));
             var start = new ProcessStartInfo(Environment.ProcessPath!)
             {
@@ -44,7 +50,15 @@ internal static class ElevatedRepairBridge
             using var process = (startForChecks ?? Process.Start)(start) ?? throw new RepairConsentException("The administrator approval helper did not start.");
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
             deadline.CancelAfter(timeout + TimeSpan.FromSeconds(15));
-            await pipe.WaitForConnectionAsync(deadline.Token).ConfigureAwait(false);
+            var connected = pipe.WaitForConnectionAsync(deadline.Token);
+            // A helper that refuses the request exits without connecting, so stop waiting when it does.
+            if (await Task.WhenAny(connected, process.WaitForExitAsync(deadline.Token)).ConfigureAwait(false) != connected)
+            {
+                deadline.Cancel();
+                try { await connected.ConfigureAwait(false); } catch (OperationCanceledException) { }
+                throw new IOException("The administrator approval helper refused this repair before it connected.");
+            }
+            await connected.ConfigureAwait(false);
             if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var client)) throw new IOException("The repair helper identity could not be checked.");
             if (client != process.Id) throw new IOException("The administrator approval helper identity did not match the launched process.");
             var ready = await ReadFrame<Handshake>(pipe, 4096, deadline.Token).ConfigureAwait(false);
@@ -85,13 +99,14 @@ internal static class ElevatedRepairBridge
         {
             if (args.Length != 2 || args[1].Length > 24000) return true;
             var request = JsonSerializer.Deserialize<Request>(Convert.FromBase64String(args[1]));
-            if (request is null || request.ParentId <= 0 || request.TimeoutSeconds is <= 0 or > 14400
+            if (request is null || request.ParentId <= 0 || request.Action is null || request.Options is null
                 || !request.Pipe.StartsWith("KillerMCP-Repair-", StringComparison.Ordinal)
                 || request.Pipe.Length != "KillerMCP-Repair-".Length + 32
                 || !Guid.TryParseExact(request.Pipe["KillerMCP-Repair-".Length..], "N", out _)
-                || (request.Elevate && !Path.IsPathFullyQualified(request.Executable))
-                || (!request.Elevate && (request.Executable.Length != 0 || request.Arguments.Length != 0))) return true;
+                || (!request.Elevate && (request.Action.Length != 0 || request.Options.Length != 0))) return true;
             if (!OperatingSystem.IsWindows() || !Environment.IsPrivilegedProcess) return true;
+            // Validate before connecting, so a request the catalog refuses never reaches Commit.
+            (string Cli, KillerBenchRepairPlan Plan)? prepared = request.Elevate ? Prepare(request.Action, request.Options) : null;
             using var pipe = new NamedPipeClientStream(".", request.Pipe, (PipeAccessRights)0x0012019b,
                 PipeOptions.Asynchronous, TokenImpersonationLevel.Anonymous, HandleInheritability.None);
             await pipe.ConnectAsync(10000).ConfigureAwait(false);
@@ -104,10 +119,13 @@ internal static class ElevatedRepairBridge
             if (commit.Kind != "Commit" || commit.Pipe != request.Pipe || commit.Elevate != request.Elevate)
                 throw new IOException("The repair host did not commit this operation.");
             KillerBenchRun result;
-            if (request.Elevate)
+            if (prepared is { } work)
             {
-                var response = await ProcessRunner.RunAsync(request.Executable, request.Arguments,
-                    TimeSpan.FromSeconds(request.TimeoutSeconds), MaximumOutput).ConfigureAwait(false);
+                // The held handle denies writes, renames and deletes until the CLI has started and finished.
+                using var held = TrustedExecutable(work.Cli);
+                var response = await ProcessRunner.RunAsync(work.Cli, work.Plan.ExecuteArguments,
+                    TimeSpan.FromSeconds(work.Plan.ExecuteSeconds), MaximumOutput,
+                    environment: ChildEnvironment(ReadEnvironment())).ConfigureAwait(false);
                 result = new KillerBenchRun(response.ExitCode, response.StandardOutput,
                     response.StandardError.Length > 65536 ? response.StandardError[..65536] : response.StandardError, response.OutputExceeded);
             }
@@ -123,6 +141,100 @@ internal static class ElevatedRepairBridge
         }
         return true;
     }
+
+    /// <summary>Rebuilds an elevated repair from the catalog and finds the only CLI allowed to run it.</summary>
+    internal static (string Cli, KillerBenchRepairPlan Plan) Prepare(string action, string options, string? programFiles = null)
+    {
+        var definition = KillerBenchRepairs.Find(action) ?? throw new RepairTrustException("The repair is not in the KillerMCP catalog.");
+        if (options.Length > MaximumOptionsLength) throw new RepairTrustException("The repair options are too large.");
+        KillerBenchRepairPlan? plan;
+        try
+        {
+            using var document = JsonDocument.Parse(options);
+            if (document.RootElement.ValueKind != JsonValueKind.Object) throw new RepairTrustException("The repair options must be an object.");
+            (plan, _) = definition.Build(document.RootElement, CancellationToken.None).GetAwaiter().GetResult();
+        }
+        catch (JsonException) { throw new RepairTrustException("The repair options are not valid JSON."); }
+        if (plan is null) throw new RepairTrustException("The catalog refused the repair options.");
+        if (!plan.Elevate) throw new RepairTrustException("This repair never runs with administrator rights.");
+        // KILLERBENCH_CLI and the per-user install are ignored here. Only the machine copy can be trusted.
+        programFiles ??= Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var cli = Path.Combine(programFiles, "KillerBench", "killerbench-cli.exe");
+        TrustedExecutable(cli).Dispose();
+        return (cli, plan);
+    }
+
+    /// <summary>
+    /// Opens an executable that only SYSTEM, Administrators or TrustedInstaller can change, along with every
+    /// folder above it. The returned handle shares read access only, so the file cannot be replaced while held.
+    /// </summary>
+    internal static FileStream TrustedExecutable(string path)
+    {
+        if (!OperatingSystem.IsWindows()) throw new RepairTrustException("Elevated repairs are only available on Windows.");
+        FileStream held;
+        try { held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            throw new RepairTrustException("KillerBench is not installed in Program Files, so elevated repairs are unavailable.");
+        }
+        try
+        {
+            var file = new FileInfo(path);
+            if ((file.Attributes & FileAttributes.ReparsePoint) != 0) throw new RepairTrustException("The KillerBench CLI is redirected.");
+            ValidateAccess(file.GetAccessControl(), true);
+            var parent = true;
+            for (var folder = file.Directory; folder is not null; folder = folder.Parent)
+            {
+                if ((folder.Attributes & FileAttributes.ReparsePoint) != 0) throw new RepairTrustException("A folder above the KillerBench CLI is redirected.");
+                ValidateAccess(folder.GetAccessControl(), parent);
+                parent = false;
+            }
+            return held;
+        }
+        catch (Exception exception) when (exception is not RepairTrustException)
+        {
+            held.Dispose();
+            throw new RepairTrustException("The KillerBench CLI location could not be checked.");
+        }
+        catch { held.Dispose(); throw; }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static void ValidateAccess(System.Security.AccessControl.FileSystemSecurity security, bool protectChildren)
+    {
+        var descriptor = new System.Security.AccessControl.RawSecurityDescriptor(security.GetSecurityDescriptorBinaryForm(), 0);
+        if (descriptor.DiscretionaryAcl is null || descriptor.Owner is null || !TrustedIdentity(descriptor.Owner.Value))
+            throw new RepairTrustException("The KillerBench CLI is not in a folder owned by SYSTEM, Administrators or TrustedInstaller.");
+        foreach (System.Security.AccessControl.GenericAce ace in descriptor.DiscretionaryAcl)
+            if (ace is not System.Security.AccessControl.CommonAce { IsCallback: false })
+                throw new RepairTrustException("The KillerBench CLI folder has an access rule that cannot be checked.");
+        // Write, append, delete, change permissions, take ownership, write attributes and generic write or all.
+        var mutation = 0x10000000u | 0x40000000u | 0x00010000u | 0x00040000u | 0x00080000u | 0x40u | 0x100u | 0x10u;
+        if (protectChildren) mutation |= 0x2u | 0x4u;
+        foreach (System.Security.AccessControl.FileSystemAccessRule rule in security.GetAccessRules(true, true, typeof(SecurityIdentifier)))
+        {
+            if (rule.AccessControlType != System.Security.AccessControl.AccessControlType.Allow) continue;
+            var inheritOnly = (rule.PropagationFlags & System.Security.AccessControl.PropagationFlags.InheritOnly) != 0;
+            if (inheritOnly && !protectChildren) continue;
+            var sid = rule.IdentityReference.Value;
+            if (TrustedIdentity(sid) || inheritOnly && sid == "S-1-3-0") continue;
+            if ((unchecked((uint)rule.FileSystemRights) & mutation) != 0)
+                throw new RepairTrustException("Someone other than an administrator can change the KillerBench CLI or a folder above it.");
+        }
+    }
+
+    private static bool TrustedIdentity(string sid) => sid is "S-1-5-18" or "S-1-5-32-544"
+        or "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
+
+    /// <summary>Clears every runtime injection variable for the elevated child and leaves the rest alone.</summary>
+    internal static IReadOnlyDictionary<string, string?> ChildEnvironment(IReadOnlyDictionary<string, string?> current) => current.Keys
+        .Where(name => name.StartsWith("DOTNET_", StringComparison.OrdinalIgnoreCase) || name.StartsWith("COR_", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("CORECLR_", StringComparison.OrdinalIgnoreCase) || name.StartsWith("COMPlus_", StringComparison.OrdinalIgnoreCase))
+        .ToDictionary(name => name, _ => (string?)null, StringComparer.OrdinalIgnoreCase);
+
+    private static IReadOnlyDictionary<string, string?> ReadEnvironment() => Environment.GetEnvironmentVariables()
+        .Cast<System.Collections.DictionaryEntry>()
+        .ToDictionary(entry => (string)entry.Key, entry => entry.Value?.ToString(), StringComparer.OrdinalIgnoreCase);
 
     private static async Task<T> ReadFrame<T>(Stream pipe, int maximum, CancellationToken token)
     {
@@ -182,3 +294,5 @@ internal static class ElevatedRepairBridge
 }
 
 internal sealed class RepairConsentException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
+
+internal sealed class RepairTrustException(string message) : InvalidOperationException(message);
