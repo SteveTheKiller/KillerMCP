@@ -44,28 +44,20 @@ internal static class UpdateFlavorReviewChecks
             listener.Start();
             int port = ((IPEndPoint)listener.LocalEndpoint).Port;
             Environment.SetEnvironmentVariable("KILLERMCP_UPDATE_API", $"http://127.0.0.1:{port}/");
-            var response = Task.Run(async () =>
-            {
-                using var connection = await listener.AcceptTcpClientAsync();
-                await using var stream = connection.GetStream();
-                var request = new byte[8192];
-                int length = 0;
-                while (length < request.Length)
-                {
-                    await stream.ReadExactlyAsync(request.AsMemory(length++, 1));
-                    if (length >= 4 && request[length - 4] == '\r' && request[length - 3] == '\n' && request[length - 2] == '\r' && request[length - 1] == '\n') break;
-                }
-                byte[] body = Encoding.UTF8.GetBytes("{\"tag_name\":\"v99.0.0\",\"body\":\"fixture\"}");
-                byte[] header = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
-                await stream.WriteAsync(header);
-                await stream.WriteAsync(body);
-            });
+            var response = ReplyAsync(listener, "fixture");
             var fresh = await UpdateChecker.CheckForUpdateAsync("0.9.4");
             await response.WaitAsync(TimeSpan.FromSeconds(5));
             Check(fresh, actualAsset);
             if (!fresh.UpdateAvailable || fresh.Cached || fresh.Unavailable) throw new InvalidOperationException("Fresh successful status path was not selected.");
             if (!UpdateChecker.Instruction(fresh).Contains("/" + actualAsset, StringComparison.Ordinal)) throw new InvalidOperationException("Update instructions use a different setup flavor.");
-            Console.WriteLine($"PASS public update status flavor across initial/off/cached/fresh/error paths ({actualAsset}, 9 selected regressions)");
+            File.Delete(cache);
+            var oversizedResponse = ReplyAsync(listener, new string('a', 300 * 1024));
+            var oversized = await UpdateChecker.CheckForUpdateAsync("0.9.4");
+            try { await oversizedResponse.WaitAsync(TimeSpan.FromSeconds(5)); }
+            catch (IOException) when (oversized.Unavailable) { }
+            if (!oversized.Unavailable || oversized.UpdateAvailable)
+                throw new InvalidOperationException("Oversized release metadata was accepted.");
+            Console.WriteLine($"PASS public update status flavor and response bounds ({actualAsset}, 10 selected regressions)");
         }
         finally
         {
@@ -73,6 +65,18 @@ internal static class UpdateFlavorReviewChecks
             Environment.SetEnvironmentVariable("KILLERMCP_UPDATE_API", oldApi);
             Directory.Delete(root, true);
         }
+    }
+
+    private static async Task ReplyAsync(TcpListener listener, string notes)
+    {
+        using var connection = await listener.AcceptTcpClientAsync();
+        await using var stream = connection.GetStream();
+        using var reader = new StreamReader(stream, Encoding.ASCII, leaveOpen: true);
+        while (await reader.ReadLineAsync() is { Length: > 0 }) { }
+        byte[] body = JsonSerializer.SerializeToUtf8Bytes(new { tag_name = "v99.0.0", body = notes });
+        byte[] header = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
+        await stream.WriteAsync(header);
+        await stream.WriteAsync(body);
     }
 
     private static void Check(UpdateStatus status, string asset)

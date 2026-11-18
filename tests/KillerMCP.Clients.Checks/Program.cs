@@ -8,6 +8,11 @@ if (!string.IsNullOrWhiteSpace(fakeCodexState))
     var command = Environment.GetCommandLineArgs().Skip(1).ToArray();
     // Stands in for a Codex that stops responding, so setup's time limit on client configuration can be checked.
     if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_CODEX_HANG") == "1") Thread.Sleep(Timeout.Infinite);
+    if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_CODEX_LARGE_OUTPUT") == "1")
+    {
+        Console.Write(new string('x', 150_000));
+        return 0;
+    }
     if (command.SequenceEqual(["mcp", "get", "killermcp", "--json"]))
     {
         if (!File.Exists(fakeCodexState)) { Console.Error.Write("No MCP server named killermcp"); return 1; }
@@ -324,6 +329,15 @@ try
     var manual = ClientConfiguration.RegisterAll(executable, new Dictionary<string, string?>(npmEnvironment) { ["PATH"] = "", ["CODEX_CLI_PATH"] = Environment.ProcessPath });
     Equal(true, manual.Any(message => message.Contains("manually", StringComparison.Ordinal)));
     Equal(customCodex.ToJsonString(), File.ReadAllText(codexState));
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_CODEX_LARGE_OUTPUT", "1");
+    try
+    {
+        var codexOnly = new Dictionary<string, string?>(npmEnvironment) { ["PATH"] = "", ["CODEX_CLI_PATH"] = Environment.ProcessPath };
+        var oversized = Caught<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, codexOnly));
+        Equal(true, oversized.Message.Contains("returned too much text", StringComparison.Ordinal));
+        Equal(customCodex.ToJsonString(), File.ReadAllText(codexState));
+    }
+    finally { Environment.SetEnvironmentVariable("KILLERMCP_FAKE_CODEX_LARGE_OUTPUT", null); }
     Console.WriteLine("PASS native KillerMCP client registration");
 
     // Setup and the update window install an update only when it is signed by the KillerMCP publisher.
