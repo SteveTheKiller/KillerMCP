@@ -265,7 +265,8 @@ public static partial class KillerPdfAdapter
         {
             if (!Uri.TryCreate(server.GetString(), UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps || address.UserInfo.Length > 0
                 || !AgentPaths.IsPublicHostAsync(address.IdnHost, CancellationToken.None).GetAwaiter().GetResult())
-                throw new InvalidOperationException(TimestampServerRefusal);
+                // ArgumentException reaches the agent as a tool error, like other refused input.
+                throw new ArgumentException(TimestampServerRefusal);
         }
         var args = Options(["--sign", String(input, "path"), output], input, ("pfx", "--pfx"), ("pfxPassword", PfxPasswordOption), ("certificate", "--cert"),
             ("reason", "--reason"), ("location", "--location"), ("contact", "--contact"), ("timestamp", "--timestamp"), ("timestampServer", "--timestamp-server"),
