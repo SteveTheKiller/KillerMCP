@@ -206,9 +206,11 @@ try {
         $cursorDifferent = $cursorOriginal | ConvertFrom-Json
         $cursorDifferent.mcpServers.killermcp.command = 'C:\DifferentApp\KillerMCP.exe'
         Write-Utf8NoBom $cursorPath ($cursorDifferent | ConvertTo-Json -Depth 20)
-        $blocked = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
+        # One client with a different connection is skipped with a warning, and the update still installs.
+        $skipped = Invoke-SetupCheck -FilePath $setup -ArgumentList '/silent' -Wait -PassThru -WindowStyle Hidden
         $preserved = (Get-Content -LiteralPath $cursorPath -Raw | ConvertFrom-Json).mcpServers.killermcp.command
-        if ($blocked.ExitCode -eq 0 -or $preserved -ne 'C:\DifferentApp\KillerMCP.exe') { throw 'Reinstall replaced a different Cursor connection.' }
+        if ($preserved -ne 'C:\DifferentApp\KillerMCP.exe') { throw 'Reinstall replaced a different Cursor connection.' }
+        if ($skipped.ExitCode -ne 0) { throw "A different Cursor connection blocked the whole install (exit $($skipped.ExitCode))." }
     }
     finally { Write-Utf8NoBom $cursorPath $cursorOriginal }
 
