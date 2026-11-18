@@ -34,6 +34,7 @@ jobs:
         shell: pwsh
         env:
           CHOCO_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
         run: |
           # The tag comes from the release or from whoever runs the workflow, so it reaches this script
@@ -42,7 +43,8 @@ jobs:
           if ($releaseTag -cnotmatch '^v[0-9]+\.[0-9]+\.[0-9]+\z') { throw "Release tag '$releaseTag' is not a version tag such as v1.2.3." }
           $version = $releaseTag.TrimStart('v')
           # A signed prerelease or draft must never become the stable Chocolatey package.
-          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/SteveTheKiller/KillerMCP/releases/tags/$releaseTag" -Headers @{ Accept = 'application/vnd.github+json' }
+          # The token keeps this lookup off the anonymous rate limit that hosted runner addresses share.
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/SteveTheKiller/KillerMCP/releases/tags/$releaseTag" -Headers @{ Accept = 'application/vnd.github+json'; Authorization = "Bearer $env:GITHUB_TOKEN" }
           if ($release.draft -or $release.prerelease) { throw "Release $releaseTag is a draft or prerelease, so it is not published to Chocolatey." }
           $exeUrl  = "https://github.com/SteveTheKiller/KillerMCP/releases/download/$releaseTag/KillerMCP-Setup.exe"
 

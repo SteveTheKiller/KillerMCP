@@ -10,7 +10,13 @@ if (args.Length != 2 || args[0] is not ("register" or "unregister") || !Path.IsP
 // Client configs live in the signed-in user's profile. An administrator or SYSTEM run would write them with a
 // token that can follow links a standard user planted, so the configurator refuses and explains instead.
 // A test run that redirects the client config files writes only into its own scratch files, as isolated setup does.
-bool isolated = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("KILLERMCP_TEST_CLAUDE_CONFIG"));
+// Every client file must be redirected, and each redirect must come from the test process itself. A value
+// persisted in the user's registry environment reaches an elevated run too, so it marks the run as planted.
+string[] clientSeams = ["KILLERMCP_TEST_CLAUDE_CONFIG", "KILLERMCP_TEST_CURSOR_CONFIG", "KILLERMCP_TEST_COPILOT_CONFIG",
+    "KILLERMCP_TEST_GEMINI_CONFIG", "KILLERMCP_TEST_WINDSURF_CONFIG", "KILLERMCP_TEST_CLAUDE_DESKTOP_CONFIG"];
+bool isolated = clientSeams.All(name => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(name))
+    && string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User))
+    && string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine)));
 if (OperatingSystem.IsWindows())
 using (var identity = WindowsIdentity.GetCurrent())
 {

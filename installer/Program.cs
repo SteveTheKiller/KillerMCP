@@ -45,6 +45,11 @@ namespace KillerMCP.Setup
             KillerMCP.Signing.NativeLoadSafety.Apply();
             KillerFamily.Accessibility.AccessibleControls.Initialize();
             string? testRoot = Environment.GetEnvironmentVariable(TestRootVariable);
+            // A test root persisted in the user's registry environment also reaches an elevated run, so only one
+            // set for this process counts as isolation. A planted value is ignored and setup refuses as usual.
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable(TestRootVariable, EnvironmentVariableTarget.User))
+                || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(TestRootVariable, EnvironmentVariableTarget.Machine)))
+                testRoot = null;
             bool isolated = !string.IsNullOrWhiteSpace(testRoot);
             string destination = isolated ? ValidateTestRoot(testRoot!) : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "KillerMCP");
             bool silent = args.Any(value => value.Equals("/silent", StringComparison.OrdinalIgnoreCase));

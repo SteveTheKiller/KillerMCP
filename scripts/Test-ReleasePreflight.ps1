@@ -13,6 +13,8 @@ $authorEmail = (& git.exe -C $repository config user.email).Trim()
 if (-not $authorName -or -not $authorEmail) { throw 'The repository Git identity must be configured.' }
 
 function Git([string]$Directory, [string[]]$Arguments) {
+    # git warns on stderr, which Windows PowerShell would turn into a stop; its exit code decides.
+    $ErrorActionPreference = 'Continue'
     & git.exe -C $Directory @Arguments
     if ($LASTEXITCODE -ne 0) { throw "Fixture git command failed: $($Arguments -join ' ')" }
 }
@@ -135,12 +137,15 @@ Write-Output 'PASS: Windows regression suites remain separate from release.'
 
 # A GitHub release that cannot be created removes the tag it pushed, so the release can run again.
 # The fixture checkout's origin is the fixture's own bare repository.
+# Publish-Release runs gh as a program, so the fixtures are programs too, not session functions.
+$failingGh = Join-Path $scratch 'gh-fails.cmd'
+FixtureFile $failingGh "@echo fixture release failure 1>&2`r`n@exit /b 1`r`n"
+$missingGh = Join-Path $scratch 'gh-missing.exe'
 try {
-    function global:gh { [Console]::Error.WriteLine('fixture release failure'); $global:LASTEXITCODE = 1 }
     $notes = Join-Path $scratch 'notes.md'
     FixtureFile $notes 'Fixture notes'
     $published = $null
-    try { & (Join-Path $PSScriptRoot 'Publish-Release.ps1') -Repository $matched -Tag 'v0.6.0' -Assets @($notes) -NotesFile $notes } catch { $published = $_.Exception.Message }
+    try { & (Join-Path $PSScriptRoot 'Publish-Release.ps1') -Repository $matched -Tag 'v0.6.0' -Assets @($notes) -NotesFile $notes -GhPath $failingGh } catch { $published = $_.Exception.Message }
     if (-not $published -or $published -notlike '*removed from origin*') { throw "A failed GitHub release did not report its tag cleanup: $published`nFixture retained at $scratch" }
     if (& git.exe -C $remote tag --list 'v0.6.0') { throw "A failed GitHub release left its tag on origin.`nFixture retained at $scratch" }
     if (& git.exe -C $matched tag --list 'v0.6.0') { throw "A failed GitHub release left its local tag.`nFixture retained at $scratch" }
@@ -152,9 +157,8 @@ Write-Output 'PASS: a failed GitHub release removes the tag it pushed.'
 
 # A gh that cannot run at all removes the tag too.
 try {
-    function global:gh { throw 'fixture: gh could not start' }
     $published = $null
-    try { & (Join-Path $PSScriptRoot 'Publish-Release.ps1') -Repository $matched -Tag 'v0.6.0' -Assets @($notes) -NotesFile $notes } catch { $published = $_.Exception.Message }
+    try { & (Join-Path $PSScriptRoot 'Publish-Release.ps1') -Repository $matched -Tag 'v0.6.0' -Assets @($notes) -NotesFile $notes -GhPath $missingGh } catch { $published = $_.Exception.Message }
     if (-not $published -or $published -notlike '*removed from origin*') { throw "A GitHub CLI that could not run did not report its tag cleanup: $published`nFixture retained at $scratch" }
     if (& git.exe -C $remote tag --list 'v0.6.0') { throw "A GitHub CLI that could not run left its tag on origin.`nFixture retained at $scratch" }
     if (& git.exe -C $matched tag --list 'v0.6.0') { throw "A GitHub CLI that could not run left its local tag.`nFixture retained at $scratch" }

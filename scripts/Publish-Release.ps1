@@ -2,13 +2,18 @@ param(
     [Parameter(Mandatory = $true)][string]$Repository,
     [Parameter(Mandatory = $true)][string]$Tag,
     [Parameter(Mandatory = $true)][string[]]$Assets,
-    [Parameter(Mandatory = $true)][string]$NotesFile
+    [Parameter(Mandatory = $true)][string]$NotesFile,
+    # The release preflight passes a fixture CLI here. Releases leave it empty and use the installed gh.exe.
+    [string]$GhPath = ''
 )
 
 # Creates and pushes the release tag, then the GitHub release. When the release cannot be created, the
 # tag is removed again from origin and locally, so the release can run again without manual cleanup.
 # git.exe is named in full so a git function in the calling session cannot stand in for it.
 $ErrorActionPreference = 'Stop'
+# git reports progress on stderr. Windows PowerShell turns that into a stopping error when output is captured,
+# so git's own exit codes decide success here.
+$ErrorActionPreference = 'Continue'
 git.exe -C $Repository tag -a $Tag -m "KillerMCP $Tag"
 if ($LASTEXITCODE -ne 0) { throw "Could not create tag $Tag." }
 git.exe -C $Repository push origin $Tag
@@ -21,7 +26,7 @@ $failed = $false
 Push-Location -LiteralPath $Repository
 try {
     # gh is resolved to the program itself, so a gh function or alias in the session cannot stand in for it.
-    $gh = (Get-Command -Name 'gh.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    $gh = if ($GhPath) { $GhPath } else { (Get-Command -Name 'gh.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source }
     & $gh release create $Tag @Assets --title "KillerMCP $Tag" --notes-file $NotesFile --verify-tag
     $failed = $LASTEXITCODE -ne 0
 }
