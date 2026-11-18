@@ -41,7 +41,7 @@ internal static class UpdateChecker
 
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3), MaxResponseContentBufferSize = 256 * 1024 };
             client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("KillerMCP", currentVersion));
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
             var endpoint = Environment.GetEnvironmentVariable("KILLERMCP_UPDATE_API") ?? ReleaseApi;

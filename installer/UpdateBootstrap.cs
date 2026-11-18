@@ -57,6 +57,7 @@ namespace KillerMCP.Setup
                 using (var client = Client(TimeSpan.FromSeconds(8)))
                 {
                     string endpoint = Environment.GetEnvironmentVariable("KILLERMCP_TEST_UPDATE_API") ?? ReleaseApi;
+                    client.MaxResponseContentBufferSize = 256 * 1024;
                     string json = client.GetStringAsync(endpoint).GetAwaiter().GetResult();
                     var release = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json);
                     latestText = (release?["tag_name"] as string)?.TrimStart('v', 'V');
@@ -124,12 +125,16 @@ namespace KillerMCP.Setup
             string baseUrl = ReleaseBase + "v" + version + "/";
             byte[] installer;
             string sums;
+            using (var client = Client(TimeSpan.FromSeconds(8)))
+            {
+                client.MaxResponseContentBufferSize = 64 * 1024;
+                sums = client.GetStringAsync(baseUrl + "SHA256SUMS.txt").GetAwaiter().GetResult();
+            }
             using (var client = Client(TimeSpan.FromMinutes(3)))
             {
                 // The installer is far smaller than this; a larger download is refused instead of filling memory.
                 client.MaxResponseContentBufferSize = 512L * 1024 * 1024;
                 installer = client.GetByteArrayAsync(baseUrl + asset).GetAwaiter().GetResult();
-                sums = client.GetStringAsync(baseUrl + "SHA256SUMS.txt").GetAwaiter().GetResult();
             }
             string expected = KillerMCP.Updates.SetupAsset.ExpectedHash(sums, asset) ?? throw new InvalidDataException("The release checksum is missing.");
             string actual;

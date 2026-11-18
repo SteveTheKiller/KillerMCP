@@ -1,8 +1,20 @@
+using System.Reflection;
+using KillerTools.Engine.Security;
+
 namespace KillerMCP.Features.Tools;
 
 internal static partial class BuiltInTools
 {
-    public static object[] Definitions { get; } =
+    private static readonly bool HasUpdatedSecurityFormats = typeof(Bip39).Assembly
+        .GetCustomAttributes<AssemblyMetadataAttribute>()
+        .Any(attribute => attribute.Key == "KillerTools.SecurityFormats" && attribute.Value == "2");
+
+    public static object[] Definitions { get; } = OperatingSystem.IsWindows()
+        ? AllDefinitions
+        : AllDefinitions.Where(tool => (string?)tool.GetType().GetProperty("name")!.GetValue(tool)
+            is not ("decode_file_base64_local" or "write_text_file_local")).ToArray();
+
+    private static object[] AllDefinitions =>
     [
         Tool("text_statistics", "Count characters, words, lines, and UTF-8 bytes.", new { text = StringSchema() }, ["text"]),
         Tool("convert_case", "Return the case conversions shown by KillerTools.", new { text = StringSchema() }, ["text"]),
@@ -87,11 +99,11 @@ internal static partial class BuiltInTools
         Tool("generate_lorem_ipsum", "Generate bounded Lorem Ipsum text using the KillerTools generator.", new { paragraphCount = new { type = "integer", minimum = 1, maximum = 10, @default = 1 }, sentencePerParagraph = new { type = "integer", minimum = 1, maximum = 10, @default = 3 }, wordCount = new { type = "integer", minimum = 1, maximum = 20, @default = 10 }, startWithLoremIpsum = BooleanSchema(true), asHTML = BooleanSchema(false) }, []),
         Tool("parse_jwt_private", "Decode a JWT locally without claiming to verify its signature.", new { token = new { type = "string", minLength = 3, maxLength = 16_384 } }, ["token"]),
         Tool("generate_rsa_keypair_private", "Generate an RSA PEM key pair locally.", new { bits = EnumSchema("2048", "3072", "4096") }, []),
-        Tool("crypt_text_private", "Encrypt or decrypt text locally with the KillerTools CryptoJS-compatible algorithms.", new { value = new { type = "string", maxLength = 8192 }, secret = new { type = "string", maxLength = 8192 }, algorithm = EnumSchema("AES", "TripleDES", "Rabbit", "RC4"), action = EnumSchema("encrypt", "decrypt") }, ["value", "secret", "action"]),
+        Tool("crypt_text_private", HasUpdatedSecurityFormats ? "Encrypt with authenticated AES-GCM or decrypt legacy CryptoJS ciphertext locally." : "Decrypt legacy CryptoJS ciphertext locally.", new { value = new { type = "string", maxLength = 44000 }, secret = new { type = "string", maxLength = 8192 }, algorithm = HasUpdatedSecurityFormats ? EnumSchema("AES-GCM", "AES", "TripleDES", "Rabbit", "RC4") : EnumSchema("AES", "TripleDES", "Rabbit", "RC4"), action = HasUpdatedSecurityFormats ? EnumSchema("encrypt", "decrypt") : EnumSchema("decrypt") }, ["value", "secret", "action"]),
         Tool("hash_text_private", "Hash private text locally using the KillerTools hash algorithms.", new { value = new { type = "string", maxLength = 8192 }, algorithm = EnumSchema("MD5", "RIPEMD160", "SHA1", "SHA3", "SHA224", "SHA256", "SHA384", "SHA512"), encoding = EnumSchema("Bin", "Hex", "Base64", "Base64url") }, ["value"]),
         Tool("hmac_private", "Calculate an HMAC locally using the KillerTools hash algorithms.", new { value = new { type = "string", maxLength = 8192 }, secret = new { type = "string", maxLength = 8192 }, algorithm = EnumSchema("MD5", "RIPEMD160", "SHA1", "SHA3", "SHA224", "SHA256", "SHA384", "SHA512"), encoding = EnumSchema("Bin", "Hex", "Base64", "Base64url") }, ["value", "secret"]),
         Tool("bcrypt_private", "Hash or compare a string with bcrypt locally.", new { value = new { type = "string", maxLength = 8192 }, action = EnumSchema("hash", "compare"), rounds = new { type = "integer", minimum = 4, maximum = 14, @default = 10 }, hash = new { type = "string", maxLength = 128 } }, ["value", "action"]),
-        Tool("bip39_private", "Generate a mnemonic or convert between entropy and a mnemonic locally using KillerTools BIP39.", new { entropy = new { type = "string", pattern = "^(?:[0-9a-f]{16}|[0-9a-f]{20}|[0-9a-f]{24}|[0-9a-f]{28}|[0-9a-f]{32})$" }, mnemonic = new { type = "string", minLength = 1, maxLength = 512 }, language = EnumSchema("English", "Czech", "French", "Italian", "Japanese", "Korean", "Portuguese", "Spanish", "Chinese simplified", "Chinese traditional") }, []),
+        Tool("bip39_private", HasUpdatedSecurityFormats ? "Generate or convert a standard BIP39 mnemonic locally." : "Generate or convert a 12-word BIP39 mnemonic locally.", new { entropy = new { type = "string", pattern = HasUpdatedSecurityFormats ? "^[0-9a-fA-F]{32}(?:[0-9a-fA-F]{8}){0,4}$" : "^[0-9a-fA-F]{32}$" }, mnemonic = new { type = "string", minLength = 1, maxLength = 512 }, language = EnumSchema("English", "Czech", "French", "Italian", "Japanese", "Korean", "Portuguese", "Spanish", "Chinese simplified", "Chinese traditional") }, []),
         Tool("analyze_password_private", "Estimate password strength and crack time locally.", new { password = new { type = "string", maxLength = 8192 } }, ["password"]),
         Tool("generate_password_private", "Generate a password or passphrase locally with the KillerTools modes.", new { mode = EnumSchema("random", "passphrase", "pronounceable", "format"), length = new { type = "integer", minimum = 8, maximum = 128, @default = 20 }, uppercase = BooleanSchema(true), lowercase = BooleanSchema(true), numbers = BooleanSchema(true), symbols = BooleanSchema(true), excludeAmbiguous = BooleanSchema(true), requireOneOfEach = BooleanSchema(true), wordCount = new { type = "integer", minimum = 1, maximum = 16, @default = 6 }, wordSeparator = new { type = "string", maxLength = 8, @default = "-" }, capitalizeWords = BooleanSchema(true), appendNumber = BooleanSchema(false), format = EnumSchema("hex", "base64", "base64url", "uuid") }, []),
         Tool("evaluate_math", "Evaluate a bounded arithmetic expression.", new { expression = new { type = "string", minLength = 1, maxLength = 256 } }, ["expression"]),

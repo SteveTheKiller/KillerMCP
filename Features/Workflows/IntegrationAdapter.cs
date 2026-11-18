@@ -241,7 +241,11 @@ public static partial class IntegrationAdapter
             if (pages is not null) args.AddRange(["--pages", pages]);
             var exported = await RunApp(pdf, args, 300, token).ConfigureAwait(false);
             if (exported.ExitCode != 0 || !File.Exists(markdown)) return Error(Limit(string.IsNullOrWhiteSpace(exported.StandardOutput) ? "KillerPDF could not export the text" : exported.StandardOutput.Trim()));
-            var text = await File.ReadAllTextAsync(markdown, token).ConfigureAwait(false);
+            using var reader = File.OpenText(markdown);
+            var characters = new char[Math.Min(reader.BaseStream.Length, NotesContent.NoteLimit) + 1];
+            int count = await reader.ReadBlockAsync(characters.AsMemory(), token).ConfigureAwait(false);
+            if (count > NotesContent.NoteLimit) return Error("The exported text exceeds the 500,000 characters a KillerNotes note holds.");
+            var text = new string(characters, 0, count);
             if (string.IsNullOrWhiteSpace(text)) return Error("The PDF has no text to save. Run killerpdf_ocr or killerpdf_scan_to_text on a scanned PDF first.");
             return await CreateNote(notes, title!, text, group, token).ConfigureAwait(false);
         }

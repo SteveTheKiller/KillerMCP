@@ -1,4 +1,7 @@
 using System.Globalization;
+using System.IO.Pipes;
+using System.Security.Principal;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -67,27 +70,50 @@ public static class KillendarAdapter
         };
         return new AppAdapter(new RuntimeTool("killendar_create_appointment",
             "Create one appointment in the currently open and unlocked Killendar. This writes calendar data. For all-day appointments, end is the next date after the last included day.", schema),
-            (input, token) => CreateAppointmentCallAsync(path!, input, token, help.StandardOutput.Contains("app-pipe-v1", StringComparison.Ordinal)));
+            CreateAppointmentCallAsync);
     }
 
-    private static async Task<AppCallResult> CreateAppointmentCallAsync(string path, JsonElement input, CancellationToken token, bool pipeReads)
+    private static async Task<AppCallResult> CreateAppointmentCallAsync(JsonElement input, CancellationToken token)
     {
         if (!ValidAppointment(input)) return new AppCallResult("Provide a title and valid local start and end times", true);
-        if (pipeReads && CalendarPipeMissing()) return new AppCallResult("Open and unlock Killendar before using calendar commands", true);
+        if (CalendarPipeMissing()) return new AppCallResult("Open and unlock Killendar before using calendar commands", true);
+        const string uncertain = "Killendar appointment outcome unknown. Check the agenda before retrying.";
+        bool dispatched = false;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
         try
         {
-            var response = await RunAsync(path, ["create", input.GetRawText()], TimeSpan.FromSeconds(20), 32768, token).ConfigureAwait(false);
-            if (response.ExitCode != 0) return new AppCallResult(ErrorText(response), true);
-            if (response.OutputExceeded) return new AppCallResult("Killendar returned too much data", true);
-            using var document = JsonDocument.Parse(response.StandardOutput);
-            return document.RootElement.ValueKind == JsonValueKind.Object &&
-                   document.RootElement.TryGetProperty("id", out _)
-                ? new AppCallResult(document.RootElement.GetRawText())
-                : new AppCallResult("Killendar returned an invalid create response", true);
+            using var pipe = new NamedPipeClientStream(".", NotesContent.ResolvePipeName(CalendarPipeName), PipeDirection.InOut,
+                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, TokenImpersonationLevel.Identification);
+            await pipe.ConnectAsync(2000, timeout.Token).ConfigureAwait(false);
+            byte[] request = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(input) + "\n");
+            timeout.Token.ThrowIfCancellationRequested();
+            dispatched = true;
+            await pipe.WriteAsync(request, timeout.Token).ConfigureAwait(false);
+            byte[] response = new byte[32768];
+            int length = 0;
+            while (length < response.Length)
+            {
+                int count = await pipe.ReadAsync(response.AsMemory(length), timeout.Token).ConfigureAwait(false);
+                if (count == 0) break;
+                int end = Array.IndexOf(response, (byte)'\n', length, count);
+                if (end >= 0)
+                {
+                    using var document = JsonDocument.Parse(response.AsMemory(0, end));
+                    var reply = document.RootElement;
+                    if (reply.ValueKind == JsonValueKind.Object && reply.TryGetProperty("id", out _))
+                        return new AppCallResult(reply.GetRawText());
+                    if (reply.ValueKind == JsonValueKind.Object && reply.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String)
+                        return new AppCallResult(Truncate(error.GetString()!), true);
+                    break;
+                }
+                length += count;
+            }
+            return new AppCallResult(uncertain, true);
         }
-        catch (Exception exception) when (exception is JsonException or TimeoutException or InvalidOperationException)
+        catch (Exception exception) when (exception is IOException or JsonException or TimeoutException or InvalidOperationException or UnauthorizedAccessException or OperationCanceledException)
         {
-            return new AppCallResult(Truncate(exception.Message), true);
+            return new AppCallResult(dispatched ? uncertain : Truncate(exception.Message), true);
         }
     }
 
@@ -192,7 +218,8 @@ public static class KillendarAdapter
         return ProcessRunner.RunAsync(path, prefix.Concat(arguments), timeout, maximumCharacters, cancellationToken);
     }
 
-    private static bool CalendarPipeMissing() => NotesContent.PipeMissing("Killendar-" + System.Diagnostics.Process.GetCurrentProcess().SessionId + "-CalendarCommands");
+    private static string CalendarPipeName => "Killendar-" + System.Diagnostics.Process.GetCurrentProcess().SessionId + "-CalendarCommands";
+    private static bool CalendarPipeMissing() => NotesContent.PipeMissing(CalendarPipeName);
 
     private static bool IsFile(string? path)
     {

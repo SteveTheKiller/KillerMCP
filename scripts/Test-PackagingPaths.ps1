@@ -25,15 +25,22 @@ function dotnet {
 function node { $global:LASTEXITCODE = 0 }
 
 & (Join-Path $PSScriptRoot 'Build-WindowsInstaller.ps1') -ArtifactRoot $fixture | Out-Null
+& (Join-Path $PSScriptRoot 'Build-WindowsInstaller.ps1') -ArtifactRoot $fixture -Store | Out-Null
 $package = Join-Path $fixture 'packages/win-x64/KillerMCP-win-x64.zip'
 $installer = Join-Path $fixture 'installer/KillerMCP-Setup.exe'
 if (-not (Test-Path -LiteralPath $package) -or -not (Test-Path -LiteralPath $installer)) {
     throw 'The package and installer did not share the requested scratch root.'
 }
-$manifest = Get-Content -Raw (Join-Path $fixture 'staging/win-x64/manifest.json') | ConvertFrom-Json
-foreach ($file in $manifest.files.PSObject.Properties) {
-    $actual = Get-FileHash -LiteralPath (Join-Path $fixture ('staging/win-x64/' + $file.Name))
-    if ($actual.Hash -ne $file.Value.sha256) { throw 'Manifest hash mismatch.' }
+foreach ($flavor in 'win-x64', 'win-x64-store') {
+    $staging = Join-Path $fixture "staging/$flavor"
+    $manifest = Get-Content -Raw (Join-Path $staging 'manifest.json') | ConvertFrom-Json
+    foreach ($notice in 'SQL-FORMATTER-LICENSE.txt', 'OUI-DATA-LICENSE.txt', 'KillerSans-OFL.txt', 'Lacquer-OFL.txt', 'Punktype-LICENSE.txt') {
+        if ($null -eq $manifest.files.PSObject.Properties[$notice]) { throw "$flavor is missing $notice." }
+    }
+    foreach ($file in $manifest.files.PSObject.Properties) {
+        $actual = Get-FileHash -LiteralPath (Join-Path $staging $file.Name)
+        if ($actual.Hash -ne $file.Value.sha256) { throw 'Manifest hash mismatch.' }
+    }
 }
 $defaultRoot = & (Join-Path $PSScriptRoot 'Get-ArtifactRoot.ps1')
 if ($defaultRoot -notlike '*scratch*' -or $defaultRoot.StartsWith((Split-Path $PSScriptRoot))) {

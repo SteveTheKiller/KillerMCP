@@ -40,6 +40,21 @@ if ($RuntimeIdentifier.StartsWith('win-', [StringComparison]::Ordinal)) {
     if ($LASTEXITCODE -ne 0) { throw 'KillerMCP update notifier publish failed.' }
 }
 
+foreach ($name in 'SQL-FORMATTER-LICENSE.txt', 'OUI-DATA-LICENSE.txt') {
+    Copy-Item -LiteralPath (Join-Path $root "docs\$name") -Destination $staging
+}
+Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $staging 'KillerMCP-LICENSE.txt')
+Copy-Item -LiteralPath (Join-Path $root 'dependencies\KillerTools\LICENSE') -Destination (Join-Path $staging 'KillerTools-LICENSE.txt')
+$engineNotices = Join-Path $root 'dependencies\KillerTools\THIRD-PARTY-NOTICES.md'
+if (Test-Path -LiteralPath $engineNotices -PathType Leaf) {
+    Copy-Item -LiteralPath $engineNotices -Destination (Join-Path $staging 'KillerTools-THIRD-PARTY-NOTICES.md')
+}
+if ($RuntimeIdentifier.StartsWith('win-', [StringComparison]::Ordinal)) {
+    foreach ($name in 'KillerSans-OFL.txt', 'Lacquer-OFL.txt', 'Punktype-LICENSE.txt') {
+        Copy-Item -LiteralPath (Join-Path $root "installer\Assets\$name") -Destination $staging
+    }
+}
+
 $files = [ordered]@{}
 Get-ChildItem -LiteralPath $staging -File -Recurse | Sort-Object FullName | ForEach-Object {
     $name = $_.FullName.Substring($staging.Length).TrimStart([char[]]@('\', '/')).Replace('\', '/')

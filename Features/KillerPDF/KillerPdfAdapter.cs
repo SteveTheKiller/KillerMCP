@@ -102,6 +102,20 @@ public static partial class KillerPdfAdapter
 
     private static Operation? ForVersion(Operation operation, Version? version)
     {
+        if (version is null || version < new Version(1, 9, 5))
+        {
+            if (operation.Tool.Name == "killerpdf_redact") return null;
+            if (operation.Tool.Name == "killerpdf_export")
+            {
+                var exportSchema = operation.Tool.InputSchema.DeepClone().AsObject();
+                exportSchema["properties"]!["output"] = NewFile("Absolute path for a new .docx, .xlsx, .pptx, .html, .md, .txt or .json file");
+                operation = operation with
+                {
+                    OutputExtensions = [.. OfficeOutputs.Where(extension => extension != ".epub")],
+                    Tool = operation.Tool with { InputSchema = exportSchema, Description = "Export a local PDF to Word, Excel, PowerPoint, HTML, Markdown, plain text or JSON, chosen by the output extension. Never changes the source." }
+                };
+            }
+        }
         bool hasRelease192 = version is not null && version >= new Version(1, 9, 2);
         if (!hasRelease192 && Release192Tools.Contains(operation.Tool.Name)) return null;
         if (!(version is not null && version >= new Version(1, 9, 3)) && Release193Tools.Contains(operation.Tool.Name)) return null;

@@ -91,7 +91,12 @@ public static class KillerNotesAdapter
             }
             token.ThrowIfCancellationRequested();
             dispatched = true;
-            var r = await Run(path, arguments, token).ConfigureAwait(false); if (r.ExitCode != 0 || r.OutputExceeded) return new AppCallResult(Error(r), true); using var doc = JsonDocument.Parse(r.StandardOutput); return new AppCallResult(doc.RootElement.GetRawText());
+            // One UTF-16 code unit can occupy six characters in an escaped JSON string.
+            int responseLimit = name == "killernotes_get" ? 65536 + 6 * 50000 : 65536;
+            var r = await Run(path, arguments, token, responseLimit).ConfigureAwait(false);
+            if (r.ExitCode != 0 || r.OutputExceeded) return new AppCallResult(Error(r), true);
+            using var doc = JsonDocument.Parse(r.StandardOutput);
+            return new AppCallResult(doc.RootElement.GetRawText());
         }
         catch (Exception ex) when (dispatched && !ReadOnly(name) && ex is TimeoutException or OperationCanceledException)
         { return new AppCallResult("KillerNotes outcome unknown. Check the note before retrying; the command may already have run.", true); }
@@ -100,7 +105,7 @@ public static class KillerNotesAdapter
     });
 
     private static bool ReadOnly(string name) => name is "killernotes_search" or "killernotes_list" or "killernotes_get" or "killernotes_groups" or "killernotes_tags" or "killernotes_backlinks" or "killernotes_links" or "killernotes_history" or "killernotes_stats" or "killernotes_templates" or "killernotes_trash_list" or "killernotes_version_get" or "killernotes_tag_definitions";
-    private static Task<ProcessResult> Run(string path, IEnumerable<string> args, CancellationToken token) { var prefix = path.EndsWith("KillerNotes.exe", StringComparison.OrdinalIgnoreCase) ? new[] { "--cli" } : Array.Empty<string>(); return ProcessRunner.RunAsync(path, prefix.Concat(args), TimeSpan.FromSeconds(40), 65536, token); }
+    private static Task<ProcessResult> Run(string path, IEnumerable<string> args, CancellationToken token, int responseLimit = 65536) { var prefix = path.EndsWith("KillerNotes.exe", StringComparison.OrdinalIgnoreCase) ? new[] { "--cli" } : Array.Empty<string>(); return ProcessRunner.RunAsync(path, prefix.Concat(args), TimeSpan.FromSeconds(40), responseLimit, token); }
     private static List<string> Optional(List<string> args, JsonElement input, params (string Property, string Flag)[] options) { foreach (var o in options) if (input.TryGetProperty(o.Property, out var v) && v.ValueKind == JsonValueKind.String) args.AddRange([o.Flag, v.GetString()!]); return args; }
     private static JsonObject Schema(JsonObject properties, params string[] required) { var value = new JsonObject { ["type"] = "object", ["properties"] = properties, ["additionalProperties"] = false }; if (required.Length > 0) value["required"] = new JsonArray(required.Select(item => JsonValue.Create(item)).ToArray()); return value; }
     private static JsonObject Text(int max, bool empty = false) => new() { ["type"] = "string", ["minLength"] = empty ? 0 : 1, ["maxLength"] = max };

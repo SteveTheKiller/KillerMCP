@@ -48,7 +48,10 @@ namespace KillerMCP.Updates
             DateTime cutoff = DateTime.UtcNow - Age;
             foreach (string file in files)
             {
-                if (!Path.GetFileName(file).StartsWith(Prefix, StringComparison.OrdinalIgnoreCase)) continue;
+                string name = Path.GetFileNameWithoutExtension(file);
+                int separator = name.LastIndexOf('-');
+                if (separator <= Prefix.Length || !Version.TryParse(name.Substring(Prefix.Length, separator - Prefix.Length), out _)
+                    || !Guid.TryParseExact(name.Substring(separator + 1), "N", out _)) continue;
                 try { if (File.GetLastWriteTimeUtc(file) < cutoff) File.Delete(file); }
                 catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException) { }
             }

@@ -217,7 +217,7 @@ public partial class UpdateWindow : Window
             if (!_runs.IsCurrent(run)) return;
             SetStatus("Automatic update failed. Opening the release page.");
             UpdateButton.IsEnabled = true;
-            Process.Start(new ProcessStartInfo(_releaseUrl) { UseShellExecute = true });
+            if (!OpenUrl(_releaseUrl)) SetStatus("Automatic update failed. Open the release page manually: " + _releaseUrl);
             Debug.WriteLine(exception);
         }
         finally
@@ -321,10 +321,18 @@ public partial class UpdateWindow : Window
         base.OnClosing(e);
     }
 
-    private static void OpenUrl(string url)
+    private static bool OpenUrl(string url)
     {
-        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
-        catch (Exception exception) { Debug.WriteLine(exception); }
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine(exception);
+            return false;
+        }
     }
 
     /// <summary>Lists the release notes between the body text and the update choice, or hides the

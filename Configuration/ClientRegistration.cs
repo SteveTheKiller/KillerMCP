@@ -62,10 +62,11 @@ public static class ClientRegistration
         {
             if (!Matches(oldEntry, executablePath, includeStdioType) && !MatchesLegacy(oldEntry, executablePath, includeStdioType))
                 throw new InvalidOperationException($"{clientName} has a different {ServerName} connection. Its settings were left unchanged.");
-            if (servers.ContainsKey(serverName) && !Matches(servers[serverName], executablePath, includeStdioType))
+            var upgraded = Upgrade(oldEntry!, executablePath);
+            if (servers.ContainsKey(serverName) && !JsonNode.DeepEquals(servers[serverName], upgraded))
                 throw new InvalidOperationException($"{clientName} has a different {serverName} connection. Its settings were left unchanged.");
             servers.Remove(ServerName);
-            servers[serverName] = Registration(executablePath, includeStdioType);
+            servers[serverName] = upgraded;
             return (root, $"KillerMCP was renamed in {clientName}.");
         }
         if (servers.TryGetPropertyValue(serverName, out var existing))
@@ -75,7 +76,7 @@ public static class ClientRegistration
                 return (null, $"{clientName} already has the correct KillerMCP connection.");
             }
             if (!MatchesLegacy(existing, executablePath, includeStdioType)) throw new InvalidOperationException($"{clientName} already has a different killermcp connection. Its settings were left unchanged.");
-            servers[serverName] = Registration(executablePath, includeStdioType);
+            servers[serverName] = Upgrade(existing!, executablePath);
             return (root, $"KillerMCP was upgraded in {clientName}.");
         }
 
@@ -150,6 +151,14 @@ public static class ClientRegistration
     {
         var registration = new JsonObject { ["command"] = executablePath, ["args"] = new JsonArray() };
         if (includeStdioType) registration["type"] = "stdio";
+        return registration;
+    }
+
+    private static JsonObject Upgrade(JsonNode existing, string executablePath)
+    {
+        var registration = existing.DeepClone().AsObject();
+        registration["command"] = executablePath;
+        registration["args"] = new JsonArray();
         return registration;
     }
 

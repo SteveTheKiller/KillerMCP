@@ -156,21 +156,25 @@ public static class ClientConfiguration
         if (existing.ExitCode == 0)
         {
             if (MatchesCodex(existing.StandardOutput, executablePath)) return "Codex already has the correct KillerMCP connection.";
-            if (!TryReadLegacyCodex(existing.StandardOutput, executablePath, out var legacyCommand, out var legacyArguments)) throw new InvalidOperationException("Codex already has a different killermcp connection. Its settings were left unchanged.");
-            var removed = Run(codex, ["mcp", "remove", "killermcp"]);
-            if (removed.ExitCode != 0) throw new InvalidOperationException("Codex could not replace the previous KillerMCP connection: " + removed.StandardError.Trim());
-            var upgraded = Run(codex, ["mcp", "add", "killermcp", "--", executablePath]);
-            if (upgraded.ExitCode != 0)
+            if (!TryReadLegacyCodex(existing.StandardOutput, executablePath, out _, out _)) throw new InvalidOperationException("Codex already has a different killermcp connection. Its settings were left unchanged.");
+            // Codex add replaces an existing entry in one settings update.
+            // Never remove the old connection before its replacement is ready.
+            if (HasCustomCodexSettings(existing.StandardOutput))
+                return "Warning: Codex has customized KillerMCP settings. Edit its killermcp connection manually, keeping those settings, changing command to " + Quote(executablePath) + " and clearing args.";
+            Exception? failure = null;
+            try
             {
-                bool restored;
-                try { restored = Run(codex, ["mcp", "add", "killermcp", "--", legacyCommand, .. legacyArguments]).ExitCode == 0; }
-                catch (Exception exception) when (exception is InvalidOperationException or TimeoutException) { restored = false; }
-                var lost = restored ? string.Empty
-                    : " The previous Codex connection could not be restored either, so Codex has no KillerMCP connection. Add it with: codex mcp add killermcp -- " + Quote(executablePath);
-                throw new InvalidOperationException("Codex could not add the native KillerMCP connection: " + upgraded.StandardError.Trim() + lost);
+                var upgraded = Run(codex, ["mcp", "add", "killermcp", "--", executablePath]);
+                if (upgraded.ExitCode != 0) failure = new InvalidOperationException(upgraded.StandardError.Trim());
             }
+            catch (Exception exception) when (exception is InvalidOperationException or TimeoutException or IOException) { failure = exception; }
             var upgradedState = Run(codex, ["mcp", "get", "killermcp", "--json"]);
-            if (upgradedState.ExitCode != 0 || !MatchesCodex(upgradedState.StandardOutput, executablePath)) throw new InvalidOperationException("Codex did not save the native KillerMCP connection.");
+            if (upgradedState.ExitCode != 0 || !MatchesCodex(upgradedState.StandardOutput, executablePath))
+            {
+                var status = upgradedState.ExitCode == 0 && TryReadLegacyCodex(upgradedState.StandardOutput, executablePath, out _, out _)
+                    ? "The previous Codex connection is still configured." : "Inspect the current connection with codex mcp get killermcp.";
+                throw new InvalidOperationException("Codex did not save the native KillerMCP connection. " + status, failure);
+            }
             return "KillerMCP was upgraded in Codex.";
         }
         if (!existing.StandardError.Contains("No MCP server named", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Codex could not read its MCP configuration: " + existing.StandardError.Trim());
@@ -193,6 +197,21 @@ public static class ClientConfiguration
         var removed = Run(codex, ["mcp", "remove", "killermcp"]);
         if (removed.ExitCode != 0) throw new InvalidOperationException("Codex could not remove its KillerMCP connection: " + removed.StandardError.Trim());
         return "KillerMCP was removed from Codex.";
+    }
+
+    private static bool HasCustomCodexSettings(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        foreach (var field in document.RootElement.EnumerateObject())
+        {
+            if (field.Name == "transport") continue;
+            if (field.Name == "name" && field.Value.ToString() == "killermcp") continue;
+            if (field.Name == "enabled" && field.Value.ValueKind == JsonValueKind.True) continue;
+            if (field.Value.ValueKind != JsonValueKind.Null) return true;
+        }
+        return document.RootElement.GetProperty("transport").EnumerateObject().Any(field =>
+            field.Name is not ("type" or "command" or "args") && field.Value.ValueKind != JsonValueKind.Null
+            && !(field.Name == "env_vars" && field.Value.ValueKind == JsonValueKind.Array && field.Value.GetArrayLength() == 0));
     }
 
     private static bool MatchesCodex(string json, string executablePath)
@@ -304,11 +323,34 @@ public static class ClientConfiguration
         {
             throw new InvalidOperationException($"Codex could not be started from {executable}: {exception.Message}", exception);
         }
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(30000)) { process.Kill(true); throw new TimeoutException("Client configuration command timed out."); }
-        Task.WaitAll(output, error);
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var output = ReadCommandOutputAsync(process.StandardOutput, deadline.Token);
+        var error = ReadCommandOutputAsync(process.StandardError, deadline.Token);
+        try
+        {
+            Task.WhenAll(process.WaitForExitAsync(deadline.Token), output, error)
+                .WaitAsync(deadline.Token).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+        {
+            try { if (!process.HasExited) process.Kill(true); }
+            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            throw new TimeoutException("Client configuration command timed out.");
+        }
         return new CommandResult(process.ExitCode, output.Result, error.Result);
+    }
+
+    private static async Task<string> ReadCommandOutputAsync(StreamReader reader, CancellationToken token)
+    {
+        const int limit = 131072;
+        var text = new System.Text.StringBuilder();
+        var buffer = new char[4096];
+        while (await reader.ReadAsync(buffer.AsMemory(), token).ConfigureAwait(false) is var count && count != 0)
+        {
+            if (text.Length < limit) text.Append(buffer, 0, System.Math.Min(count, limit - text.Length));
+        }
+        if (text.Length == limit) throw new InvalidOperationException("Client configuration command returned too much text.");
+        return text.ToString();
     }
 
     private static string? Value(IReadOnlyDictionary<string, string?> values, string name) => values.TryGetValue(name, out var value) ? value : values.FirstOrDefault(item => item.Key.Equals(name, StringComparison.OrdinalIgnoreCase)).Value;

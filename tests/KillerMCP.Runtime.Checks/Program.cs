@@ -1,6 +1,8 @@
 using KillerMCP;
 using System.Text.Json;
 
+if (args.SequenceEqual(["--review-adapter-095"])) { await Adapter095Checks.RunAsync(); return; }
+if (Adapter095Checks.Serve(args)) return;
 if (await NativeHostFixture.TryRunAsync(args)) return;
 if (await UacConsentReviewChecks.ServeAsync(args)) return;
 if (args.SequenceEqual(["--review-uac-consent"])) { await UacConsentReviewChecks.RunAsync(); return; }
@@ -492,10 +494,7 @@ try
     var createAdapter = await KillendarAdapter.CreateAppointmentAsync(Environment.ProcessPath);
     if (createAdapter is null) throw new InvalidOperationException("The Killendar create tool was not discovered.");
     Equal("killendar_create_appointment", createAdapter.Tool.Name);
-    using var appointment = JsonDocument.Parse("{\"title\":\"Site visit\",\"start\":\"2026-10-01T09:00\",\"end\":\"2026-10-01T10:00\"}");
-    var created = await createAdapter.CallAsync(appointment.RootElement, CancellationToken.None);
-    Equal(false, created.IsError);
-    Equal("Site visit", JsonDocument.Parse(created.Text).RootElement.GetProperty("title").GetString());
+    await Adapter095Checks.CalendarAsync(false);
     using var invalidAppointment = JsonDocument.Parse("{\"title\":\"Site visit\",\"start\":\"2026-10-01T10:00\",\"end\":\"2026-10-01T09:00\"}");
     Equal(true, (await createAdapter.CallAsync(invalidAppointment.RootElement, CancellationToken.None)).IsError);
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_KILLENDAR", null);
@@ -845,8 +844,9 @@ try
     if (args.Contains("--notes-only", StringComparer.Ordinal)) return;
 
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
+    Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION", "1.9.5");
     var pdfAdapters = await KillerPdfAdapter.CreateAsync(Environment.ProcessPath);
-    Equal(70, pdfAdapters.Count);
+    Equal(71, pdfAdapters.Count);
     var pdfByName = pdfAdapters.ToDictionary(item => item.Tool.Name);
     var sourceOne = Path.Combine(root, "source-one.pdf");
     var sourceTwo = Path.Combine(root, "source-two.pdf");

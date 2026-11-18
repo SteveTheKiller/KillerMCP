@@ -47,10 +47,12 @@ internal static class NotesContent
     internal static bool PipeMissing(string name)
     {
         if (!OperatingSystem.IsWindows()) return false;
-        name = PipeNames.Value?.Invoke(name) ?? name;
+        name = ResolvePipeName(name);
         if (WaitNamedPipe(@"\\.\pipe\" + name, 1)) return false;
         return Marshal.GetLastWin32Error() == 2;
     }
+
+    internal static string ResolvePipeName(string name) => PipeNames.Value?.Invoke(name) ?? name;
 
     [DllImport("kernel32.dll", EntryPoint = "WaitNamedPipeW", CharSet = CharSet.Unicode, SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

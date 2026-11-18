@@ -26,7 +26,7 @@ for (let index = 2; index < process.argv.length; index += 2) {
   const option = process.argv[index];
   const value = process.argv[index + 1];
   assert.ok(['--host', '--fixture', '--scratch-root'].includes(option) && value && isAbsolute(value), 'Expected --host, --fixture, or --scratch-root with an absolute path.');
-  options.set(option, value);
+  options.set(option, resolve(value));
 }
 const hostExecutable = options.get('--host') ?? resolve('bin/Release/net10.0', process.platform === 'win32' ? 'KillerMCP.exe' : 'KillerMCP');
 const fixtureExecutable = options.get('--fixture') ?? resolve('tests/KillerMCP.Runtime.Checks/bin/Release/net10.0/KillerMCP.Runtime.Checks.exe');
@@ -74,6 +74,7 @@ const environment = {
   KILLERMCP_FAKE_SHELL: '1',
   KILLERMCP_FAKE_SCAN: '1',
   KILLERMCP_FAKE_PDF: '1',
+  KILLERMCP_FAKE_PDF_VERSION: '1.9.5',
   KILLERPDF_CLI: fixtureExecutable,
   KILLERSCAN_CLI: fixtureExecutable,
   KILLERSHELL_CLI: fixtureExecutable,
@@ -218,7 +219,7 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killerpdf_add_form_fields', 'killerpdf_set_layer', 'killerpdf_portfolio_view', 'killerpdf_add_attachment',
   'killerpdf_edit_attachment', 'killerpdf_repair_links', 'killerpdf_table_of_contents',
   'killerpdf_page_labels', 'killerpdf_initial_view', 'killerpdf_redact', 'killerpdf_protect',
-  'killerpdf_export', 'killerpdf_convert_office', 'killerpdf_data_merge', 'killerpdf_replace_text',
+  'killerpdf_export', 'killerpdf_convert_office', 'killerpdf_convert_book', 'killerpdf_data_merge', 'killerpdf_replace_text',
   'killerpdf_export_form_data', 'killerpdf_import_form_data', 'killerpdf_xfa_to_acroform',
   'killerpdf_flatten_forms', 'killerpdf_run_macro', 'killerpdf_list_macros', 'killerpdf_sign',
   'killerpdf_scan', 'killerpdf_list_scanners', 'killerpdf_images_to_pdf',
@@ -343,7 +344,12 @@ assert.equal(JSON.parse(yamlJson.content[0].text).text, '{\n  "a": 1\n}');
 const formattedYaml = await request('tools/call', { name: 'format_yaml', arguments: { text: 'b: 2\na: 1', sortKeys: true } });
 assert.equal(JSON.parse(formattedYaml.content[0].text).text, 'a: 1\nb: 2\n');
 const metaTags = await request('tools/call', { name: 'generate_meta_tags', arguments: { fields: { title: 'KillerTools' } } });
-assert.match(JSON.parse(metaTags.content[0].text).html, /property="og:title" value="KillerTools"/);
+const cryptoActions = listed.tools.find(tool => tool.name === 'crypt_text_private').inputSchema.properties.action.enum;
+const updatedEngine = cryptoActions.includes('encrypt');
+if (process.env.KILLERMCP_REQUIRE_UPDATED_ENGINE === '1') assert.equal(updatedEngine, true);
+assert.match(JSON.parse(metaTags.content[0].text).html, updatedEngine
+  ? /property="og:title" content="KillerTools"/
+  : /property="og:title" value="KillerTools"/);
 const invalidMetaTags = await request('tools/call', { name: 'generate_meta_tags', arguments: { fields: { unknown: 'value' } } });
 assert.equal(invalidMetaTags.isError, true);
 assert.equal(invalidMetaTags.content[0].text, 'Unknown metadata field for selected page type');
@@ -444,7 +450,7 @@ const hotp = await request('tools/call', { name: 'otp_private', arguments: { sec
 assert.deepEqual(JSON.parse(hotp.content[0].text), { code: '755224', counter: 0 });
 const otpSecret = await request('tools/call', { name: 'generate_otp_secret_private', arguments: { issuer: 'Killer Tools', account: 'user@example.com' } });
 const generatedOtp = JSON.parse(otpSecret.content[0].text);
-assert.match(generatedOtp.secret, /^[A-Z2-7]{16}$/);
+assert.match(generatedOtp.secret, updatedEngine ? /^[A-Z2-7]{32}$/ : /^[A-Z2-7]{16}$/);
 assert.match(generatedOtp.uri, /^otpauth:\/\/totp\/Killer%20Tools:user%40example\.com\?/);
 const ulids = await request('tools/call', { name: 'generate_ulids', arguments: { count: 2 } });
 assert.match(JSON.parse(ulids.content[0].text).ids[0], /^[0-9A-HJKMNP-TV-Z]{26}$/);
@@ -454,10 +460,15 @@ const lorem = await request('tools/call', { name: 'generate_lorem_ipsum', argume
 assert.equal(JSON.parse(lorem.content[0].text).text, 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.');
 const jwt = await request('tools/call', { name: 'parse_jwt_private', arguments: { token: 'eyJhbGciOiJub25lIn0.eyJzdWIiOiJsb2NhbCJ9.x' } });
 assert.equal(JSON.parse(jwt.content[0].text).signatureVerified, false);
-for (const algorithm of ['AES', 'TripleDES', 'Rabbit', 'RC4']) {
-  const encrypted = JSON.parse((await request('tools/call', { name: 'crypt_text_private', arguments: { value: 'private π', secret: 'secret', algorithm, action: 'encrypt' } })).content[0].text).output;
-  const decrypted = JSON.parse((await request('tools/call', { name: 'crypt_text_private', arguments: { value: encrypted, secret: 'secret', algorithm, action: 'decrypt' } })).content[0].text).output;
-  assert.equal(decrypted, 'private π');
+const crypt = arguments_ => request('tools/call', { name: 'crypt_text_private', arguments: arguments_ });
+assert.equal((await crypt({ value: 'private π', secret: 'secret', algorithm: 'AES', action: 'encrypt' })).isError, true);
+if (updatedEngine) {
+  const plaintext = 'π'.repeat(8192);
+  const encrypted = JSON.parse((await crypt({ value: plaintext, secret: 'secret', action: 'encrypt' })).content[0].text).output;
+  assert.match(encrypted, /^kt1:/);
+  const decrypted = JSON.parse((await crypt({ value: encrypted, secret: 'secret', action: 'decrypt' })).content[0].text).output;
+  assert.equal(decrypted, plaintext);
+  assert.equal((await crypt({ value: encrypted, secret: 'wrong', action: 'decrypt' })).isError, true);
 }
 const hash = await request('tools/call', { name: 'hash_text_private', arguments: { value: 'abc' } });
 assert.equal(JSON.parse(hash.content[0].text).hash, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
@@ -471,10 +482,20 @@ const generatedPassphrase = JSON.parse((await request('tools/call', { name: 'gen
 assert.equal(generatedPassphrase.split('-').length, 7);
 const formattedPassword = JSON.parse((await request('tools/call', { name: 'generate_password_private', arguments: { mode: 'format', format: 'base64url', length: 24 } })).content[0].text).password;
 assert.match(formattedPassword, /^[A-Za-z0-9_-]{24}$/);
-const japaneseMnemonic = JSON.parse((await request('tools/call', { name: 'bip39_private', arguments: { entropy: '0000000000000000', language: 'Japanese' } })).content[0].text);
-assert.equal(japaneseMnemonic.mnemonic, 'あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいこくしん　あいだ');
+const shortEntropy = await request('tools/call', { name: 'bip39_private', arguments: { entropy: '0000000000000000' } });
+assert.equal(shortEntropy.isError, true);
+const japaneseMnemonic = JSON.parse((await request('tools/call', { name: 'bip39_private', arguments: { entropy: '00000000000000000000000000000000', language: 'Japanese' } })).content[0].text);
+assert.equal(japaneseMnemonic.mnemonic, [...Array(11).fill('あいこくしん'), 'あおぞら'].join('　'));
 const japaneseEntropy = JSON.parse((await request('tools/call', { name: 'bip39_private', arguments: { mnemonic: japaneseMnemonic.mnemonic, language: 'Japanese' } })).content[0].text);
-assert.equal(japaneseEntropy.entropy, '0000000000000000');
+assert.equal(japaneseEntropy.entropy, '00000000000000000000000000000000');
+if (updatedEngine) {
+  const entropy = '0'.repeat(64);
+  const generated = await request('tools/call', { name: 'bip39_private', arguments: { entropy } });
+  const { mnemonic } = JSON.parse(generated.content[0].text);
+  assert.equal(mnemonic.split(' ').length, 24);
+  const decoded = await request('tools/call', { name: 'bip39_private', arguments: { mnemonic } });
+  assert.equal(JSON.parse(decoded.content[0].text).entropy, entropy);
+}
 const bcryptCompare = await request('tools/call', { name: 'bcrypt_private', arguments: { value: 'private', action: 'compare', hash: JSON.parse(bcryptHash.content[0].text).hash } });
 assert.equal(JSON.parse(bcryptCompare.content[0].text).matches, true);
 const rsa = await request('tools/call', { name: 'generate_rsa_keypair_private', arguments: { bits: '2048' } });

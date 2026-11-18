@@ -14,6 +14,7 @@ internal static class McpServer
     private const int MaximumResultCharacters = 32 * 1024 * 1024;
     private const int MaximumRunningCalls = 32;
     private const int MaximumLocalCalls = 8;
+    private const int MaximumWaitingLists = 8;
 
     public static async Task RunAsync()
     {
@@ -34,7 +35,14 @@ internal static class McpServer
         var running = new System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource>(StringComparer.Ordinal);
         var localRunning = 0;
         var externalRunning = 0;
-        var calls = new List<Task>();
+        var waitingLists = 0;
+        var calls = new HashSet<Task>();
+        void Track(Task task)
+        {
+            lock (calls) calls.Add(task);
+            _ = task.ContinueWith(completed => { lock (calls) calls.Remove(completed); },
+                CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
         void Send(object message)
         {
             var text = JsonSerializer.Serialize(message, json);
@@ -76,7 +84,7 @@ internal static class McpServer
                 if (method == "notifications/cancelled"
                     && request.TryGetProperty("params", out var cancelParams) && cancelParams.ValueKind == JsonValueKind.Object
                     && cancelParams.TryGetProperty("requestId", out var cancelledId)
-                    && running.TryGetValue(cancelledId.GetRawText(), out var cancelled))
+                    && running.TryGetValue(RequestKey(cancelledId), out var cancelled))
                 {
                     // The call can finish and release its source between the lookup and here.
                     try { cancelled.Cancel(); } catch (ObjectDisposedException) { }
@@ -85,7 +93,7 @@ internal static class McpServer
             }
             if (method == "tools/call")
             {
-                var key = id.GetRawText();
+                var key = RequestKey(id);
                 var callParams = request.TryGetProperty("params", out var givenParams) ? givenParams : default;
                 var localCall = ToolRegistry.IsFastLocalCall(callParams);
                 var limit = localCall ? MaximumLocalCalls : MaximumRunningCalls;
@@ -104,7 +112,6 @@ internal static class McpServer
                 }
                 if (localCall) Interlocked.Increment(ref localRunning);
                 else Interlocked.Increment(ref externalRunning);
-                calls.RemoveAll(task => task.IsCompleted);
                 async Task ExecuteCallAsync()
                 {
                     try
@@ -133,17 +140,28 @@ internal static class McpServer
                 }
                 // Windows pipe readers can occupy pool workers while app processes wait. These few
                 // bounded local operations have their own slots so that they still answer promptly.
-                calls.Add(localCall
+                Track(localCall
                     ? Task.Factory.StartNew(ExecuteCallAsync, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap()
                     : Task.Run(ExecuteCallAsync));
                 continue;
             }
             if (method == "tools/list" && !adaptersReady.IsCompleted)
             {
-                calls.Add(Task.Run(async () =>
+                if (Volatile.Read(ref waitingLists) >= MaximumWaitingLists)
                 {
-                    await adaptersReady.ConfigureAwait(false);
-                    Send(new { jsonrpc = "2.0", id, result = new { tools = ToolRegistry.Tools } });
+                    Send(new { jsonrpc = "2.0", id, error = new { code = -32000, message = "The tool catalog is loading. Retry after a pending list request finishes." } });
+                    continue;
+                }
+                Interlocked.Increment(ref waitingLists);
+                Track(Task.Run(async () =>
+                {
+                    try
+                    {
+                        await adaptersReady.ConfigureAwait(false);
+                        Send(new { jsonrpc = "2.0", id, result = new { tools = ToolRegistry.Tools } });
+                    }
+                    catch (Exception exception) { Send(Failure(id, exception)); }
+                    finally { Interlocked.Decrement(ref waitingLists); }
                 }));
                 continue;
             }
@@ -179,13 +197,19 @@ internal static class McpServer
         {
             try { source.Cancel(); } catch (ObjectDisposedException) { }
         }
-        Task.WaitAll([.. calls], TimeSpan.FromSeconds(10));
+        Task[] remaining;
+        lock (calls) remaining = [.. calls];
+        Task.WaitAll(remaining, TimeSpan.FromSeconds(10));
         // A KillerBench repair that started keeps running to its own time limit, which is up to four hours for
         // some repairs. The host stays until it ends, with no limit of its own, so it keeps the one-repair hold
         // that stops another window from starting a second repair, and records the result and any
         // uncertain-result lock. The repair's own limit and the approval window's five minutes bound the wait.
         KillerBenchRepairJobs.WaitForRunning(Timeout.InfiniteTimeSpan);
     }
+
+    private static string RequestKey(JsonElement id) => id.ValueKind == JsonValueKind.String
+        ? "string:" + id.GetString()
+        : id.GetRawText();
 
     private static async Task RegisterAdaptersAsync(Task<IReadOnlyList<AppAdapter>> adapters) =>
         ToolRegistry.SetAdapters(await adapters.ConfigureAwait(false));

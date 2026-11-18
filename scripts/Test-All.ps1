@@ -28,6 +28,9 @@ if ($LASTEXITCODE -ne 0) { throw 'KillerMCP client checks failed.' }
 dotnet run --project (Join-Path $root 'tests\KillerMCP.Runtime.Checks\KillerMCP.Runtime.Checks.csproj') -c Release --no-build
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP runtime checks failed.' }
 
+dotnet run --project (Join-Path $root 'tests\KillerMCP.Runtime.Checks\KillerMCP.Runtime.Checks.csproj') -c Release --no-build -- --review-adapter-095
+if ($LASTEXITCODE -ne 0) { throw 'KillerMCP 0.9.5 adapter checks failed.' }
+
 foreach ($review in @('--review-child-input', '--review-positional-input', '--review-download-paths', '--review-data-moves', '--review-repair-trust', '--review-uac-consent', '--review-async', '--review-adapter-safety', '--review-notes-bridge', '--review-notes-workflows', '--review-integration-pdf', '--review-network-path', '--review-release-gaps', '--review-update-flavor')) {
     $previousPdfRoot = [Environment]::GetEnvironmentVariable('KILLERMCP_PDF_CHECK_ROOT')
     $previousAdapterRoot = [Environment]::GetEnvironmentVariable('KILLERMCP_ADAPTER_CHECK_ROOT')
@@ -62,6 +65,9 @@ if ($LASTEXITCODE -ne 0) { throw 'KillerMCP setup checks failed.' }
 
 node (Join-Path $PSScriptRoot 'Test-NativeHost.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP native host checks failed.' }
+
+node (Join-Path $root 'tests\BrowserCompanionChecks.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'KillerMCP browser companion checks failed.' }
 
 node (Join-Path $PSScriptRoot 'Test-ReviewDrivers.mjs') --root (Join-Path $ArtifactRoot 'driver-stub-checks')
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP pure Node review-driver checks failed.' }

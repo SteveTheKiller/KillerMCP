@@ -20,7 +20,7 @@
 </head>
 <body>
   <h1>KillerTools MCP Browser Companion</h1>
-  <p>Keep this page open while using the five browser tools through your local MCP server. Camera access begins only when you click Enable camera. Captured information stays on this computer.</p>
+  <p>Keep this page open while using the five browser tools through your local MCP server. Camera access begins only when you click Enable camera. The connected agent can read information you capture here and may send it to its AI provider.</p>
 
   <section>
     <h2>Device information</h2>
@@ -52,6 +52,7 @@
   <section>
     <h2>Camera recorder</h2>
     <button id="enableCamera">Enable camera</button>
+    <button id="disableCamera" disabled>Disable camera</button>
     <button id="capturePhoto" disabled>Capture photo</button>
     <button id="startRecording" disabled>Start recording</button>
     <button id="stopRecording" disabled>Stop recording</button>
@@ -68,7 +69,9 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, value }),
       });
-      if (!response.ok) throw new Error('Local MCP transfer failed');
+      if (!response.ok) throw new Error(type === 'camera'
+        ? 'The capture could not be transferred. The previous capture may still be available.'
+        : 'Local MCP transfer failed');
     }
 
     async function deviceInfo() {
@@ -169,53 +172,110 @@
     };
 
     const preview = document.querySelector('#preview');
+    const enableCamera = document.querySelector('#enableCamera');
+    const disableCamera = document.querySelector('#disableCamera');
+    const capturePhoto = document.querySelector('#capturePhoto');
+    const startRecording = document.querySelector('#startRecording');
+    const stopRecording = document.querySelector('#stopRecording');
+    const cameraStatus = document.querySelector('#cameraStatus');
+    const maximumRecordingBytes = 1_450_000;
     let stream;
     let recorder;
-    document.querySelector('#enableCamera').onclick = async () => {
+    let closing = false;
+    function disable() {
+      stream?.getTracks().forEach(track => track.stop());
+      stream = null;
+      preview.srcObject = null;
+      enableCamera.disabled = closing || recorder !== undefined;
+      disableCamera.disabled = true;
+      capturePhoto.disabled = true;
+      startRecording.disabled = true;
+      stopRecording.disabled = true;
+    }
+    enableCamera.onclick = () => report('#cameraStatus', async () => {
+      enableCamera.disabled = true;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        const opened = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        if (closing) {
+          opened.getTracks().forEach(track => track.stop());
+          return;
+        }
+        stream = opened;
         preview.srcObject = stream;
-        document.querySelector('#capturePhoto').disabled = false;
-        document.querySelector('#startRecording').disabled = !window.MediaRecorder;
-        document.querySelector('#cameraStatus').textContent = 'Camera enabled.';
+        disableCamera.disabled = false;
+        capturePhoto.disabled = false;
+        startRecording.disabled = !window.MediaRecorder;
+        cameraStatus.textContent = 'Camera enabled.';
+      } catch (error) {
+        enableCamera.disabled = closing;
+        throw error;
       }
-      catch (error) { document.querySelector('#cameraStatus').textContent = error.message; }
+    });
+    disableCamera.onclick = () => {
+      if (recorder?.state === 'recording') recorder.stop();
+      disable();
+      cameraStatus.textContent = 'Camera is off.';
     };
-    document.querySelector('#capturePhoto').onclick = async () => {
+    capturePhoto.onclick = () => report('#cameraStatus', async () => {
+      if (!preview.videoWidth) throw new Error('Wait for the camera preview before taking a photo.');
       const canvas = document.createElement('canvas');
-      canvas.width = preview.videoWidth;
-      canvas.height = preview.videoHeight;
-      canvas.getContext('2d').drawImage(preview, 0, 0);
+      const scale = Math.min(1, 1280 / Math.max(preview.videoWidth, preview.videoHeight));
+      canvas.width = Math.max(1, Math.round(preview.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(preview.videoHeight * scale));
+      canvas.getContext('2d').drawImage(preview, 0, 0, canvas.width, canvas.height);
       await send('camera', canvas.toDataURL('image/jpeg', .8));
-      document.querySelector('#cameraStatus').textContent = 'Photo is available to the local MCP server.';
-    };
-    document.querySelector('#startRecording').onclick = () => {
+      cameraStatus.textContent = 'Photo replaced the previous capture.';
+    });
+    startRecording.onclick = () => report('#cameraStatus', () => {
       const chunks = [];
-      recorder = new MediaRecorder(stream);
-      recorder.ondataavailable = event => chunks.push(event.data);
-      recorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: recorder.mimeType });
-        const reader = new FileReader();
-        reader.onload = async () => {
-          try {
-            await send('camera', reader.result);
-            document.querySelector('#cameraStatus').textContent = 'Video is available to the local MCP server.';
-          }
-          catch (error) { document.querySelector('#cameraStatus').textContent = error.message; }
-        };
-        reader.readAsDataURL(blob);
+      let bytes = 0;
+      let tooLarge = false;
+      const recording = new MediaRecorder(stream, { videoBitsPerSecond: 750_000 });
+      recording.ondataavailable = event => {
+        bytes += event.data.size;
+        if (bytes > maximumRecordingBytes) {
+          tooLarge = true;
+          if (recording.state === 'recording') recording.stop();
+        } else {
+          chunks.push(event.data);
+        }
       };
-      recorder.start();
-      document.querySelector('#startRecording').disabled = true;
-      document.querySelector('#stopRecording').disabled = false;
-      document.querySelector('#cameraStatus').textContent = 'Recording. Keep the clip short.';
+      recording.onstop = () => report('#cameraStatus', async () => {
+        try {
+          if (closing) return;
+          if (tooLarge) throw new Error('Recording exceeded the size limit. The previous capture was kept.');
+          const blob = new Blob(chunks, { type: recording.mimeType });
+          const value = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(blob);
+          });
+          await send('camera', value);
+          cameraStatus.textContent = 'Video replaced the previous capture.';
+        } finally {
+          recorder = undefined;
+          enableCamera.disabled = closing || Boolean(stream);
+          startRecording.disabled = !stream;
+          capturePhoto.disabled = !stream;
+          stopRecording.disabled = true;
+        }
+      });
+      recording.start(250);
+      recorder = recording;
+      startRecording.disabled = true;
+      capturePhoto.disabled = true;
+      stopRecording.disabled = false;
+      cameraStatus.textContent = 'Recording. Keep the clip short.';
+    });
+    stopRecording.onclick = () => {
+      stopRecording.disabled = true;
+      if (recorder?.state === 'recording') recorder.stop();
     };
-    document.querySelector('#stopRecording').onclick = () => {
-      recorder.stop();
-      document.querySelector('#startRecording').disabled = false;
-      document.querySelector('#stopRecording').disabled = true;
-    };
-    addEventListener('pagehide', () => stream?.getTracks().forEach(track => track.stop()));
+    addEventListener('pagehide', () => {
+      closing = true;
+      disable();
+    });
   </script>
 </body>
 </html>

@@ -93,7 +93,13 @@ internal static partial class BuiltInTools
             var mnemonic = OptionalNullableString(arguments, "mnemonic");
             var language = OptionalString(arguments, "language", "English");
             if (entropy is not null && mnemonic is not null) throw new ToolCallException("Provide entropy or a mnemonic, not both");
-            if (mnemonic is not null) return new { entropy = Bip39.MnemonicToEntropy(mnemonic, language), mnemonic };
+            if (mnemonic is not null)
+            {
+                var decoded = Bip39.MnemonicToEntropy(mnemonic, language);
+                if (!HasUpdatedSecurityFormats && decoded.Length != 32)
+                    throw new ToolCallException("Provide a standard 12-word BIP39 mnemonic.");
+                return new { entropy = decoded, mnemonic };
+            }
             entropy ??= Bip39.GenerateEntropy();
             return new { entropy, mnemonic = Bip39.EntropyToMnemonic(entropy, language) };
         }
@@ -295,12 +301,22 @@ internal static partial class BuiltInTools
         {
             string value = arguments.GetProperty("value").GetString()!;
             string secret = arguments.GetProperty("secret").GetString()!;
-            string algorithm = OptionalString(arguments, "algorithm", "AES");
-            string output = arguments.GetProperty("action").GetString() == "encrypt"
+            bool encrypt = arguments.GetProperty("action").GetString() == "encrypt";
+            if (encrypt && !HasUpdatedSecurityFormats)
+                throw new ToolCallException("This engine can only decrypt existing ciphertext.");
+            string algorithm = OptionalString(arguments, "algorithm", encrypt || value.StartsWith("kt1:", StringComparison.Ordinal) ? "AES-GCM" : "AES");
+            if (encrypt && algorithm != "AES-GCM")
+                throw new ToolCallException("Use AES-GCM for new ciphertext.");
+            if (encrypt && secret.Length == 0)
+                throw new ToolCallException("Provide a password to encrypt text.");
+            if (encrypt && value.Length > 8192)
+                throw new ToolCallException("Plaintext must be at most 8,192 characters.");
+            string output = encrypt
                 ? CryptoJsText.Encrypt(value, secret, algorithm)
                 : CryptoJsText.Decrypt(value, secret, algorithm);
             return new { output };
         }
+        catch (ToolCallException) { throw; }
         catch (Exception) { throw new ToolCallException("Unable to process encrypted text"); }
     }
     private static async Task<object> DnsLookup(JsonElement arguments, HttpClient? client, CancellationToken cancellationToken)

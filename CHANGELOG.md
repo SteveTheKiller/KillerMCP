@@ -10,11 +10,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Changed
 
-- `killerpdf_redact` says that hidden information is removed by default and that the call fails when a redacted word survives anywhere in the file. A new `keepHidden` option keeps that information.
+- Hidden-data removal and the `keepHidden` option require KillerPDF 1.9.5. Redaction fails when marked content requires rasterization and rasterization is disabled.
+- Explain where browser capture data goes and bound camera recordings before transfer.
+- Require standard 128-bit entropy for the host's 12-word BIP39 tool.
+- Use authenticated encryption and support all standard BIP39 lengths with the updated engine. Continue to read legacy CryptoJS ciphertext.
+
+### Fixed
+
+- Preserve client configuration during migration, bound startup requests and update responses, and avoid deleting unrelated installer files.
+- Send calendar appointment details through the local app pipe and warn before retrying an uncertain save.
+- Bundle the SQL formatter, MAC vendor data, and font notices with Windows installers.
 
 ### Added
 
-- `killerpdf_export` writes a reflowable EPUB 3 book when the output ends in `.epub`.
+- `killerpdf_export` writes a reflowable EPUB 3 book with KillerPDF 1.9.5 or later.
 
 ## [0.9.4] - 2026-11-14
 

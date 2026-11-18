@@ -14,7 +14,7 @@ Tool results do go back to the agent client you connected KillerMCP to, such as 
 
 KillerMCP contacts a service only when it checks for updates or when a tool you call needs it.
 
-- **GitHub:** KillerMCP checks the GitHub releases API for updates and downloads updates from GitHub releases. The KillerScripts and Killer modules tools read their lists from GitHub.
+- **GitHub:** KillerMCP checks the GitHub releases API for updates and downloads updates from GitHub releases. The KillerScripts tool reads its script list from GitHub. The Killer modules tool searches an embedded module catalog on your computer.
 - **Domain lookups:** DNS lookups go to Cloudflare DNS over HTTPS. Registration lookups go to IANA's RDAP bootstrap file and the public RDAP server for the domain.
 - **CVE lookups:** Your search text goes to the KillerTools NVD proxy, which queries the National Vulnerability Database.
 - **GIF search:** Your search text goes to the KillerTools GIF proxy, which queries a GIF search provider.

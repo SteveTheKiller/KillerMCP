@@ -8,6 +8,7 @@ public partial class App : Application
 {
     private const string InstanceName = @"Local\KillerMCP-UpdateWindow";
     private const string WakeName = @"Local\KillerMCP-UpdateWindow-Wake";
+    private const string HandoffLockName = @"Local\KillerMCP-UpdateWindow-Handoff";
     private const string NoticeOpenedName = @"Local\KillerMCP-UpdateNotice-Opened";
     private Mutex? _instance;
     private EventWaitHandle? _wake;
@@ -149,9 +150,13 @@ public partial class App : Application
     {
         try
         {
-            string path = HandoffPath();
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, new JavaScriptSerializer().Serialize(args) + Environment.NewLine);
+            WithHandoffLock(() =>
+            {
+                string path = HandoffPath();
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, new JavaScriptSerializer().Serialize(args) + Environment.NewLine);
+                return args;
+            });
         }
         catch { }
     }
@@ -160,12 +165,25 @@ public partial class App : Application
     {
         try
         {
-            string path = HandoffPath();
-            string[]? args = new JavaScriptSerializer().Deserialize<string[]>(File.ReadAllText(path));
-            File.Delete(path);
-            return args;
+            return WithHandoffLock(() =>
+            {
+                string path = HandoffPath();
+                if (!File.Exists(path)) return null;
+                string[]? args = new JavaScriptSerializer().Deserialize<string[]>(File.ReadAllText(path));
+                File.Delete(path);
+                return args;
+            });
         }
         catch { return null; }
+    }
+
+    private static string[]? WithHandoffLock(Func<string[]?> action)
+    {
+        using var gate = new Mutex(false, HandoffLockName);
+        try { if (!gate.WaitOne(TimeSpan.FromSeconds(2))) return null; }
+        catch (AbandonedMutexException) { }
+        try { return action(); }
+        finally { gate.ReleaseMutex(); }
     }
 
     protected override void OnExit(ExitEventArgs e)

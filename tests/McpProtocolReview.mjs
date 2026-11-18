@@ -20,7 +20,7 @@ export async function runReview(hostPath, scratchPath, mode, fixturePath) {
   await new Promise(done => server.listen(0, '127.0.0.1', done));
   const address = `http://127.0.0.1:${server.address().port}/latest`;
   let serial = 0;
-  const start = () => {
+  const start = (extraEnvironment = {}) => {
     const child = spawn(resolve(hostPath), [], { stdio: ['pipe', 'pipe', 'pipe'], env: {
       ...process.env,
       KILLERMCP_UPDATE_API: address,
@@ -29,6 +29,7 @@ export async function runReview(hostPath, scratchPath, mode, fixturePath) {
       KILLERMCP_TOOL_CALL_LOG: join(directory, 'calls.jsonl'),
       ...Object.fromEntries(['KILLERPDF', 'KILLERNOTES', 'KILLERSHELL', 'KILLERSCAN', 'KILLERSHOT', 'KILLENDAR', 'KILLERBENCH'].map(name => [name + '_CLI', missing])),
       ...(mode === 'load' ? { KILLERSHOT_CLI: resolve(fixturePath), KILLERMCP_FAKE_SHOT: '1' } : {}),
+      ...extraEnvironment,
     } });
     hosts.push(child);
     let text = '';
@@ -56,6 +57,26 @@ export async function runReview(hostPath, scratchPath, mode, fixturePath) {
   };
   try {
     const host = start();
+    if (mode === 'load' || mode === 'request-id') {
+      const pending = start({ KILLERNOTES_CLI: resolve(fixturePath), KILLERMCP_FAKE_HANG: '1' });
+      await pending.request('initialize');
+      const call = '{"jsonrpc":"2.0","id":"request","method":"tools/call","params":{"name":"killernotes_list"}}';
+      pending.send(call.replace('"request"', '"\\u0072equest"'));
+      pending.send(call);
+      assert.equal((await pending.next()).error?.code, -32600, 'Equivalent string IDs must identify the same running request.');
+      pending.send({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 'request' } });
+      console.log('PASS equivalent escaped request IDs');
+      if (mode === 'request-id') return;
+    }
+    if (mode === 'load' || mode === 'pending-catalog') {
+      const pending = start({ KILLERNOTES_CLI: resolve(fixturePath), KILLERMCP_FAKE_HANG: '1' });
+      await pending.request('initialize');
+      for (let id = 1; id <= 9; id++) pending.send({ jsonrpc: '2.0', id, method: 'tools/list' });
+      const busy = await pending.next();
+      assert.equal(busy.error?.code, -32000, 'Pending catalog requests must be bounded before app discovery completes.');
+      console.log('PASS catalog waiters bounded during discovery');
+      if (mode === 'pending-catalog') return;
+    }
     if (mode === 'load') {
       await host.request('initialize');
       const tools = await host.request('tools/list');

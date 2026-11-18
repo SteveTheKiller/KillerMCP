@@ -117,6 +117,7 @@ try
         var path = Path.Combine(root, name, "settings.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var legacyRegistration = new JsonObject { ["command"] = legacyCommand, ["args"] = new JsonArray(legacyScript) };
+        legacyRegistration["env"] = new JsonObject { ["PREFERENCE"] = "custom" };
         if (name == "CLAUDE") legacyRegistration["type"] = "stdio";
         File.WriteAllText(path, new JsonObject { ["preservedSetting"] = "keep", ["mcpServers"] = new JsonObject { ["killermcp"] = legacyRegistration } }.ToJsonString());
         environment[$"KILLERMCP_TEST_{name}_CONFIG"] = path;
@@ -130,6 +131,7 @@ try
         Equal("keep", Read(path)["preservedSetting"]!.GetValue<string>());
         var serverName = name == "CLAUDE_DESKTOP" ? "KillerMCP" : "killermcp";
         Equal(executable, Read(path)["mcpServers"]![serverName]!["command"]!.GetValue<string>());
+        Equal("custom", Read(path)["mcpServers"]![serverName]!["env"]?["PREFERENCE"]?.GetValue<string>());
         if (name == "CLAUDE_DESKTOP") Equal(false, Read(path)["mcpServers"]!.AsObject().ContainsKey("killermcp"));
     }
     Equal(7, ClientConfiguration.RemoveAll(executable, environment).Count);
@@ -305,16 +307,23 @@ try
     using (File.Open(brokenCodex, FileMode.Open, FileAccess.Read, FileShare.None))
         Equal(true, Caught<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, brokenEnvironment)).Message.Contains("Codex could not be started", StringComparison.Ordinal));
 
-    // When Codex cannot take the new connection and the old one cannot be put back either, the error says so.
+    // Failed replacement must leave the legacy connection in place.
     File.WriteAllText(codexState, new JsonObject { ["transport"] = new JsonObject { ["type"] = "stdio", ["command"] = legacyCommand, ["args"] = new JsonArray(legacyScript) } }.ToJsonString());
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_CODEX_FAIL_ADD", "1");
     try
     {
         var codexOnly = new Dictionary<string, string?>(npmEnvironment) { ["PATH"] = string.Empty, ["CODEX_CLI_PATH"] = Environment.ProcessPath };
         var lost = Caught<InvalidOperationException>(() => ClientConfiguration.RegisterAll(executable, codexOnly));
-        Equal(true, lost.Message.Contains("could not be restored", StringComparison.Ordinal) && lost.Message.Contains("codex mcp add killermcp", StringComparison.Ordinal));
+        Equal(true, lost.Message.Contains("previous", StringComparison.Ordinal));
+        Equal(legacyCommand, Read(codexState)["transport"]!["command"]!.GetValue<string>());
     }
     finally { Environment.SetEnvironmentVariable("KILLERMCP_FAKE_CODEX_FAIL_ADD", null); }
+    var customCodex = Read(codexState);
+    customCodex["transport"]!["env"] = new JsonObject { ["PREFERENCE"] = "custom" };
+    File.WriteAllText(codexState, customCodex.ToJsonString());
+    var manual = ClientConfiguration.RegisterAll(executable, new Dictionary<string, string?>(npmEnvironment) { ["PATH"] = "", ["CODEX_CLI_PATH"] = Environment.ProcessPath });
+    Equal(true, manual.Any(message => message.Contains("manually", StringComparison.Ordinal)));
+    Equal(customCodex.ToJsonString(), File.ReadAllText(codexState));
     Console.WriteLine("PASS native KillerMCP client registration");
 
     // Setup and the update window install an update only when it is signed by the KillerMCP publisher.
@@ -349,9 +358,9 @@ try
     // are removed before the next download; other files are left alone.
     var downloads = Path.Combine(root, "downloads");
     Directory.CreateDirectory(downloads);
-    var oldDownload = Path.Combine(downloads, "KillerMCP-Setup-0.6.0-old.exe");
+    var oldDownload = KillerMCP.Updates.DownloadedSetups.NewPath(downloads, "0.6.0");
     var recentDownload = Path.Combine(downloads, "KillerMCP-Setup-0.6.1-recent.exe");
-    var otherFile = Path.Combine(downloads, "KillerMCP-Setup.exe");
+    var otherFile = Path.Combine(downloads, "KillerMCP-Setup-manual-backup.exe");
     foreach (var file in new[] { oldDownload, recentDownload, otherFile }) File.WriteAllText(file, "fixture");
     File.SetLastWriteTimeUtc(oldDownload, DateTime.UtcNow.AddDays(-2));
     File.SetLastWriteTimeUtc(otherFile, DateTime.UtcNow.AddDays(-2));
