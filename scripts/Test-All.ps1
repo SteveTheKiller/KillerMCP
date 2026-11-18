@@ -31,7 +31,7 @@ if ($LASTEXITCODE -ne 0) { throw 'KillerMCP runtime checks failed.' }
 dotnet run --project (Join-Path $root 'tests\KillerMCP.Runtime.Checks\KillerMCP.Runtime.Checks.csproj') -c Release --no-build -- --review-adapter-095
 if ($LASTEXITCODE -ne 0) { throw 'KillerMCP 0.9.5 adapter checks failed.' }
 
-foreach ($review in @('--review-child-input', '--review-positional-input', '--review-download-paths', '--review-data-moves', '--review-repair-trust', '--review-uac-consent', '--review-async', '--review-adapter-safety', '--review-notes-bridge', '--review-notes-workflows', '--review-integration-pdf', '--review-network-path', '--review-release-gaps', '--review-update-flavor')) {
+foreach ($review in @('--review-child-input', '--review-positional-input', '--review-download-paths', '--review-data-moves', '--review-repair-trust', '--review-uac-consent', '--review-async', '--review-adapter-safety', '--review-notes-bridge', '--review-notes-workflows', '--review-integration-pdf', '--review-network-path', '--review-release-gaps', '--review-update-flavor', '--review-open-questions')) {
     $previousPdfRoot = [Environment]::GetEnvironmentVariable('KILLERMCP_PDF_CHECK_ROOT')
     $previousAdapterRoot = [Environment]::GetEnvironmentVariable('KILLERMCP_ADAPTER_CHECK_ROOT')
     $previousTemp = [Environment]::GetEnvironmentVariable('TEMP')
