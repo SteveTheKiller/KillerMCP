@@ -31,7 +31,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Changed
 
-- The Chocolatey package installs per user and refuses to run from an elevated shell.
+- The Chocolatey package installs per user, and from an elevated shell it runs setup as the signed-in account's standard token.
 - Hidden-data removal and the `keepHidden` option require KillerPDF 1.9.5. Redaction fails when marked content requires rasterization and rasterization is disabled.
 - Explain where browser capture data goes and bound camera recordings before transfer.
 - Require standard 128-bit entropy for the host's 12-word BIP39 tool.

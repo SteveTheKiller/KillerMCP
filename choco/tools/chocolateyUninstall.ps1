@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $toolsDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+. (Join-Path $toolsDir 'Invoke-KillerMcpSetup.ps1')
 
 # Uninstall runs only the setup copy this package downloaded and checked, never a path from the user's
 # registry entry, which any program running as that user could point somewhere else.
@@ -12,6 +13,6 @@ if ($hash -ne 'REPLACE_HASH') { throw "The KillerMCP setup copy in $toolsDir cha
 $signature = Get-AuthenticodeSignature -LiteralPath $setup
 if ($signature.Status -ne 'Valid') { throw "The KillerMCP setup copy in $toolsDir is not validly signed ($($signature.Status)), so it was not run." }
 
-$process = Start-Process -FilePath $setup -ArgumentList '/silent', '/uninstall' -Wait -PassThru
-if ($process.ExitCode -eq 11) { throw 'KillerMCP setup refuses to run as administrator. Run KillerMCP-Setup.exe /uninstall from your normal, non-elevated account.' }
-if ($process.ExitCode -ne 0) { throw "KillerMCP uninstall failed with exit code $($process.ExitCode)." }
+# Setup runs as the signed-in account's standard token, even when Chocolatey itself is elevated.
+$exitCode = Invoke-KillerMcpSetup -Setup $setup -Arguments '/silent', '/uninstall'
+if ($exitCode -ne 0) { throw "KillerMCP uninstall failed with exit code $exitCode." }

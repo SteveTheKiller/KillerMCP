@@ -27,7 +27,7 @@
 - Labeled tool effects and a local tool call log that never records arguments or results
 - Signed updates that must match the published SHA256 and pass Windows signature verification
 - Installs for the current user and requires the .NET 10 Desktop Runtime
-- Refuses to install as administrator, so run Chocolatey from a normal, non-elevated shell set up for non-admin installs
+- Runs its setup as your standard account even from an elevated shell, so agent settings are never written with administrator rights
 - GPLv3, local-only, no account, no telemetry
     </description>
     <releaseNotes>https://github.com/SteveTheKiller/KillerMCP/releases/tag/vREPLACE_VERSION</releaseNotes>

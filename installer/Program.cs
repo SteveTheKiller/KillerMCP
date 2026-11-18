@@ -114,7 +114,7 @@ namespace KillerMCP.Setup
         // steer it, so it stops and says how to run it instead. An isolated test install writes only under
         // its temporary test folder and is allowed.
         internal static string? ElevationRefusal(bool elevated, bool isolated) => elevated && !isolated
-            ? "KillerMCP installs for your Windows account only, so setup does not run as administrator. Start KillerMCP-Setup.exe normally, without Run as administrator. Package managers that always run installers as administrator, such as Chocolatey, cannot install or remove KillerMCP; use the setup from GitHub, winget or the Microsoft Store instead."
+            ? "KillerMCP installs for your Windows account only, so setup does not run as administrator. Start KillerMCP-Setup.exe normally, without Run as administrator. The Chocolatey package handles this for you by running setup as your standard account."
             : null;
 
         internal static bool IsElevated()
