@@ -10,7 +10,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
-- Setup refuses only the SYSTEM account now. An administrator install still lands in that user's own profile, and the 0.9.5 refusal made WinGet's install validation fail with exit code 11.
+- Setup refuses only the SYSTEM account now. The 0.9.5 refusal of every administrator token made WinGet's install validation fail with exit code 11.
+
+### Security
+
+- An elevated administrator run installs the program files but no longer configures agent clients, because that step writes settings through links and starts agent CLIs from the account's PATH. Setup warns and asks for a normal run to connect clients. Chocolatey still de-elevates and connects them as before.
 
 ## [0.9.5] - 2026-11-18
 

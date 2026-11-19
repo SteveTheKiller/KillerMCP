@@ -34,6 +34,13 @@ internal static class InstallerLifecycleReviewChecks
         if (Invoke("ElevationRefusal", false, false) is not null || Invoke("ElevationRefusal", true, true) is not null)
             throw new InvalidOperationException("Setup refused an ordinary or isolated test run.");
         Console.WriteLine("PASS setup run as SYSTEM refuses and explains (3 selected regressions)");
+        if (Invoke("ElevatedConfigurationWarning", true, false, "register") is not string skipRegister || !skipRegister.StartsWith("Warning: ", StringComparison.Ordinal) || skipRegister.IndexOf("not connected", StringComparison.Ordinal) < 0)
+            throw new InvalidOperationException("An elevated install configured agent clients instead of skipping them with a warning.");
+        if (Invoke("ElevatedConfigurationWarning", true, false, "unregister") is not string skipUnregister || !skipUnregister.StartsWith("Warning: ", StringComparison.Ordinal) || skipUnregister.IndexOf("still list KillerMCP", StringComparison.Ordinal) < 0)
+            throw new InvalidOperationException("An elevated uninstall updated agent clients instead of skipping them with a warning.");
+        if (Invoke("ElevatedConfigurationWarning", false, false, "register") is not null || Invoke("ElevatedConfigurationWarning", true, true, "register") is not null)
+            throw new InvalidOperationException("Setup skipped client configuration for an ordinary or isolated test run.");
+        Console.WriteLine("PASS elevated setup installs files but leaves agent clients for a normal run (4 selected regressions)");
         try { Invoke("EnsureVersionAllowed", "2.0.0", "1.0.0", false); throw new InvalidOperationException("Silent downgrade was allowed."); }
         catch (System.Security.SecurityException) { }
         Invoke("EnsureVersionAllowed", "2.0.0", "1.0.0", true);

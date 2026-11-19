@@ -109,10 +109,12 @@ namespace KillerMCP.Setup
 
         internal const int ElevatedExitCode = 11;
 
-        // KillerMCP installs for one account. An elevated run by a real user still installs into that same
-        // user's own profile, so it is allowed (WinGet validation and admin users run setup this way). Run as
-        // SYSTEM, setup would install into the system profile for no person at all, so it stops and says how
-        // to run it instead. An isolated test install writes only under its temporary test folder and is allowed.
+        // KillerMCP installs for one account. Run as SYSTEM, setup would install into the system profile for
+        // no person at all, so it stops and says how to run it instead. An elevated administrator run is
+        // allowed, because WinGet validation and admin shells start setup that way. It installs into the
+        // profile of the account that owns the elevated token, which is a different administrator when a
+        // standard user typed that administrator's credentials at the UAC prompt. An isolated test install
+        // writes only under its temporary test folder and is allowed.
         internal static string? ElevationRefusal(bool system, bool isolated) => system && !isolated
             ? "KillerMCP installs for your Windows account only, so setup does not run as the SYSTEM account. Start KillerMCP-Setup.exe from your own Windows account. The Chocolatey package handles this for you by running setup as your standard account."
             : null;
@@ -122,6 +124,23 @@ namespace KillerMCP.Setup
             using (var identity = System.Security.Principal.WindowsIdentity.GetCurrent())
                 return identity.IsSystem;
         }
+
+        internal static bool IsAdministrator()
+        {
+            using (var identity = System.Security.Principal.WindowsIdentity.GetCurrent())
+                return new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+
+        // Client configuration writes the account's agent settings, following links to their targets, and
+        // starts agent CLIs found on the account's PATH. Anything a standard process in that profile can plant
+        // would then run or be written with an administrator token. An elevated run therefore installs the
+        // program files only and leaves client configuration for a normal run. The warning reaches the
+        // console, the wizard and the uninstall report like any other client warning.
+        internal static string? ElevatedConfigurationWarning(bool administrator, bool isolated, string action) => administrator && !isolated
+            ? action == "unregister"
+                ? "Warning: Setup ran as administrator, so agent clients were not updated and still list KillerMCP. Remove the killermcp entry from their MCP settings, or install and uninstall again without Run as administrator."
+                : "Warning: Setup ran as administrator, so agent clients were not connected. Run KillerMCP-Setup.exe again without Run as administrator to connect them."
+            : null;
 
         internal static bool RuntimeReady(bool isolated) => IsStorePackage || HasRuntime10(isolated);
 
@@ -292,6 +311,7 @@ namespace KillerMCP.Setup
 
         private static string Configure(string destination, string action)
         {
+            if (ElevatedConfigurationWarning(IsAdministrator(), TestRoot() is not null, action) is { } skipped) return skipped;
             string executable = Path.Combine(destination, "KillerMCP.exe");
             string configurator = Path.Combine(destination, "KillerMCP.Configure.exe");
             var start = new ProcessStartInfo(configurator)

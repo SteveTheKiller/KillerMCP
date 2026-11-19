@@ -1,6 +1,6 @@
-# KillerMCP installs for one Windows account, and its setup refuses an administrator token because an elevated
-# install could write agent client settings through links a standard user planted. Chocolatey runs elevated by
-# default, so an elevated run hands the verified setup copy to a one-time scheduled task that runs as the same
+# KillerMCP installs for one Windows account. Run with an administrator token, setup installs the program files
+# but skips agent client configuration, because that step could write settings through links a standard user
+# planted. Chocolatey runs elevated by default, so to get a fully connected install an elevated run hands the verified setup copy to a one-time scheduled task that runs as the same
 # signed-in account with its standard (Limited) token, then waits for it and returns setup's exit code.
 function Invoke-KillerMcpSetup {
     param(
