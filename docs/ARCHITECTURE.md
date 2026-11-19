@@ -59,3 +59,9 @@ Build `KillerMCP.slnx` from the root. This builds the host, configuration helper
 Packaging, installer checks and `release.ps1` share `-ArtifactRoot`, defaulting to `scratch/KillerMCP-packaging` under the current user's home directory. Packages, staging, installers, checksums and release notes stay there. Output inside a Git repository is rejected. Existing `-Installer` inputs remain supported for testing an exact package.
 
 Run the client and runtime check projects plus `scripts/Test-NativeHost.mjs` to verify registration, integrations and MCP behavior. `scripts/Test-NativePackage.ps1` verifies the published executables. Installer and update integration checks belong in the disposable Windows lab.
+
+The full suite runs in that lab with `powershell -NoProfile -File scripts\Test-All.ps1 -LabMachine <lab name>`. It first requires a passed GitHub Checks run for the exact commit, so push the reviewed commit and let Checks finish before starting it. The maintained [fuzz and data-move drivers](../scripts/review/README.md) take an explicit candidate host, scratch root and seed.
+
+For development builds or custom app locations, set `KILLERPDF_CLI`, `KILLERSCAN_CLI`, `KILLERNOTES_CLI`, `KILLENDAR_CLI`, `KILLERSHELL_CLI`, `KILLERBENCH_CLI`, or `KILLERSHOT_CLI` to an absolute executable path. An invalid override leaves that app unavailable instead of silently selecting another copy.
+
+`release.ps1` builds, signs, verifies, publishes to GitHub and submits to the Microsoft Store. `-DryRun` builds and signs without publishing, and `-SkipSign` produces an unsigned local build that never publishes.

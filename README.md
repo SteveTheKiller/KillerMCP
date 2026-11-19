@@ -5,108 +5,46 @@
 
 One local MCP connection for KillerTools and the Killer app family: KillerPDF, KillerNotes, KillerScan, KillerShell, Killendar, KillerBench, and KillerShot.
 
-KillerMCP is a native .NET 10 host. It detects supported Killer apps, exposes their available commands, and registers one MCP server with compatible agent clients. The separate [KillerTools repository](https://github.com/SteveTheKiller/KillerTools) provides the shared engine for the website utilities.
+KillerMCP detects the Killer apps you have installed, exposes the commands each version supports, and registers one MCP server with your agent clients.
 
 ## Install
 
-[Download the signed KillerMCP installer](https://github.com/SteveTheKiller/KillerMCP/releases/latest/download/KillerMCP-Setup.exe), run setup, then open a new agent chat. Setup checks for the .NET 10 runtime and registers KillerMCP with Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when those clients are found.
-
-You can also install it with WinGet or Chocolatey. Both install the .NET 10 Desktop Runtime for you when it is missing. The Microsoft Store version carries its own .NET runtime, so it needs nothing installed first.
+[Download the signed installer](https://github.com/SteveTheKiller/KillerMCP/releases/latest/download/KillerMCP-Setup.exe), or install it with WinGet or Chocolatey:
 
 ```powershell
 winget install killermcp
 choco install killermcp
 ```
 
-Fully quit and reopen an agent client after setup or upgrade, then start a new chat. In Claude Desktop, KillerMCP appears under Settings > Developer as a running local server and under Connectors as a desktop connector. Cowork can use that local connection without a separate plugin.
+Setup registers KillerMCP with Codex, Claude Code, Claude Desktop, Cursor, GitHub Copilot, Gemini CLI, and Windsurf when it finds them. It needs the .NET 10 Desktop Runtime, which WinGet and Chocolatey install for you and the Microsoft Store version carries itself. Quit and reopen your agent client afterward, then start a new chat.
 
-Once connected, ask naturally:
-
-- `killer domain search example.com`
-- `killer merge these PDFs`
-- `killerscan my network`
-- `killer update status`
-
-The server supplies tool descriptions and instructions that help the client select the appropriate tool. Client behavior varies, so these phrases are guidance rather than guaranteed commands.
-
-KillerMCP checks GitHub Releases hourly and shows a Black/Fuchsia update window when a newer version is available. Choose whether future updates should stay off, check and ask, download and ask, or install automatically. Every downloaded installer must match the published SHA256 and pass Windows signature verification before it can run.
+KillerMCP checks GitHub Releases hourly and can stay off, ask, download and ask, or install updates automatically. Every update must match its published SHA256 and pass Windows signature verification before it runs.
 
 ## What it includes
 
-- All 81 KillerTools website utilities from the native KillerTools engine.
-- Automatic tool discovery for supported versions of KillerPDF, KillerScan, KillerNotes, KillerShell, Killendar, KillerBench, and KillerShot.
-- Ordinary text saving to new UTF-8 files in Downloads without converting it to Base64.
-- Client registrations preserved during native KillerMCP updates.
-- Install, reinstall, repair, and uninstall behavior through the KillerUI styled Windows setup.
-- A framework dependent native package for each supported operating system and processor architecture.
+| App | Tools |
+| --- | --- |
+| KillerTools | All 81 website utilities from the native KillerTools engine |
+| KillerPDF | Editing, conversion, inspection, OCR, printing, redaction and accessibility checks |
+| KillerScan | Network details, scans, host probes, MAC vendor lookup, ping, route tracing, diagnostics and speed tests |
+| KillerShell | Read-only file browsing, hashing, processes, services, event logs, registry and storage reports |
+| KillerNotes | Search, read, create, edit, organize, tag, import images, history and export |
+| Killendar | Agenda lookup and single appointments while the app is open and unlocked |
+| KillerShot | Screenshots, MP4 and GIF recording, OCR, QR reading and image edits |
+| KillerBench | Windows code lookups, diagnostic scans and guarded repairs that need UAC approval |
+| Cross-app | Export notes, scan reports, agendas and folder listings to PDF, or save reports as notes |
 
-KillerPDF provides PDF editing, conversion, inspection, OCR, printing, and accessibility tools when the installed version advertises them. KillerScan provides local network details, bounded scans, host probes, offline MAC vendor lookup, ping, route tracing, diagnostics, availability watching, and KillerSpeed tests. KillerShell provides read-only file browsing, text reading, file hashing, process and service listings with optional detail and filter, event log reading, registry inspection, drive information, and a folder size report with KillerShell 1.5.1 or newer. KillerNotes can search, read, create, edit, organize, color, import images, inspect links and history, and export notes. Killendar provides agenda lookup and creates single appointments while its window is open and unlocked.
-
-KillerShot takes screenshots, records MP4 or GIF, lists monitors, windows and recent captures, and opens images in its editor. Version 1.1.1 or newer also provides local OCR and QR reading, image edits into new files, recording controls, and capture-library search when its command line advertises them. PDF optimization's signature-invalidation option requires KillerPDF 1.9.1 or newer, and EPUB and DjVu book conversion requires KillerPDF 1.9.3 or newer, so MCP can be updated before PDF.
-
-KillerBench provides offline Windows code lookups, read-only checks and full diagnostic scans. It can also preview and run a fixed list of guarded Windows repairs. Repairs are off until you turn them on in the KillerMCP section of the KillerBench About window. Every repair needs a fresh preview and Windows administrator approval through UAC. Disruptive repairs, the first repair in each host session, and repairs after a setting change also show a window explaining the repair before Windows asks for approval. Windows Hello is not required. See [KillerBench](docs/CAPABILITIES.md#killerbench) for the full list and safeguards.
-
-Cross app workflows can export a KillerNotes note, KillerScan network report, Killendar agenda, or KillerShell directory listing to PDF. They can also save scan, agenda, and directory reports as notes, or render selected KillerPDF pages into image notes.
-
-Notes and Calendar versions advertising active-app pipe support can read encrypted data after you open and unlock the app. Newer Notes capabilities also expose templates, trash and version reads, restoration, pinning and tag organization. Tools appear only when the installed app advertises them.
-
-See [What KillerMCP can do](docs/CAPABILITIES.md) for the complete tool guide, examples, limits, and data handling details.
-
-For tool permissions and invocation logging, see [Tool permissions and visibility](docs/CAPABILITIES.md#tool-permissions-and-visibility) and [Tool call history](docs/CAPABILITIES.md#tool-call-history).
+Tools only appear when the installed app version advertises them. See [What KillerMCP can do](docs/CAPABILITIES.md) for the full tool guide, version requirements, limits, permissions and data handling.
 
 ## Build from source
-
-Clone this repository with its pinned KillerTools engine source:
 
 ```powershell
 git clone --recurse-submodules https://github.com/SteveTheKiller/KillerMCP.git
 cd KillerMCP
-```
-
-Open `KillerMCP.slnx` at the repository root. The main app project, `KillerMCP.csproj`, includes the repository's source, assets, scripts, tests and documentation in Solution Explorer.
-
-| Folder | Contents |
-| --- | --- |
-| `Features` | Tools, browser companion, app integrations and cross-app workflows |
-| `Services` | MCP requests, app discovery, processes, logging, safety and updates |
-| `Models` | Tool contracts and request errors |
-| `Configuration` | Client registration and the `KillerMCP.Configure` command-line helper |
-| `Shell` | Windows tray, update window and repair confirmation |
-| `installer` | Windows setup and uninstall |
-| `dependencies/KillerTools` | Pinned source for the shared KillerTools engine |
-
-See [Architecture](docs/ARCHITECTURE.md) for the project and request flow. To add the app to an existing Visual Studio solution, add `KillerMCP.csproj` and `dependencies/KillerTools/src/KillerTools.Engine/KillerTools.Engine.csproj`. Visual Studio needs the referenced engine project loaded for package restore.
-
-Build and test the native host in a disposable lab named `LAB-VM` (substitute the lab's actual name):
-
-```powershell
 dotnet build KillerMCP.slnx -c Release
-powershell -NoProfile -File scripts\Test-All.ps1 -LabMachine LAB-VM
 ```
 
-Before release, push the reviewed commit and let its GitHub Checks finish. `Test-All.ps1` verifies that the latest Checks run for that exact commit passed before starting local acceptance. It refuses missing, running, failed or canceled runs, including a newer failure after an older success. GitHub CLI access is required. The release script does not repeat this workflow check or the full test suite.
-
-Build a framework dependent package for the current platform:
-
-```powershell
-powershell -NoProfile -File scripts\Test-NativePackage.ps1
-```
-
-Build and test the Windows installer:
-
-```powershell
-powershell -NoProfile -File scripts\Test-WindowsInstaller.ps1
-```
-
-Run app, installer and desktop acceptance in a disposable Windows lab. The maintained [fuzz and data-move drivers](scripts/review/README.md) take an explicit candidate host, scratch root and seed; app-writing scenarios require the lab mutation gate.
-
-The native host requires the .NET 10 runtime. The Windows installer checks for it before installation and links to the official Microsoft download when it is missing.
-
-For development builds or custom app locations, set `KILLERPDF_CLI`, `KILLERSCAN_CLI`, `KILLERNOTES_CLI`, `KILLENDAR_CLI`, `KILLERSHELL_CLI`, `KILLERBENCH_CLI`, or `KILLERSHOT_CLI` to an absolute executable path. An invalid override leaves that app unavailable instead of silently selecting another copy.
-
-Run `powershell -NoProfile -File release.ps1` to build, sign, verify, publish to GitHub, and submit to Microsoft Store. The reviewed source must be on `origin/main` and the changelog entry must be dated for release. Run `scripts\Test-All.ps1` separately for the full regression and installer suites. Use `-DryRun` to build and sign without tagging, publishing, or submitting to the Store. `-SkipSign` produces an unsigned local test build and never publishes or contacts the Store.
-
-Public installers are published through [KillerMCP releases](https://github.com/SteveTheKiller/KillerMCP/releases).
+See [Architecture](docs/ARCHITECTURE.md) for the project layout, test suites and release process.
 
 ## License
 
