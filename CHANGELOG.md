@@ -40,6 +40,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 ### Added
 
 - `killerpdf_export` writes a reflowable EPUB 3 book with KillerPDF 1.9.5 or later.
+- `killerpdf_pdfua` checks a PDF against PDF/UA-1, or PDF/UA-2 when the file declares it, with KillerPDF 1.9.5 or later.
 
 ## [0.9.4] - 2026-11-14
 

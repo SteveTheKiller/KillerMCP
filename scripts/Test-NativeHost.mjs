@@ -223,7 +223,7 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killerpdf_export_form_data', 'killerpdf_import_form_data', 'killerpdf_xfa_to_acroform',
   'killerpdf_flatten_forms', 'killerpdf_run_macro', 'killerpdf_list_macros', 'killerpdf_sign',
   'killerpdf_scan', 'killerpdf_list_scanners', 'killerpdf_images_to_pdf',
-  'killerpdf_preflight', 'killerpdf_accessibility', 'killerpdf_verify_install',
+  'killerpdf_preflight', 'killerpdf_accessibility', 'killerpdf_pdfua', 'killerpdf_verify_install',
   'killerbench_code_lookup', 'killerbench_diagnostic_scopes', 'killerbench_check', 'killerbench_scan',
   'killerbench_job', 'killerbench_repair_actions', 'killerbench_repair_preview', 'killerbench_repair_execute',
   'killerbench_repair_recover', 'killerbench_save_scan_note',

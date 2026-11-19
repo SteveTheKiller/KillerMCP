@@ -8,7 +8,7 @@ internal static class ToolSafety
         "killernotes_tags", "killernotes_backlinks", "killernotes_links", "killernotes_history",
         "killernotes_stats", "killendar_agenda", "killerscan_local_network", "killerscan_list_locations",
         "killerscan_mac_vendor", "killerpdf_document_info", "killerpdf_search_text",
-        "killerpdf_preflight", "killerpdf_accessibility", "killerpdf_verify_install",
+        "killerpdf_preflight", "killerpdf_accessibility", "killerpdf_pdfua", "killerpdf_verify_install",
         "killerpdf_print_production", "killerpdf_signatures", "killerpdf_layers", "killerpdf_portfolio",
         "killerpdf_comments", "killerpdf_navigation_audit", "killerpdf_measurements", "killerpdf_separations",
         "killerpdf_compare_structure", "killerpdf_list_attachments", "killerpdf_recognize_fields",
