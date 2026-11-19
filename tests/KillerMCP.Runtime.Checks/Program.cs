@@ -855,7 +855,7 @@ try
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF", "1");
     Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION", "1.9.5");
     var pdfAdapters = await KillerPdfAdapter.CreateAsync(Environment.ProcessPath);
-    Equal(71, pdfAdapters.Count);
+    Equal(72, pdfAdapters.Count);
     var pdfByName = pdfAdapters.ToDictionary(item => item.Tool.Name);
     var sourceOne = Path.Combine(root, "source-one.pdf");
     var sourceTwo = Path.Combine(root, "source-two.pdf");
@@ -936,8 +936,15 @@ try
             Equal(true, (await olderTool.CallAsync(olderRequest.RootElement, CancellationToken.None)).IsError);
             Equal(false, File.Exists(argumentsLog));
         }
+        // KillerPDF 1.9.4 has no --pdfua, redaction or EPUB export, so those stay hidden even when the help lists them.
+        Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION", "1.9.4");
+        var release194 = (await KillerPdfAdapter.CreateAsync(Environment.ProcessPath)).ToDictionary(item => item.Tool.Name);
+        Equal(false, release194.ContainsKey("killerpdf_pdfua") || release194.ContainsKey("killerpdf_redact"));
+        Equal(false, release194["killerpdf_export"].Tool.Description.Contains("EPUB", StringComparison.OrdinalIgnoreCase));
+        Equal(true, release194.ContainsKey("killerpdf_accessibility"));
         // A version KillerMCP cannot read counts as older.
         Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION", "unknown");
+        Equal(false, (await KillerPdfAdapter.CreateAsync(Environment.ProcessPath)).Any(item => item.Tool.Name == "killerpdf_pdfua"));
         Equal(false, (await KillerPdfAdapter.CreateAsync(Environment.ProcessPath)).First(item => item.Tool.Name == "killerpdf_decrypt").Tool.InputSchema["properties"]!.AsObject().ContainsKey("password"));
         Environment.SetEnvironmentVariable("KILLERMCP_FAKE_PDF_VERSION", "1.8.91");
         using var olderPlain = JsonDocument.Parse(JsonSerializer.Serialize(new { path = sourceOne, output = Path.Combine(root, "older-plain.pdf") }));

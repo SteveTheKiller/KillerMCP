@@ -57,7 +57,9 @@ public static partial class KillerPdfAdapter
         }
         AddReport(help, path!, adapters, "--preflight", "killerpdf_preflight", "Check a local PDF with KillerPDF preflight and return findings without changing the file.", PreflightSchema());
         AddReport(help, path!, adapters, "--accessibility", "killerpdf_accessibility", "Check a local PDF for accessibility findings using KillerPDF without changing the file.", Schema(new JsonObject { ["path"] = PdfPath() }, "path"));
-        AddReport(help, path!, adapters, "--pdfua", "killerpdf_pdfua", "Check a local PDF against PDF/UA-1 (Matterhorn checkpoints), or PDF/UA-2 when the file declares part 2, using KillerPDF without changing the file.", Schema(new JsonObject { ["path"] = PdfPath() }, "path"));
+        // --pdfua is new in KillerPDF 1.9.5; an older or unreadable version never gets the tool, whatever its help says.
+        if (installedVersion is not null && installedVersion >= new Version(1, 9, 5))
+            AddReport(help, path!, adapters, "--pdfua", "killerpdf_pdfua", "Check a local PDF against PDF/UA-1 (Matterhorn checkpoints), or PDF/UA-2 when the file declares part 2, using KillerPDF without changing the file.", Schema(new JsonObject { ["path"] = PdfPath() }, "path"));
         if (KillerPdfCapabilities.Supports(help.StandardOutput, "--verify | /verify")) adapters.Add(new AppAdapter(VerifyTool(), (input, token) => Verify(path!, input, token)));
         return adapters;
     }
