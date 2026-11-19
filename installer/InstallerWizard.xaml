@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="clr-namespace:KillerMCP.Setup"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="KillerMCP Setup" Width="650" Height="390" WindowStartupLocation="CenterScreen"
+        Title="KillerMCP Setup" Width="650" MinHeight="390" SizeToContent="Height" WindowStartupLocation="CenterScreen"
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
         FontFamily="./Assets/#Killer Sans UI, Segoe UI" Foreground="{DynamicResource TextBrush}" TextOptions.TextFormattingMode="Display"
         TextOptions.TextRenderingMode="ClearType" UseLayoutRounding="True" SnapsToDevicePixels="True">

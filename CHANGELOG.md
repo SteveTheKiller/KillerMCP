@@ -25,6 +25,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 ### Fixed
 
 - Skip one client whose settings cannot be read instead of failing setup.
+- Setup grows to fit the .NET runtime notice. The Update behavior dropdown used to be cut off when the runtime was missing.
 - Preserve client configuration during migration, bound startup requests and update responses, and avoid deleting unrelated installer files.
 - Send calendar appointment details through the local app pipe and warn before retrying an uncertain save.
 - Bundle the SQL formatter, MAC vendor data, and font notices with Windows installers.

@@ -25,12 +25,25 @@ try {
     $wizard.WindowStartupLocation = 'Manual'
     $wizard.Left = -10000
     $wizard.Top = -10000
+    # The missing-runtime notice and download link are the tallest state; the window must grow to fit them (reported at 125% on 2560x1440).
+    $wizard.FindName('RuntimeStatus').Text = '.NET 10 runtime required before installation'
+    $wizard.FindName('RuntimeStatus').Visibility = 'Visible'
+    $wizard.FindName('RuntimeLink').Visibility = 'Visible'
     $wizard.Show()
-    $wizard.Measure([Windows.Size]::new($wizard.Width, $wizard.Height))
-    $wizard.Arrange([Windows.Rect]::new(0, 0, $wizard.Width, $wizard.Height))
     $wizard.UpdateLayout()
+    $panel = $wizard.FindName('Status').Parent
+    foreach ($name in 'UpdateBehaviorBox', 'Status', 'InstallButton') {
+        $element = $wizard.FindName($name)
+        $bottom = $element.TransformToAncestor($panel).Transform([Windows.Point]::new(0, $element.ActualHeight)).Y
+        if ($bottom -gt $panel.ActualHeight + 0.5) { throw "$name is cut off: bottom $bottom, panel $($panel.ActualHeight)." }
+    }
+    # The dropdown sits in a star row, so a short window crops it under the status line instead of shrinking it.
+    $status = $wizard.FindName('Status')
+    $boxBottom = $box.TransformToAncestor($panel).Transform([Windows.Point]::new(0, $box.ActualHeight)).Y
+    $statusTop = $status.TransformToAncestor($panel).Transform([Windows.Point]::new(0, 0)).Y - $status.Margin.Top
+    if ($boxBottom -gt $statusTop + 0.5) { throw "Update behavior dropdown is cut off: bottom $boxBottom, row ends at $statusTop." }
     if ($RenderPath) {
-        $bitmap = [Windows.Media.Imaging.RenderTargetBitmap]::new([int]$wizard.Width, [int]$wizard.Height, 96, 96, [Windows.Media.PixelFormats]::Pbgra32)
+        $bitmap = [Windows.Media.Imaging.RenderTargetBitmap]::new([int]$wizard.ActualWidth, [int]$wizard.ActualHeight, 96, 96, [Windows.Media.PixelFormats]::Pbgra32)
         $bitmap.Render($wizard)
         $encoder = [Windows.Media.Imaging.PngBitmapEncoder]::new()
         $encoder.Frames.Add([Windows.Media.Imaging.BitmapFrame]::Create($bitmap))
@@ -49,5 +62,5 @@ try {
         try { $encoder.Save($stream) } finally { $stream.Dispose() }
         $box.IsDropDownOpen = $false
     }
-    Write-Output "PASS: installer offers four notifier choices, selects $Expected, and exposes its accessible name."
+    Write-Output "PASS: installer offers four notifier choices, selects $Expected, exposes its accessible name, and fits the runtime notice without clipping ($([int]$wizard.ActualHeight) px tall)."
 } finally { $wizard.Close(); $app.Shutdown() }
