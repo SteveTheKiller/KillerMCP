@@ -50,8 +50,9 @@ if ($SignTool) {
     # The Store package ships its libraries as loose files instead of inside one program, so every library
     # that arrives unsigned gets the same signature. The .NET runtime files already carry Microsoft's.
     if ($SelfContained) {
-        $programs += Get-ChildItem -LiteralPath $staging -File -Recurse -Include '*.dll', '*.exe' |
-            Where-Object { $programs -notcontains $_.FullName -and (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status -ne 'Valid' } |
+        # Windows PowerShell's -Include with -LiteralPath lets other files such as *.deps.json through, so match the extension.
+        $programs += Get-ChildItem -LiteralPath $staging -File -Recurse |
+            Where-Object { @('.dll', '.exe') -contains $_.Extension.ToLowerInvariant() -and $programs -notcontains $_.FullName -and (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status -ne 'Valid' } |
             ForEach-Object FullName
     }
     & (Join-Path $PSScriptRoot 'Sign-KillerFiles.ps1') -SignTool $SignTool -CertThumbprint $CertThumbprint -CertName $CertName -Path $programs
