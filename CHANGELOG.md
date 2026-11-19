@@ -4,7 +4,7 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.5] - Unreleased
+## [0.9.5] - 2026-11-18
 
 0.9.5 catches the KillerPDF tools up with KillerPDF 1.9.5 and closes the findings from a full security review of the host, setup and release pipeline.
 
@@ -24,16 +24,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Fixed
 
-- Skip one client whose settings cannot be read instead of failing setup.
 - Setup grows to fit the .NET runtime notice. The Update behavior dropdown used to be cut off when the runtime was missing.
 - Preserve client configuration during migration, bound startup requests and update responses, and avoid deleting unrelated installer files.
 - Send calendar appointment details through the local app pipe and warn before retrying an uncertain save.
+- Skip one client whose settings cannot be read instead of failing setup.
 - Bundle the SQL formatter, MAC vendor data, and font notices with Windows installers.
 
 ### Changed
 
-- The Chocolatey package installs per user, and from an elevated shell it runs setup as the signed-in account's standard token.
 - Hidden-data removal and the `keepHidden` option require KillerPDF 1.9.5. Redaction fails when marked content requires rasterization and rasterization is disabled.
+- The Chocolatey package installs per user, and from an elevated shell it runs setup as the signed-in account's standard token.
 - Explain where browser capture data goes and bound camera recordings before transfer.
 - Require standard 128-bit entropy for the host's 12-word BIP39 tool.
 - Use authenticated encryption and support all standard BIP39 lengths with the updated engine. Continue to read legacy CryptoJS ciphertext.
