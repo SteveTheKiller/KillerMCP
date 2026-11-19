@@ -29,11 +29,11 @@ internal static class InstallerLifecycleReviewChecks
             finally { squatted.ReleaseMutex(); }
         }
         Console.WriteLine("PASS uninstall honors the per-user install lease, and the old machine-wide name blocks nothing (2 selected regressions)");
-        if (Invoke("ElevationRefusal", true, false) is not string refusal || refusal.IndexOf("administrator", StringComparison.Ordinal) < 0)
-            throw new InvalidOperationException("Setup run as administrator did not refuse and explain.");
+        if (Invoke("ElevationRefusal", true, false) is not string refusal || refusal.IndexOf("SYSTEM", StringComparison.Ordinal) < 0)
+            throw new InvalidOperationException("Setup run as SYSTEM did not refuse and explain.");
         if (Invoke("ElevationRefusal", false, false) is not null || Invoke("ElevationRefusal", true, true) is not null)
             throw new InvalidOperationException("Setup refused an ordinary or isolated test run.");
-        Console.WriteLine("PASS setup run as administrator refuses and explains (3 selected regressions)");
+        Console.WriteLine("PASS setup run as SYSTEM refuses and explains (3 selected regressions)");
         try { Invoke("EnsureVersionAllowed", "2.0.0", "1.0.0", false); throw new InvalidOperationException("Silent downgrade was allowed."); }
         catch (System.Security.SecurityException) { }
         Invoke("EnsureVersionAllowed", "2.0.0", "1.0.0", true);

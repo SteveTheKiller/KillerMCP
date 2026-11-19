@@ -51,7 +51,7 @@ namespace KillerMCP.Setup
             bool notify = args.Any(value => value.Equals("/notify", StringComparison.OrdinalIgnoreCase));
             bool uninstall = args.Any(value => value.Equals("/uninstall", StringComparison.OrdinalIgnoreCase));
             bool checkUpdate = args.Any(value => value.Equals("/check-update", StringComparison.OrdinalIgnoreCase));
-            if (ElevationRefusal(IsElevated(), isolated) is { } elevated)
+            if (ElevationRefusal(IsSystem(), isolated) is { } elevated)
             {
                 Console.Error.WriteLine(elevated);
                 if (!silent) SetupDialog.ShowFailure(elevated);
@@ -109,18 +109,18 @@ namespace KillerMCP.Setup
 
         internal const int ElevatedExitCode = 11;
 
-        // KillerMCP installs for one account. Run as administrator, setup would read that account's files,
-        // client settings and PATH with an administrator token, where anything the account can write could
-        // steer it, so it stops and says how to run it instead. An isolated test install writes only under
-        // its temporary test folder and is allowed.
-        internal static string? ElevationRefusal(bool elevated, bool isolated) => elevated && !isolated
-            ? "KillerMCP installs for your Windows account only, so setup does not run as administrator. Start KillerMCP-Setup.exe normally, without Run as administrator. The Chocolatey package handles this for you by running setup as your standard account."
+        // KillerMCP installs for one account. An elevated run by a real user still installs into that same
+        // user's own profile, so it is allowed (WinGet validation and admin users run setup this way). Run as
+        // SYSTEM, setup would install into the system profile for no person at all, so it stops and says how
+        // to run it instead. An isolated test install writes only under its temporary test folder and is allowed.
+        internal static string? ElevationRefusal(bool system, bool isolated) => system && !isolated
+            ? "KillerMCP installs for your Windows account only, so setup does not run as the SYSTEM account. Start KillerMCP-Setup.exe from your own Windows account. The Chocolatey package handles this for you by running setup as your standard account."
             : null;
 
-        internal static bool IsElevated()
+        internal static bool IsSystem()
         {
             using (var identity = System.Security.Principal.WindowsIdentity.GetCurrent())
-                return identity.IsSystem || new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+                return identity.IsSystem;
         }
 
         internal static bool RuntimeReady(bool isolated) => IsStorePackage || HasRuntime10(isolated);

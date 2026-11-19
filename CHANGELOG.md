@@ -4,6 +4,14 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.6] - 2026-11-18
+
+0.9.6 lets setup run elevated again, so WinGet can validate and install it.
+
+### Fixed
+
+- Setup refuses only the SYSTEM account now. An administrator install still lands in that user's own profile, and the 0.9.5 refusal made WinGet's install validation fail with exit code 11.
+
 ## [0.9.5] - 2026-11-18
 
 0.9.5 catches the KillerPDF tools up with KillerPDF 1.9.5 and closes the findings from a full security review of the host, setup and release pipeline.

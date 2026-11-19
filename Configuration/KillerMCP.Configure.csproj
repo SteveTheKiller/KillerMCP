@@ -3,7 +3,7 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>KillerMCP.Configure</AssemblyName>
     <RootNamespace>KillerMCP.Configuration</RootNamespace>
-    <Version>0.9.5</Version>
+    <Version>0.9.6</Version>
     <!-- Published as one file, so the analyzer and its package are on for every build and the lock file matches. -->
     <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
