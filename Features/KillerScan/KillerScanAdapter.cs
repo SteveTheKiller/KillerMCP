@@ -16,13 +16,19 @@ public static partial class KillerScanAdapter
         if (help.ExitCode != 0) return [];
         var adapters = new List<AppAdapter>();
         var options = ScanOptions.From(help.StandardOutput);
+        // KillerScan 1.9.6 and later answer network and vendor in JSON, and their help shows it in its examples.
+        // Earlier versions print text only, which is read the old way.
+        bool jsonNetwork = help.StandardOutput.Contains("killerscan network /json", StringComparison.Ordinal);
+        bool jsonVendor = help.StandardOutput.Contains("killerscan vendor 00:11:22:33:44:55 /json", StringComparison.Ordinal);
         // KillerScan 1.8.2 and later list commands by name in their help and still accept the slash forms
         // this adapter sends; earlier versions list the slash forms.
-        Add(help, ["/network", "killerscan network "], adapters, Tool("killerscan_local_network", "Use KillerScan to identify the active local IPv4 network, interface, gateway, and DNS server without scanning hosts.", EmptySchema()), (input, token) => Network(path!, input, token));
+        Add(help, ["/network", "killerscan network "], adapters, Tool("killerscan_local_network", "Use KillerScan to identify the active local IPv4 network, interface, gateway, and DNS server without scanning hosts." + (jsonNetwork ? " Also names the adapter, whether it is wireless and its link speed in bits per second." : ""), EmptySchema()), (input, token) => jsonNetwork ? JsonNetwork(path!, input, token) : Network(path!, input, token));
         Add(help, ["killerscan locations "], adapters, Tool("killerscan_list_locations", "List KillerScan's saved Locations as JSON, with the id and name that location takes, each one's customer, and its last scan targets and adapter. Reads only and sends no network traffic. An older install lists none until KillerScan moves its data into Locations, which opening KillerScan or scanning with location does.", EmptySchema()), (input, token) => JsonCommand(path!, input, [], ["/locations", "/json"], 15, _ => null, token));
         Add(help, ["/scan [targets]", "killerscan scan [targets]"], adapters, Tool("killerscan_scan_network", "Scan the active local IPv4 network, an IPv4 host, or a CIDR of at most 1,024 addresses with KillerScan and return the scanned range, its address count and the discovered devices as JSON. Omit target for requests such as \"killerscan my network\"; a local network larger than 1,024 addresses needs a target inside it. Runs quick discovery by default; set full for fingerprinting and port checks. Scanning sends network probes." + options.ScanText, ScanSchema(options)), (input, token) => Scan(path!, options, input, token));
         Add(help, ["/probe <IPv4>", "killerscan probe <IPv4>"], adapters, Tool("killerscan_probe_host", "Deep probe one IPv4 host with KillerScan, including ports 1 through 1024, and return its device details as JSON. Probing sends network traffic to the selected host." + options.ProbeText, ProbeSchema(options)), (input, token) => Probe(path!, options, input, token));
-        Add(help, ["/vendor <MAC>", "killerscan vendor <MAC>"], adapters, Tool("killerscan_mac_vendor", "Look up the manufacturer of a MAC address in KillerScan's bundled offline OUI database.", VendorSchema()), (input, token) => Vendor(path!, input, token));
+        Add(help, ["/vendor <MAC>", "killerscan vendor <MAC>"], adapters, Tool("killerscan_mac_vendor", "Look up the manufacturer of a MAC address in KillerScan's bundled offline OUI database.", VendorSchema()), (input, token) => Vendor(path!, input, jsonVendor, token));
+        Add(help, ["killerscan history [run]"], adapters, Tool("killerscan_list_history", "List the scans saved in KillerScan's History as JSON, newest first, from every Location or from one given by name or ID. Each run has a number, which shifts when a new scan is saved, and a scannedAt, which does not. Reads only and sends no network traffic.", HistoryListSchema()), (input, token) => HistoryList(path!, input, token));
+        Add(help, ["killerscan history [run]"], adapters, Tool("killerscan_history_run", "Return one saved KillerScan run's devices as JSON, or with compare, what was added, removed or changed since its baseline, the last complete run like it. run is the scannedAt from killerscan_list_history, or its number as text. Reads only and sends no network traffic.", HistoryRunSchema()), (input, token) => HistoryRun(path!, input, token));
         Add(help, ["/ping <target>", "killerscan ping <target>"], adapters, Tool("killerscan_ping", "Send a bounded set of ICMP checks to one IPv4 address or hostname with KillerScan and return latency and packet loss as JSON. Public hosts are contacted directly from this PC.", TargetIntegerSchema("count", 1, 20, 4)), (input, token) => Ping(path!, input, token));
         Add(help, ["/trace <target>", "killerscan trace <target>"], adapters, Tool("killerscan_trace_route", "Trace the network path to one IPv4 address or hostname with KillerScan and return up to 64 hops as JSON. Public hosts are contacted directly from this PC.", TargetIntegerSchema("maxHops", 1, 64, 30)), (input, token) => Trace(path!, input, token));
         Add(help, ["/diagnose <target>", "killerscan diagnose <target>"], adapters, Tool("killerscan_diagnose_host", "Check DNS, ping, route selection, and selected TCP ports for this PC or one private, link-local or CGNAT IPv4 address or hostname with KillerScan. Public hosts are refused.", DiagnoseSchema()), (input, token) => Diagnose(path!, input, token));
@@ -46,9 +52,61 @@ public static partial class KillerScanAdapter
         return result.Count == labels.Count ? Ok(result.ToJsonString()) : Error("KillerScan returned an incomplete network response");
     }
 
+    // The JSON answer keeps every field even when one is empty, such as an adapter Windows gave no label.
+    private static async Task<AppCallResult> JsonNetwork(string path, JsonElement input, CancellationToken token)
+    {
+        if (input.ValueKind != JsonValueKind.Object || input.EnumerateObject().Any()) return Error("This tool takes no arguments");
+        var response = await Run(path, ["/network", "/json"], 15, 8192, token).ConfigureAwait(false);
+        if (response.ExitCode != 0) return ProcessError(response);
+        try
+        {
+            using var document = JsonDocument.Parse(response.StandardOutput);
+            var root = document.RootElement;
+            bool Text(string name) => root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String;
+            return !response.OutputExceeded && root.ValueKind == JsonValueKind.Object && new[] { "interface", "localIp", "subnet", "gateway", "dns" }.All(Text)
+                ? Ok(root.GetRawText()) : Error("KillerScan returned an incomplete network response");
+        }
+        catch (JsonException) { return Error("KillerScan returned an incomplete network response"); }
+    }
+
+    private static Task<AppCallResult> HistoryList(string path, JsonElement input, CancellationToken token)
+    {
+        if (!ObjectWith(input, "location")) return Task.FromResult(Error("This tool takes only location"));
+        var args = new List<string> { "/history" };
+        if (HistoryLocation(input, args) is { } refused) return Task.FromResult(Error(refused));
+        args.Add("/json");
+        return JsonCommand(path, input, ["location"], args, 30, _ => null, token);
+    }
+
+    private static Task<AppCallResult> HistoryRun(string path, JsonElement input, CancellationToken token)
+    {
+        if (!ObjectWith(input, "run", "location", "compare") || !RequiredString(input, "run", out var run) || !HistoryKey(run!))
+            return Task.FromResult(Error("Run must be a scannedAt from killerscan_list_history, such as 2026-11-21T10:13:54.8350707-08:00, or a run number from 1"));
+        if (!OptionalBoolean(input, "compare", out var compare)) return Task.FromResult(Error("Compare must be true or false"));
+        var args = new List<string> { "/history", run! };
+        if (HistoryLocation(input, args) is { } refused) return Task.FromResult(Error(refused));
+        if (compare) args.Add("/compare");
+        args.Add("/json");
+        return JsonCommand(path, input, ["run", "location", "compare"], args, 30, _ => null, token);
+    }
+
+    // A run is a number or a round-trip timestamp, so nothing passed on can read as a KillerScan option.
+    private static bool HistoryKey(string run) =>
+        run.Length <= 10 && run.All(char.IsAsciiDigit) && int.TryParse(run, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number) && number >= 1
+        || run.Length <= 40 && DateTimeOffset.TryParseExact(run, "o", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out _);
+
+    private static string? HistoryLocation(JsonElement input, List<string> args)
+    {
+        if (!input.TryGetProperty("location", out var element)) return null;
+        var value = element.ValueKind == JsonValueKind.String ? element.GetString()!.Trim() : string.Empty;
+        if (value.Length is 0 or > MaximumOptionLength || value.Any(char.IsControl)) return $"The location must be a name of 1 to {MaximumOptionLength} characters on one line";
+        args.AddRange(["/location", value]);
+        return null;
+    }
+
     private static async Task<AppCallResult> Scan(string path, ScanOptions options, JsonElement input, CancellationToken token)
     {
-        if (!ObjectWith(input, "target", "full", "limit", "location", "skip", "adapter")) return Error("Expected scan arguments");
+        if (!ObjectWith(input, "target", "full", "limit", "timeout", "location", "skip", "adapter")) return Error("Expected scan arguments");
         string? target = null;
         if (input.TryGetProperty("target", out var targetValue))
         {
@@ -57,11 +115,12 @@ public static partial class KillerScanAdapter
         }
         if (!OptionalBoolean(input, "full", out var full)) return Error("Full must be true or false");
         if (!OptionalInteger(input, "limit", 1, 100, 100, out var limit)) return Error("Limit must be between 1 and 100");
+        if (!OptionalInteger(input, "timeout", 10, 300, 60, out var timeout)) return Error("Timeout must be between 10 and 300 seconds");
         var selected = new List<string>();
         if (OptionArguments(input, options, selected, out var location) is { } refused) return Error(refused);
         var (scope, problem) = await ResolveScopeAsync(path, target, token, location).ConfigureAwait(false);
         if (scope is null) return Error(problem!);
-        var response = await Run(path, [.. ScanArguments(scope, full, limit), .. selected], 70, 1048576, token).ConfigureAwait(false);
+        var response = await Run(path, [.. ScanArguments(scope, full, limit, timeout), .. selected], timeout + 10, 1048576, token).ConfigureAwait(false);
         var devices = DeviceArray(response, 100, "scan");
         if (devices.IsError) return devices;
         var result = new JsonObject { ["target"] = scope.Target, ["addresses"] = scope.Addresses, ["devices"] = JsonNode.Parse(devices.Text) };
@@ -200,9 +259,9 @@ public static partial class KillerScanAdapter
         return true;
     }
 
-    public static List<string> ScanArguments(ScanScope scope, bool full, int limit)
+    public static List<string> ScanArguments(ScanScope scope, bool full, int limit, int timeout = 60)
     {
-        var args = new List<string> { "/scan", scope.Target, "/json", "/timeout", "60", "/limit", limit.ToString() };
+        var args = new List<string> { "/scan", scope.Target, "/json", "/timeout", timeout.ToString(System.Globalization.CultureInfo.InvariantCulture), "/limit", limit.ToString() };
         if (!full) args.Add("/quick");
         return args;
     }
@@ -233,12 +292,27 @@ public static partial class KillerScanAdapter
         return await JsonArray(path, arguments, timeout + 10, 1, "probe", token).ConfigureAwait(false);
     }
 
-    private static async Task<AppCallResult> Vendor(string path, JsonElement input, CancellationToken token)
+    private static async Task<AppCallResult> Vendor(string path, JsonElement input, bool json, CancellationToken token)
     {
         if (!ObjectWith(input, "mac") || !RequiredString(input, "mac", out var mac) || !MacAddress().IsMatch(mac!)) return Error("MAC address must be six hexadecimal pairs, such as 00:11:22:33:44:55, 00-11-22-33-44-55, 001122334455 or 0011.2233.4455");
         ProcessResult response;
-        try { response = await Run(path, ["/vendor", mac!], 15, 8192, token).ConfigureAwait(false); }
+        try { response = await Run(path, json ? ["/vendor", mac!, "/json"] : ["/vendor", mac!], 15, 8192, token).ConfigureAwait(false); }
         catch (Exception exception) when (exception is TimeoutException or InvalidOperationException) { return Error("KillerScan could not look up the vendor: " + exception.Message); }
+        if (json)
+        {
+            // Exit 3 is an unknown maker, answered the same way as before: vendor "Unknown".
+            if (response.OutputExceeded || response.ExitCode is not (0 or 3)) return ProcessError(response);
+            try
+            {
+                using var document = JsonDocument.Parse(response.StandardOutput);
+                var root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("known", out var known) || known.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+                    || !root.TryGetProperty("vendor", out var name) || name.ValueKind != JsonValueKind.String || known.GetBoolean() != (response.ExitCode == 0))
+                    return Error("KillerScan returned an invalid vendor response");
+                return Ok(JsonSerializer.Serialize(new { mac, vendor = known.GetBoolean() ? name.GetString() : "Unknown", known = known.GetBoolean() }));
+            }
+            catch (JsonException) { return Error("KillerScan returned an invalid vendor response"); }
+        }
         var value = response.StandardOutput.Trim();
         if (response.OutputExceeded || response.ExitCode != 0 && !(response.ExitCode == 3 && value.Equals("Unknown", StringComparison.OrdinalIgnoreCase))) return ProcessError(response);
         return Ok(JsonSerializer.Serialize(new { mac, vendor = value.Length == 0 ? "Unknown" : value }));
@@ -275,8 +349,9 @@ public static partial class KillerScanAdapter
     private static Task<AppCallResult> Watch(string path, JsonElement input, bool timeLimit, CancellationToken token)
     {
         if (!ObjectWith(input, "targets", "count", "interval") || !input.TryGetProperty("targets", out var targets) || targets.ValueKind != JsonValueKind.Array || targets.GetArrayLength() is < 1 or > 16 || targets.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String || !IsIpv4(item.GetString()!))) return Task.FromResult(Error("Targets must contain 1 to 16 IPv4 addresses"));
-        if (!OptionalInteger(input, "count", 1, 20, 4, out var count)) return Task.FromResult(Error("Count must be between 1 and 20"));
-        if (!OptionalInteger(input, "interval", 1, 10, 1, out var interval)) return Task.FromResult(Error("Interval must be between 1 and 10 seconds"));
+        // The same limits KillerScan's own watch has had since 1.8.0.
+        if (!OptionalInteger(input, "count", 1, 60, 4, out var count)) return Task.FromResult(Error("Count must be between 1 and 60"));
+        if (!OptionalInteger(input, "interval", 1, 60, 1, out var interval)) return Task.FromResult(Error("Interval must be between 1 and 60 seconds"));
         var args = new List<string> { "/watch" };
         args.AddRange(targets.EnumerateArray().Select(item => item.GetString()!));
         args.AddRange(["/count", count.ToString(), "/interval", interval.ToString(), "/json"]);
@@ -340,7 +415,9 @@ public static partial class KillerScanAdapter
     private static AppCallResult ProcessError(ProcessResult response) { var text = string.IsNullOrWhiteSpace(response.StandardError) ? "KillerScan command failed" : response.StandardError.Trim(); return Error(text.Length <= 1024 ? text : text[..1024]); }
 
     private static JsonObject EmptySchema() => new() { ["type"] = "object", ["properties"] = new JsonObject(), ["additionalProperties"] = false };
-    private static JsonObject ScanSchema(ScanOptions options) => Schema(WithOptions(new JsonObject { ["target"] = new JsonObject { ["type"] = "string" }, ["full"] = new JsonObject { ["type"] = "boolean", ["default"] = false }, ["limit"] = Integer(1, 100, 100) }, options));
+    private static JsonObject ScanSchema(ScanOptions options) => Schema(WithOptions(new JsonObject { ["target"] = new JsonObject { ["type"] = "string" }, ["full"] = new JsonObject { ["type"] = "boolean", ["default"] = false }, ["limit"] = Integer(1, 100, 100), ["timeout"] = Integer(10, 300, 60) }, options));
+    private static JsonObject HistoryListSchema() => Schema(new JsonObject { ["location"] = OptionName() });
+    private static JsonObject HistoryRunSchema() => Schema(new JsonObject { ["run"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 40 }, ["location"] = OptionName(), ["compare"] = new JsonObject { ["type"] = "boolean", ["default"] = false } }, "run");
     private static JsonObject ProbeSchema(ScanOptions options) => Schema(WithOptions(new JsonObject { ["target"] = new JsonObject { ["type"] = "string" }, ["timeout"] = Integer(5, 300, 60) }, options), "target");
     private static JsonObject WithOptions(JsonObject properties, ScanOptions options)
     {
@@ -353,7 +430,7 @@ public static partial class KillerScanAdapter
     private static JsonObject VendorSchema() => Schema(new JsonObject { ["mac"] = new JsonObject { ["type"] = "string" } }, "mac");
     private static JsonObject TargetIntegerSchema(string property, int min, int max, int defaultValue) => Schema(new JsonObject { ["target"] = new JsonObject { ["type"] = "string" }, [property] = Integer(min, max, defaultValue) }, "target");
     private static JsonObject DiagnoseSchema() => Schema(new JsonObject { ["target"] = new JsonObject { ["type"] = "string" }, ["ports"] = new JsonObject { ["type"] = "array", ["items"] = Integer(1, 65535), ["maxItems"] = 32 } }, "target");
-    private static JsonObject WatchSchema() => Schema(new JsonObject { ["targets"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" }, ["minItems"] = 1, ["maxItems"] = 16 }, ["count"] = Integer(1, 20, 4), ["interval"] = Integer(1, 10, 1) }, "targets");
+    private static JsonObject WatchSchema() => Schema(new JsonObject { ["targets"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" }, ["minItems"] = 1, ["maxItems"] = 16 }, ["count"] = Integer(1, 60, 4), ["interval"] = Integer(1, 60, 1) }, "targets");
     private static JsonObject Schema(JsonObject properties, params string[] required) { var schema = new JsonObject { ["type"] = "object", ["properties"] = properties, ["additionalProperties"] = false }; if (required.Length > 0) schema["required"] = new JsonArray(required.Select(value => JsonValue.Create(value)).ToArray()); return schema; }
     private static JsonObject Integer(int min, int max, int? defaultValue = null) { var value = new JsonObject { ["type"] = "integer", ["minimum"] = min, ["maximum"] = max }; if (defaultValue.HasValue) value["default"] = defaultValue.Value; return value; }
 

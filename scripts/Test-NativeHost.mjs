@@ -231,7 +231,7 @@ assert.deepEqual(listed.tools.map(tool => tool.name), [
   'killershot_capture_window', 'killershot_capture_region', 'killershot_record', 'killershot_recent',
   'killershot_open_in_editor', 'killershot_settings',
   'killer_create_pdf', 'killernotes_export_pdf', 'killernotes_export_notes_pdf', 'killerscan_export_report_pdf',
-  'killerscan_save_report_note', 'killendar_export_agenda_pdf', 'killendar_save_agenda_note',
+  'killerscan_export_report_html', 'killerscan_save_report_note', 'killendar_export_agenda_pdf', 'killendar_save_agenda_note',
   'killershell_export_directory_pdf', 'killershell_save_directory_note', 'killerpdf_save_text_as_note',
   'killerpdf_save_report_as_note',
   'killerpdf_save_pages_as_notes',

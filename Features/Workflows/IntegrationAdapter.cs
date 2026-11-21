@@ -59,6 +59,7 @@ public static partial class IntegrationAdapter
         if (IsFile(notes)) tools.Add(Tool("killernotes_export_pdf", "Export one KillerNotes note directly to a new PDF.", IdOutputSchema(), (input, token) => NotePdf(notes!, input, token)));
         if (IsFile(notes) && IsFile(pdf)) tools.Add(Tool("killernotes_export_notes_pdf", "Export up to 50 KillerNotes notes, in the order given, into one new PDF combined by KillerPDF.", NotesPdfSchema(), (input, token) => NotesPdf(notes!, pdf!, input, token)));
         if (IsFile(scan)) tools.Add(Tool("killerscan_export_report_pdf", "Scan a network and create a PDF report with a device table.", ScanOutputSchema(), (input, token) => ScanPdf(scan!, input, token)));
+        if (IsFile(scan)) tools.Add(Tool("killerscan_export_report_html", "Scan a network and save KillerScan's own HTML report, the one its Export menu writes, with a sortable device table and a theme switcher. theme is the theme it opens in; an older KillerScan refuses a theme it does not have.", ScanHtmlSchema(), (input, token) => ScanHtml(scan!, input, token)));
         if (IsFile(scan) && IsFile(notes)) tools.Add(Tool("killerscan_save_report_note", "Scan a network and save the device report as a new KillerNotes note.", ScanNoteSchema(), (input, token) => ScanNote(scan!, notes!, input, token)));
         if (IsFile(calendar) && AppVersion.IsAtLeast(calendar!, new Version(1, 1, 4))) tools.Add(Tool("killendar_export_agenda_pdf", "Export a Killendar agenda to a new PDF.", AgendaOutputSchema(), (input, token) => AgendaPdf(calendar!, input, token)));
         if (IsFile(calendar) && AppVersion.IsAtLeast(calendar!, new Version(1, 1, 4)) && IsFile(notes)) tools.Add(Tool("killendar_save_agenda_note", "Save a Killendar agenda as a new KillerNotes note.", AgendaNoteSchema(), (input, token) => AgendaNote(calendar!, notes!, input, token)));
@@ -106,6 +107,48 @@ public static partial class IntegrationAdapter
         if (rendered.IsError) return rendered;
         return Ok(JsonSerializer.Serialize(new { output, target = json.Target, devices = Rows(json.Root).Length }));
     }
+
+    // KillerScan writes the report itself into a private folder, and it is published from there the way a PDF is,
+    // so the destination is checked again after the scan and a file that appeared meanwhile is never replaced.
+    private static async Task<AppCallResult> ScanHtml(string scan, JsonElement input, CancellationToken token)
+    {
+        const string refusal = "Provide valid scan options, a theme KillerScan offers and a new absolute .html output path in an existing folder";
+        if (!Exact(input, "target", "full", "limit", "theme", "output")) return Error(refusal);
+        string? target = null;
+        if (input.TryGetProperty("target", out var t) && (t.ValueKind != JsonValueKind.String || !ValidScanTarget(target = t.GetString()))) return Error(refusal);
+        bool full = false;
+        if (input.TryGetProperty("full", out var f)) { if (f.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return Error(refusal); full = f.GetBoolean(); }
+        int limit = 100;
+        if (!OptionalInt(input, "limit", 1, 100, ref limit)) return Error(refusal);
+        string theme = "dark";
+        if (input.TryGetProperty("theme", out var th) && (th.ValueKind != JsonValueKind.String || !ReportThemes.Contains(theme = th.GetString()!, StringComparer.Ordinal))) return Error(refusal);
+        if (!Text(input, "output", 1024, out var output) || !NewHtml(output!)) return Error(refusal);
+
+        var (scope, problem) = await KillerScanAdapter.ResolveScopeAsync(scan, string.IsNullOrWhiteSpace(target) ? null : target, token).ConfigureAwait(false);
+        if (scope is null) return Error(problem!);
+        var temp = TempFolder();
+        try
+        {
+            CreateTemporaryFolder(temp);
+            var staged = Path.Combine(temp, "report.html");
+            // The .html extension picks the format, so the scan's /json is left out.
+            var args = KillerScanAdapter.ScanArguments(scope, full, limit).Where(arg => arg != "/json").ToList();
+            args.AddRange(["/export", staged, "/theme", theme, "/quiet"]);
+            var response = await RunApp(scan, args, 90, token).ConfigureAwait(false);
+            if (response.ExitCode != 0) return ProcessError("KillerScan", response);
+            if (!File.Exists(staged)) return Error("KillerScan did not write the report");
+            await PublishPdf(staged, output!, token).ConfigureAwait(false);
+            return Ok(JsonSerializer.Serialize(new { output, target = scope.Target, theme }));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return Error(Limit(ex.Message)); }
+        finally { await DeleteAsync(temp).ConfigureAwait(false); }
+    }
+
+    // The themes KillerScan's /theme takes, newest last. Releases before 1.9.6 do not have trashpolka.
+    private static readonly string[] ReportThemes =
+        ["dark", "light", "black", "98se", "blood", "greed", "cyanotic", "ectoplasm", "decay", "malaise", "sepulchre", "delirium", "mourning", "trashpolka"];
+
+    private static bool NewHtml(string path) { try { return Path.IsPathFullyQualified(path) && (path.EndsWith(".html", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)) && Directory.Exists(Path.GetDirectoryName(path)) && !File.Exists(path) && !Directory.Exists(path); } catch { return false; } }
 
     private static async Task<AppCallResult> ScanNote(string scan, string notes, JsonElement input, CancellationToken token)
     {
@@ -644,6 +687,7 @@ public static partial class IntegrationAdapter
 
     private static JsonObject ContentPdfSchema() => Schema(new() { ["content"] = String(1_000_000), ["format"] = Enum("html", "text"), ["title"] = String(240), ["output"] = PathValue("New absolute PDF path") }, "content", "output");
     private static JsonObject IdOutputSchema() => Schema(new() { ["id"] = Integer(1, int.MaxValue), ["output"] = PathValue("New absolute PDF path") }, "id", "output");
+    private static JsonObject ScanHtmlSchema() => Schema(new() { ["target"] = String(64), ["full"] = Boolean(false), ["limit"] = Integer(1, 100, 100), ["theme"] = Enum(ReportThemes), ["output"] = PathValue("New absolute .html path") }, "output");
     private static JsonObject ScanOutputSchema() => Schema(new() { ["target"] = String(64), ["full"] = Boolean(false), ["limit"] = Integer(1, 100, 100), ["output"] = PathValue("New absolute PDF path") }, "output");
     private static JsonObject ScanNoteSchema() => Schema(new() { ["target"] = String(64), ["full"] = Boolean(false), ["limit"] = Integer(1, 100, 100), ["group"] = String(240) });
     private static JsonObject AgendaOutputSchema() => Schema(new() { ["date"] = String(10), ["days"] = Integer(1, 31, 7), ["limit"] = Integer(1, 100, 50), ["output"] = PathValue("New absolute PDF path") }, "date", "output");
