@@ -128,6 +128,9 @@ internal static class AdapterSafetyReviewChecks
             if (!JsonSerializer.SerializeToElement(ToolSafety.For("killershot_recording_control")).GetProperty("destructiveHint").GetBoolean()) throw new InvalidOperationException("Recording discard is not marked destructive.");
             var recover = JsonSerializer.SerializeToElement(ToolSafety.For("killerbench_repair_recover"));
             if (recover.GetProperty("readOnlyHint").GetBoolean() || recover.GetProperty("destructiveHint").GetBoolean()) throw new InvalidOperationException("Repair recover, which archives journal records, is not marked as a non-destructive write.");
+            // The report workflows run the same LAN scan as killerscan_scan_network, so they say they reach the network too.
+            foreach (var name in new[] { "killerscan_export_report_html", "killerscan_export_report_pdf", "killerscan_save_report_note" })
+                if (!JsonSerializer.SerializeToElement(ToolSafety.For(name)).GetProperty("openWorldHint").GetBoolean()) throw new InvalidOperationException(name + " scans the network but is not marked open-world.");
             var rejected = false;
             try { ToolSafety.For("unregistered_review_tool"); }
             catch (InvalidOperationException) { rejected = true; }

@@ -108,6 +108,8 @@ internal static class ToolSafety
         if (!readOnly && !DestructiveTools.Contains(name) && !IsKnownAdditive(name))
             throw new InvalidOperationException("Tool annotations are missing for " + name);
         bool openWorld = ActiveScanTools.Contains(name)
+            // The report workflows run the same LAN scan as killerscan_scan_network.
+            || name is "killerscan_export_report_pdf" or "killerscan_export_report_html" or "killerscan_save_report_note"
             || name is "open_browser_companion_local" or "killerpdf_print" or "killerpdf_ocr"
             or "killerpdf_scan_to_text" or "killerpdf_fix_orientation" or "killerpdf_run_macro" or "killerpdf_sign" or "killerpdf_scan"
             or "killerbench_check" or "killerbench_scan" or "killerbench_repair_preview" or "killerbench_repair_execute"

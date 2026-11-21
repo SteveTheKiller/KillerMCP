@@ -268,8 +268,14 @@ public static class AgentPaths
     private static IEnumerable<string> CredentialFiles()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        foreach (var name in new[] { ".git-credentials", ".netrc", "_netrc", ".npmrc", ".pypirc", Path.Combine(".claude", ".credentials.json"), Path.Combine(".codex", "auth.json"), Path.Combine(".gemini", "oauth_creds.json") })
+        var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        foreach (var name in new[] { ".git-credentials", ".netrc", "_netrc", ".npmrc", ".pypirc", Path.Combine(".claude", ".credentials.json"), Path.Combine(".codex", "auth.json"), Path.Combine(".gemini", "oauth_creds.json"),
+            // Agent and MCP client settings keep server tokens in their env blocks.
+            ".claude.json", Path.Combine(".cursor", "mcp.json"), Path.Combine(".codeium", "windsurf", "mcp_config.json"),
+            ".vault-token", Path.Combine(".terraform.d", "credentials.tfrc.json") })
             yield return Path.Combine(home, name);
+        yield return Path.Combine(roaming, "Claude", "claude_desktop_config.json");
+        yield return Path.Combine(roaming, "NuGet", "NuGet.Config");
     }
 
     /// <summary>True for a path in a well-known credential store or a .env file. Search results inside
@@ -312,6 +318,9 @@ public static class AgentPaths
             foreach (var folder in ProtectedFolders)
                 if (IsInside(Path.GetFullPath(folder), target) || IsInside(Resolve(folder), target))
                     return "Content search cannot include KillerMCP or KillerBench settings. Choose a folder outside those settings folders.";
+            // A walk that would pass through a credential store would list or hash what is inside it.
+            foreach (var folder in CredentialFolders())
+                if (IsInside(Path.GetFullPath(folder), target)) return CredentialMessage + " Choose a folder that does not contain one.";
             return null;
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
