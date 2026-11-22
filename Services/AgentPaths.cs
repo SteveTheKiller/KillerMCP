@@ -254,8 +254,10 @@ public static class AgentPaths
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        foreach (var name in new[] { ".ssh", ".aws", ".azure", ".kube", ".docker", ".gnupg", Path.Combine(".config", "gcloud"), Path.Combine(".config", "gh") })
+        foreach (var name in new[] { ".ssh", ".aws", ".azure", ".kube", ".docker", ".gnupg", Path.Combine(".config", "gcloud"), Path.Combine(".config", "gh"), Path.Combine(".claude", "backups") })
             yield return Path.Combine(home, name);
+        // Claude Desktop keeps a browser profile here, like the browser User Data folders below.
+        yield return Path.Combine(roaming, "Claude");
         foreach (var root in new[] { roaming, local })
             foreach (var name in new[] { "Credentials", "Protect", "Vault" })
                 yield return Path.Combine(root, "Microsoft", name);
@@ -272,11 +274,19 @@ public static class AgentPaths
         foreach (var name in new[] { ".git-credentials", ".netrc", "_netrc", ".npmrc", ".pypirc", Path.Combine(".claude", ".credentials.json"), Path.Combine(".codex", "auth.json"), Path.Combine(".gemini", "oauth_creds.json"),
             // Agent and MCP client settings keep server tokens in their env blocks.
             ".claude.json", Path.Combine(".cursor", "mcp.json"), Path.Combine(".codeium", "windsurf", "mcp_config.json"),
+            Path.Combine(".codex", "config.toml"), Path.Combine(".gemini", "settings.json"),
             ".vault-token", Path.Combine(".terraform.d", "credentials.tfrc.json") })
             yield return Path.Combine(home, name);
         yield return Path.Combine(roaming, "Claude", "claude_desktop_config.json");
+        yield return Path.Combine(roaming, "Code", "User", "mcp.json");
+        yield return Path.Combine(roaming, "Code - Insiders", "User", "mcp.json");
         yield return Path.Combine(roaming, "NuGet", "NuGet.Config");
     }
+
+    // Claude Code writes copies of .claude.json next to it, such as .claude.json.backup.
+    private static bool IsClaudeConfigCopy(string full) =>
+        Path.GetFileName(full).StartsWith(".claude.json", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(Path.GetDirectoryName(full), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>True for a path in a well-known credential store or a .env file. Search results inside
     /// these are dropped as well, so a content search cannot quote them.</summary>
@@ -287,7 +297,7 @@ public static class AgentPaths
         if (name.Equals(".env", StringComparison.OrdinalIgnoreCase)
             || name.StartsWith(".env.", StringComparison.OrdinalIgnoreCase) && !(name.EndsWith(".example", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".sample", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".template", StringComparison.OrdinalIgnoreCase)))
             return true;
-        if (CredentialFiles().Any(file => full.Equals(file, StringComparison.OrdinalIgnoreCase))) return true;
+        if (CredentialFiles().Any(file => full.Equals(file, StringComparison.OrdinalIgnoreCase)) || IsClaudeConfigCopy(full)) return true;
         return CredentialFolders().Any(folder => IsInside(full, folder));
     }
 
@@ -319,8 +329,9 @@ public static class AgentPaths
                 if (IsInside(Path.GetFullPath(folder), target) || IsInside(Resolve(folder), target))
                     return "Content search cannot include KillerMCP or KillerBench settings. Choose a folder outside those settings folders.";
             // A walk that would pass through a credential store would list or hash what is inside it.
-            foreach (var folder in CredentialFolders())
-                if (IsInside(Path.GetFullPath(folder), target)) return CredentialMessage + " Choose a folder that does not contain one.";
+            foreach (var store in CredentialFolders().Concat(CredentialFiles()))
+                if (IsInside(Path.GetFullPath(store), target) || IsInside(Resolve(store), target))
+                    return CredentialMessage + " Choose a folder that does not contain one.";
             return null;
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)

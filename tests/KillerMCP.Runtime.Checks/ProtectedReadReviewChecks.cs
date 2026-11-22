@@ -31,15 +31,23 @@ internal static class ProtectedReadReviewChecks
             Path.Combine(home, ".claude.json"), Path.Combine(roaming, "Claude", "claude_desktop_config.json"), Path.Combine(home, ".cursor", "mcp.json"),
             Path.Combine(home, ".codeium", "windsurf", "mcp_config.json"), Path.Combine(home, ".vault-token"),
             Path.Combine(home, ".terraform.d", "credentials.tfrc.json"), Path.Combine(roaming, "NuGet", "NuGet.Config"),
+            // Backups and sibling client configs hold the same server tokens.
+            Path.Combine(home, ".claude.json.backup"), Path.Combine(home, ".claude", "backups", ".claude.json.backup.1"),
+            Path.Combine(home, ".codex", "config.toml"), Path.Combine(home, ".gemini", "settings.json"),
+            Path.Combine(roaming, "Code", "User", "mcp.json"), Path.Combine(roaming, "Code - Insiders", "User", "mcp.json"),
+            // Claude Desktop keeps a browser profile, like the browser User Data folders.
+            Path.Combine(roaming, "Claude", "Local Storage", "leveldb", "000003.log"),
         })
             if (method.Invoke(null, new object[] { path }) is null) throw new Exception("Credential read accepted: " + path);
-        foreach (var path in new[] { Path.Combine(Path.GetTempPath(), "project", ".env.example"), Path.Combine(Path.GetTempPath(), "project", "notes.env.txt"), Path.Combine(home, ".sshrc-notes.txt"), Path.Combine(home, "Documents", "aws.txt") })
+        foreach (var path in new[] { Path.Combine(Path.GetTempPath(), "project", ".env.example"), Path.Combine(Path.GetTempPath(), "project", "notes.env.txt"), Path.Combine(home, ".sshrc-notes.txt"), Path.Combine(home, "Documents", "aws.txt"),
+            Path.Combine(home, ".claude", "CLAUDE.md"), Path.Combine(home, ".codex", "AGENTS.md"), Path.Combine(roaming, "Code", "User", "settings.json"), Path.Combine(home, "Documents", ".claude.json.backup") })
             if (method.Invoke(null, new object[] { path }) is not null) throw new Exception("Ordinary read refused as a credential: " + path);
         if (!AgentPaths.IsCredentialLocation(Path.Combine(home, ".ssh", "known_hosts")) || AgentPaths.IsCredentialLocation(Path.Combine(home, "Documents", "x.txt")))
             throw new Exception("Search result filter does not match the credential list.");
         // A folder walk that would pass through a credential store is refused at its root, so listings such as
         // KillerBench's large files and duplicates never name or hash what is inside one.
-        foreach (var root in new[] { roaming, Path.Combine(roaming, "Microsoft"), Path.Combine(home, ".config") })
+        foreach (var root in new[] { roaming, Path.Combine(roaming, "Microsoft"), Path.Combine(home, ".config"),
+            Path.Combine(home, ".claude"), Path.Combine(home, ".codex"), Path.Combine(roaming, "Claude"), Path.Combine(roaming, "NuGet"), Path.Combine(roaming, "Code", "User") })
             if (AgentPaths.RecursiveReadRefusal(root) is null) throw new Exception("Folder walk through a credential store accepted: " + root);
         if (AgentPaths.RecursiveReadRefusal(Path.GetTempPath()) is not null) throw new Exception("Ordinary folder walk refused.");
         Console.WriteLine("PASS: MCP and Bench settings and credential store reads blocked, ordinary reads allowed.");
