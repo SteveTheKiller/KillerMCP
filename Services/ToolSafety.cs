@@ -43,7 +43,7 @@ internal static class ToolSafety
     private static readonly HashSet<string> ReadOnlyShotTools = new(StringComparer.Ordinal)
     {
         "killershot_list_monitors", "killershot_list_windows", "killershot_recent", "killershot_settings",
-        "killershot_read_text", "killershot_text_languages", "killershot_read_qr",
+        "killershot_read_text", "killershot_text_languages", "killershot_read_qr", "killershot_list_collections",
     };
 
     private static readonly HashSet<string> DestructiveTools = new(StringComparer.Ordinal)
@@ -54,6 +54,9 @@ internal static class ToolSafety
         "killershot_recording_control", "killernotes_pin", "killernotes_unpin", "killernotes_version_restore",
         "killernotes_rename_group", "killernotes_rename_tag", "killernotes_set_tag_color",
         "killernotes_template_group", "killernotes_daily_group",
+        // Copy replaces the clipboard; the rest change or remove what the library holds.
+        "killershot_copy_capture", "killershot_set_capture_note", "killershot_move_capture", "killershot_delete_capture",
+        "killershot_rename_collection", "killershot_delete_collection",
     };
 
     private static readonly HashSet<string> NetworkTools = new(StringComparer.Ordinal)
@@ -100,6 +103,7 @@ internal static class ToolSafety
     {
         "killershot_capture_monitor", "killershot_capture_all", "killershot_capture_window", "killershot_capture_region",
         "killershot_record", "killershot_open_in_editor", "killershot_edit_image",
+        "killershot_export_capture", "killershot_open_capture", "killershot_create_collection",
     };
 
     public static object For(string name)

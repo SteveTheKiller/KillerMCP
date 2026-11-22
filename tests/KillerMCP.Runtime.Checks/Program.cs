@@ -145,6 +145,16 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1")
     }
     if (shot.Length > 0 && shot[0] == "capture") { Console.Write(JsonSerializer.Serialize(new { path = Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_NULL_PATH") == "1" ? null : "C:\\fixture.png", mode = Option("--mode"), args = shot })); return; }
     if (shot.Length > 0 && shot[0] == "record") { Console.Write(JsonSerializer.Serialize(new { path = "C:\\fixture.mp4", mode = Option("--mode"), args = shot })); return; }
+    if (shot.Length > 2 && shot[0] == "recent" && shot[1] is "--export" or "--copy" or "--open" or "--note" or "--move" or "--delete")
+    {
+        string action = shot[1][2..];
+        Console.Write(action == "export"
+            ? JsonSerializer.Serialize(new { index = 1, id = long.Parse(shot[2][3..]), path = Option("--out"), action, args = shot })
+            : JsonSerializer.Serialize(new { index = 1, id = long.Parse(shot[2][3..]), action, args = shot }));
+        return;
+    }
+    if (shot.SequenceEqual(["collections", "--json"])) { Console.Write(JsonSerializer.Serialize(new { collections = new[] { new { name = "Camera club", captures = 3 } }, args = shot })); return; }
+    if (shot.Length > 2 && shot[0] == "collections") { Console.Write(JsonSerializer.Serialize(new { action = shot[1], collection = shot[^2] == "--yes" ? shot[^3] : shot[^2], args = shot })); return; }
     if (shot.Length >= 4 && shot[0] == "recent") { Console.Write(JsonSerializer.Serialize(new { folder = "C:\\Recent", items = Array.Empty<object>(), limit = shot[2], args = shot })); return; }
     if (shot.Length == 3 && shot[0] == "open") { Console.Write(JsonSerializer.Serialize(new { opened = shot[1] })); return; }
     if (shot.SequenceEqual(["settings", "--json"])) { Console.Write(JsonSerializer.Serialize(new { capture = new { format = "png" } })); return; }
@@ -254,6 +264,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1")
         {
             Console.WriteLine("KillerShot command line\n  capture [options]\n  record --seconds <n> [options]\n  recent [options]\n  open <image>\n  monitors\n  windows [--limit <n>]\n  settings");
+            if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_LIBRARY") == "1") Console.WriteLine("  collections [create|rename|delete]  List or manage collections; delete needs --yes.\nA capture n is a position in the list, or id:<id> with the id from --json. A position");
             if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_RECORD_CLIPBOARD") == "1") Console.WriteLine("  --clipboard, --no-clipboard     Copy the finished file to the clipboard.");
             if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_ENHANCED") == "1") Console.WriteLine("  text <image|region> [--copy]\n  text --languages\n  qr <image|region> [--json]\n  recording pause|resume|stop|cancel\n  edit <image> [options]\n  --search <words>  Filter recent captures");
         }
@@ -455,6 +466,7 @@ try
         Directory.CreateDirectory(root);
         await KillerShotReviewChecks.RunAsync(Environment.ProcessPath!, root);
         await KillerShotEnhancedChecks.RunAsync(Environment.ProcessPath!, root);
+        await KillerShotLibraryChecks.RunAsync(Environment.ProcessPath!, root);
         return;
     }
     if (args.Contains("--pdf-create-only", StringComparer.Ordinal))

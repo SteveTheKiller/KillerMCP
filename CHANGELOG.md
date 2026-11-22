@@ -27,6 +27,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 - killerscan_export_report_html saves KillerScan's own HTML report in the theme you pick.
 - killerscan_scan_network takes a timeout from 10 to 300 seconds.
 - With KillerScan 1.9.6, killerscan_local_network also names the adapter, whether it is wireless and its link speed.
+- With KillerShot 1.2.1, new tools export, copy, open, note, move and delete a capture by its id from killershot_recent. Deletes need confirmDelete.
+- With KillerShot 1.2.1, new tools list, create, rename and delete collections.
 
 ## [0.9.6] - 2026-11-18
 

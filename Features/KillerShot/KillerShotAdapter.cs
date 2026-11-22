@@ -57,6 +57,7 @@ public static partial class KillerShotAdapter
             new RuntimeTool("killershot_settings", "Read KillerShot's capture, recording and shortcut settings without changing them.", EmptySchema()),
             (input, token) => SimpleAsync(path!, input, ["settings", "--json"], "capture", token));
         await AddEnhancedAsync(path!, help.StandardOutput, adapters, cancellationToken).ConfigureAwait(false);
+        AddLibrary(path!, help.StandardOutput, adapters);
         return adapters;
     }
 
