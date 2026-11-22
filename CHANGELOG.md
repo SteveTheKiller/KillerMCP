@@ -17,6 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Changed
 
+- killerscan_local_network and killerscan_mac_vendor read KillerScan 1.9.6's JSON answers instead of its text output.
 - killerscan_watch_hosts takes up to 60 checks at intervals of up to 60 seconds, the same limits KillerScan has.
 - The KillerBench scan and repair recover descriptions say what each one records.
 - killershot_record leaves the clipboard alone unless the call asks for a copy, now that KillerShot 1.2.1 recordings follow Copy file to clipboard.
