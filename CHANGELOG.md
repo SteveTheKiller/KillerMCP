@@ -6,17 +6,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ## [0.9.7] - 2026-11-21
 
-0.9.7 catches the KillerScan tools up with KillerScan 1.9.6 and closes the findings from a review of the read-only tools.
+0.9.7 catches the KillerScan and KillerShot tools up with their new releases, ships the updated KillerTools engine and closes the findings from a review of the read-only tools.
 
 ### Security
 
 - The offline PDF signature check no longer downloads certificates, so a crafted PDF cannot make it contact a host.
-- Read tools refuse agent and MCP client settings, Vault and Terraform tokens, and NuGet credentials.
+- Read tools refuse agent and MCP client settings and their backups, Claude Desktop's profile, Vault and Terraform tokens, and NuGet credentials.
 - Folder walks refuse a root that contains a credential store, so KillerBench's large file and duplicate listings never name or hash what is inside one.
 - The KillerScan report tools now say they reach the network, like the scan they run.
+- generate_otp_secret_private makes 160-bit secrets.
+- bcrypt_private verifies only standard 60-character hashes with a cost from 4 to 14.
+
+### Fixed
+
+- generate_meta_tags writes the value as an encoded content attribute.
+- calculate_ipv4_subnet counts two usable hosts for a /31 network.
+- convert_date_time refuses an ObjectId that is not 24 hexadecimal digits.
 
 ### Changed
 
+- check_pdf_signatures_local reports revocationStatus. A signature counts as verified only when revocation data already cached on this PC says it is good, since the check no longer goes online.
+- bip39_private takes 12 to 24 word phrases, not only 12.
 - killerscan_local_network and killerscan_mac_vendor read KillerScan 1.9.6's JSON answers instead of its text output.
 - killerscan_watch_hosts takes up to 60 checks at intervals of up to 60 seconds, the same limits KillerScan has.
 - The KillerBench scan and repair recover descriptions say what each one records.
@@ -24,6 +34,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 
 ### Added
 
+- crypt_text_private encrypts with authenticated AES-GCM, and it still decrypts legacy CryptoJS ciphertext.
 - killerscan_list_history and killerscan_history_run read KillerScan's saved History, and a run can be compared with its baseline.
 - killerscan_export_report_html saves KillerScan's own HTML report in the theme you pick.
 - killerscan_scan_network takes a timeout from 10 to 300 seconds.
