@@ -35,11 +35,20 @@ public static class KillerShotReviewChecks
             // An older KillerShot never copied a recording unasked and refuses --no-clipboard.
             Require(!Args(await Call("killershot_record", new { mode = "all", seconds = 1 })).Contains("--no-clipboard"), "An older KillerShot must not be sent --no-clipboard for a recording");
             var previousRecordClipboard = Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_RECORD_CLIPBOARD");
+            var previousVersion = Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_VERSION");
             try
             {
-                // A KillerShot whose record follows Copy file to clipboard gets --no-clipboard, so
-                // a recording leaves the clipboard alone unless the call asks for the copy.
+                // The version decides, not the help: a 1.2.0 that prints the 1.2.1 line still
+                // refuses --no-clipboard on record.
                 Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_RECORD_CLIPBOARD", "1");
+                Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_VERSION", "1.2.0");
+                var before = (await KillerShotAdapter.CreateAsync(executable)).ToDictionary(item => item.Tool.Name);
+                using (var request = JsonDocument.Parse(JsonSerializer.Serialize(new { mode = "all", seconds = 1 })))
+                    Require(!Args(await before["killershot_record"].CallAsync(request.RootElement, CancellationToken.None)).Contains("--no-clipboard"),
+                        "KillerShot 1.2.0 must not be sent --no-clipboard for a recording");
+                // KillerShot 1.2.1 records follow Copy file to clipboard, so they get --no-clipboard
+                // and a recording leaves the clipboard alone unless the call asks for the copy.
+                Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_VERSION", "1.2.1");
                 var following = (await KillerShotAdapter.CreateAsync(executable)).ToDictionary(item => item.Tool.Name);
                 async Task<string[]> Record(object input)
                 {
@@ -51,7 +60,11 @@ public static class KillerShotReviewChecks
                 var copied = await Record(new { mode = "all", seconds = 1, clipboard = true });
                 Require(copied.Contains("--clipboard") && !copied.Contains("--no-clipboard"), "A recording asked to copy must send --clipboard: " + string.Join(' ', copied));
             }
-            finally { Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_RECORD_CLIPBOARD", previousRecordClipboard); }
+            finally
+            {
+                Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_RECORD_CLIPBOARD", previousRecordClipboard);
+                Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_VERSION", previousVersion);
+            }
             Require((await Call("killershot_capture_monitor", new { monitor = "100" })).IsError, "Monitor above the advertised range must fail");
             Require((await Call("killershot_capture_monitor", new { monitor = "0" })).IsError, "Monitor zero must fail");
             var unsupported = Path.Combine(root, "shot-review.txt");

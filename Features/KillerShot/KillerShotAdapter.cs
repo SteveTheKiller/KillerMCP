@@ -22,10 +22,11 @@ public static partial class KillerShotAdapter
         if (help.ExitCode != 0 || !help.StandardOutput.Contains("KillerShot command line", StringComparison.Ordinal)) return [];
 
         var adapters = new List<AppAdapter>();
+        // Features newer than the first CLI are gated on the version KillerShot reports.
+        var installed = await InstalledVersionAsync(path!, cancellationToken).ConfigureAwait(false);
         // KillerShot 1.2.1 and later copy a recording when Copy file to clipboard is on, and take
         // --no-clipboard to skip it. Older builds never copied unasked and refuse the option.
-        bool recordFollowsClipboard = System.Text.RegularExpressions.Regex.IsMatch(help.StandardOutput,
-            @"^\s*--clipboard, --no-clipboard\s+Copy the finished file", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        bool recordFollowsClipboard = installed >= new Version(1, 2, 1);
         Add(help, "monitors", adapters,
             new RuntimeTool("killershot_list_monitors", "List the monitors KillerShot can capture, numbered left to right, with their bounds in screen pixels.", EmptySchema()),
             (input, token) => SimpleAsync(path!, input, ["monitors", "--json"], "monitors", token));
@@ -56,8 +57,8 @@ public static partial class KillerShotAdapter
         Add(help, "settings", adapters,
             new RuntimeTool("killershot_settings", "Read KillerShot's capture, recording and shortcut settings without changing them.", EmptySchema()),
             (input, token) => SimpleAsync(path!, input, ["settings", "--json"], "capture", token));
-        await AddEnhancedAsync(path!, help.StandardOutput, adapters, cancellationToken).ConfigureAwait(false);
-        AddLibrary(path!, help.StandardOutput, adapters);
+        AddEnhanced(path!, help.StandardOutput, installed, adapters);
+        AddLibrary(path!, installed, adapters);
         return adapters;
     }
 

@@ -6,12 +6,18 @@ namespace KillerMCP;
 
 public static partial class KillerShotAdapter
 {
-    private static async Task AddEnhancedAsync(string path, string help, List<AppAdapter> adapters, CancellationToken token)
+    /// <summary>The version KillerShot's version command reports, or null when it gives none.</summary>
+    private static async Task<Version?> InstalledVersionAsync(string path, CancellationToken token)
     {
         ProcessResult version;
         try { version = await RunAsync(path, ["version"], TimeSpan.FromSeconds(8), 1024, token).ConfigureAwait(false); }
-        catch (Exception exception) when (exception is TimeoutException or InvalidOperationException or IOException) { return; }
-        if (version.ExitCode != 0 || !Version.TryParse(version.StandardOutput.Trim(), out var installed) || installed < new Version(1, 1, 1)) return;
+        catch (Exception exception) when (exception is TimeoutException or InvalidOperationException or IOException) { return null; }
+        return version.ExitCode == 0 && Version.TryParse(version.StandardOutput.Trim(), out var installed) ? installed : null;
+    }
+
+    private static void AddEnhanced(string path, string help, Version? installed, List<AppAdapter> adapters)
+    {
+        if (installed is null || installed < new Version(1, 1, 1)) return;
         if (Advertises(help, "text"))
         {
             adapters.Add(new AppAdapter(new RuntimeTool("killershot_read_text", "Read text from an existing local image with KillerShot's on-device OCR. Returns text without opening links, capturing the screen or changing the clipboard. Requires KillerShot 1.1.1 or later.", PathSchema()),

@@ -7,13 +7,15 @@ namespace KillerMCP;
 public static partial class KillerShotAdapter
 {
     // KillerShot 1.2.1 and later act on a capture by the id that killershot_recent lists. A list
-    // position moves when a new capture arrives, so these tools never send one.
-    private const string CaptureIdMarker = "id:<id> with the id from --json";
-    private const string CollectionsMarker = "collections [create|rename|delete]";
+    // position moves when a new capture arrives, so these tools never send one. Collections
+    // shipped in 1.2.0.
+    private static readonly Version CaptureIdVersion = new(1, 2, 1);
+    private static readonly Version CollectionsVersion = new(1, 2, 0);
 
-    private static void AddLibrary(string path, string help, List<AppAdapter> adapters)
+    private static void AddLibrary(string path, Version? installed, List<AppAdapter> adapters)
     {
-        if (help.Contains(CaptureIdMarker, StringComparison.Ordinal))
+        if (installed is null) return;
+        if (installed >= CaptureIdVersion)
         {
             var export = IdSchema();
             export["properties"]!["output"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024, ["description"] = "Absolute new file path or an existing folder. A picture saves as .png, .jpg or .jpeg; a recording saves as its clip's own extension. Existing files are never replaced." };
@@ -40,7 +42,7 @@ public static partial class KillerShotAdapter
             adapters.Add(new AppAdapter(new RuntimeTool("killershot_delete_capture", "Delete one capture from KillerShot's library. This cannot be undone and requires confirmDelete=true. Use the id from killershot_recent.", delete),
                 (input, token) => DeleteCaptureAsync(path, input, token)));
         }
-        if (!help.Contains(CollectionsMarker, StringComparison.Ordinal)) return;
+        if (installed < CollectionsVersion) return;
         adapters.Add(new AppAdapter(new RuntimeTool("killershot_list_collections", "List the collections in KillerShot's library with how many captures each holds. Does not change the library.", EmptySchema()),
             (input, token) => SimpleAsync(path, input, ["collections", "--json"], "collections", token)));
         adapters.Add(new AppAdapter(new RuntimeTool("killershot_create_collection", "Create an empty collection in KillerShot's library.", NameSchema(("name", "Name for the new collection"))),

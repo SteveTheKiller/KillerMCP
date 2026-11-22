@@ -1,26 +1,40 @@
 using System.Text.Json;
 using KillerMCP;
 
-/// <summary>The capture and collection tools: gated on KillerShot's help, acting by capture id,
-/// never replacing files, and refusing deletes without consent.</summary>
+/// <summary>The capture and collection tools: gated on KillerShot's version (collections from
+/// 1.2.0, capture ids from 1.2.1), acting by capture id, never replacing files, and refusing
+/// deletes without consent.</summary>
 internal static class KillerShotLibraryChecks
 {
-    private static readonly string[] Tools =
+    private static readonly string[] CaptureTools =
     [
         "killershot_export_capture", "killershot_copy_capture", "killershot_open_capture", "killershot_set_capture_note",
-        "killershot_move_capture", "killershot_delete_capture", "killershot_list_collections", "killershot_create_collection",
-        "killershot_rename_collection", "killershot_delete_collection",
+        "killershot_move_capture", "killershot_delete_capture",
     ];
+    private static readonly string[] CollectionTools =
+    [
+        "killershot_list_collections", "killershot_create_collection", "killershot_rename_collection", "killershot_delete_collection",
+    ];
+    private static readonly string[] Tools = [.. CaptureTools, .. CollectionTools];
 
     internal static async Task RunAsync(string executable, string root)
     {
         Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT", "1");
         try
         {
-            var older = (await KillerShotAdapter.CreateAsync(executable)).Select(item => item.Tool.Name).ToHashSet();
-            Require(!Tools.Any(older.Contains), "A KillerShot without id: actions or collections must not get the library tools");
-
+            // The help below advertises every library command, so only the version decides.
             Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_LIBRARY", "1");
+            foreach (var (version, managed, captures) in new[] { ("1.1.1", false, false), ("unknown", false, false), ("1.2.0", true, false), ("1.2.1", true, true), ("1.3.0", true, true) })
+            {
+                Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_VERSION", version);
+                var listed = (await KillerShotAdapter.CreateAsync(executable)).Select(item => item.Tool.Name).ToHashSet();
+                Require(CollectionTools.All(listed.Contains) == managed && CollectionTools.Any(listed.Contains) == managed,
+                    "Collection tools must be gated to KillerShot 1.2.0 or newer: " + version);
+                Require(CaptureTools.All(listed.Contains) == captures && CaptureTools.Any(listed.Contains) == captures,
+                    "Capture id tools must be gated to KillerShot 1.2.1 or newer: " + version);
+            }
+
+            Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_VERSION", "1.2.1");
             var tools = (await KillerShotAdapter.CreateAsync(executable)).ToDictionary(item => item.Tool.Name);
             foreach (string name in Tools)
             {
@@ -73,7 +87,7 @@ internal static class KillerShotLibraryChecks
         }
         finally
         {
-            foreach (string variable in new[] { "KILLERMCP_FAKE_SHOT", "KILLERMCP_FAKE_SHOT_LIBRARY" }) Environment.SetEnvironmentVariable(variable, null);
+            foreach (string variable in new[] { "KILLERMCP_FAKE_SHOT", "KILLERMCP_FAKE_SHOT_LIBRARY", "KILLERMCP_FAKE_SHOT_VERSION" }) Environment.SetEnvironmentVariable(variable, null);
         }
     }
 
