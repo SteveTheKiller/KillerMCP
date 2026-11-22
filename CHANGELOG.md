@@ -4,6 +4,29 @@ All notable changes to KillerMCP are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.7] - 2026-11-21
+
+0.9.7 catches the KillerScan tools up with KillerScan 1.9.6 and closes the findings from a review of the read-only tools.
+
+### Security
+
+- The offline PDF signature check no longer downloads certificates, so a crafted PDF cannot make it contact a host.
+- Read tools refuse agent and MCP client settings, Vault and Terraform tokens, and NuGet credentials.
+- Folder walks refuse a root that contains a credential store, so KillerBench's large file and duplicate listings never name or hash what is inside one.
+- The KillerScan report tools now say they reach the network, like the scan they run.
+
+### Changed
+
+- killerscan_watch_hosts takes up to 60 checks at intervals of up to 60 seconds, the same limits KillerScan has.
+- The KillerBench scan and repair recover descriptions say what each one records.
+
+### Added
+
+- killerscan_list_history and killerscan_history_run read KillerScan's saved History, and a run can be compared with its baseline.
+- killerscan_export_report_html saves KillerScan's own HTML report in the theme you pick.
+- killerscan_scan_network takes a timeout from 10 to 300 seconds.
+- With KillerScan 1.9.6, killerscan_local_network also names the adapter, whether it is wireless and its link speed.
+
 ## [0.9.6] - 2026-11-18
 
 0.9.6 lets setup run elevated again, so WinGet can validate and install it.
