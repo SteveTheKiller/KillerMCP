@@ -3,8 +3,8 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>KillerMCP</AssemblyName>
     <RootNamespace>KillerMCP</RootNamespace>
-    <Version>0.9.6</Version>
-    <ReleaseDate>2026-11-18</ReleaseDate>
+    <Version>0.9.7</Version>
+    <ReleaseDate>2026-11-21</ReleaseDate>
     <ApplicationIcon>assets\KillerMCP.ico</ApplicationIcon>
     <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
     <!-- The host also runs as the elevated repair helper, so DOTNET_STARTUP_HOOKS must never load code into it. -->
