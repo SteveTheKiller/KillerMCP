@@ -22,6 +22,10 @@ public static partial class KillerShotAdapter
         if (help.ExitCode != 0 || !help.StandardOutput.Contains("KillerShot command line", StringComparison.Ordinal)) return [];
 
         var adapters = new List<AppAdapter>();
+        // KillerShot 1.2.1 and later copy a recording when Copy file to clipboard is on, and take
+        // --no-clipboard to skip it. Older builds never copied unasked and refuse the option.
+        bool recordFollowsClipboard = System.Text.RegularExpressions.Regex.IsMatch(help.StandardOutput,
+            @"^\s*--clipboard, --no-clipboard\s+Copy the finished file", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
         Add(help, "monitors", adapters,
             new RuntimeTool("killershot_list_monitors", "List the monitors KillerShot can capture, numbered left to right, with their bounds in screen pixels.", EmptySchema()),
             (input, token) => SimpleAsync(path!, input, ["monitors", "--json"], "monitors", token));
@@ -42,7 +46,7 @@ public static partial class KillerShotAdapter
             (input, token) => CaptureAsync(path!, input, "region", token));
         Add(help, "record --seconds", adapters,
             new RuntimeTool("killershot_record", "Record a monitor, every monitor, a window or a rectangle to MP4 or GIF with KillerShot for a set number of seconds and return the saved file path. Recordings have no sound unless sound is set. In MP4, mic and both record room audio through the microphone; system records computer playback.", RecordSchema()),
-            (input, token) => RecordAsync(path!, input, token));
+            (input, token) => RecordAsync(path!, input, recordFollowsClipboard, token));
         Add(help, "recent [options]", adapters,
             new RuntimeTool("killershot_recent", "List the newest captures in KillerShot's capture library with their ids, capture times, sizes, window titles and program names.", LimitSchema(20, 20)),
             (input, token) => RecentAsync(path!, input, token));
@@ -124,7 +128,7 @@ public static partial class KillerShotAdapter
         return RunJsonAsync(path, arguments, "path", 45 + delay, token);
     }
 
-    private static Task<AppCallResult> RecordAsync(string path, JsonElement input, CancellationToken token)
+    private static Task<AppCallResult> RecordAsync(string path, JsonElement input, bool refuseClipboard, CancellationToken token)
     {
         if (!Allowed(input, "mode", "monitor", "window", "x", "y", "width", "height", "seconds", "format", "sound", "fps", "output", "clipboard", "cursor"))
             return Task.FromResult(Error("Unknown recording argument"));
@@ -168,15 +172,16 @@ public static partial class KillerShotAdapter
             if (!RequiredInteger(input, "fps", 1, 60, out int fps)) return Task.FromResult(Error("Fps must be from 1 to 60"));
             arguments.AddRange(["--fps", Text(fps)]);
         }
-        var problem = CommonOptions(input, arguments, allowDelay: false);
+        var problem = CommonOptions(input, arguments, allowDelay: false, refuseClipboard);
         if (problem != null) return Task.FromResult(Error(problem));
         arguments.Add("--json");
         return RunJsonAsync(path, arguments, "path", seconds + 90, token);
     }
 
     /// <summary>output, clipboard, cursor and delay. The clipboard is left alone unless the call
-    /// asks for it, because the user may be holding something there.</summary>
-    private static string? CommonOptions(JsonElement input, List<string> arguments, bool allowDelay)
+    /// asks for it, because the user may be holding something there. A recording names
+    /// --no-clipboard only when <paramref name="refuseClipboard"/> says that KillerShot takes it.</summary>
+    private static string? CommonOptions(JsonElement input, List<string> arguments, bool allowDelay, bool refuseClipboard = false)
     {
         if (input.TryGetProperty("output", out _))
         {
@@ -184,7 +189,7 @@ public static partial class KillerShotAdapter
             arguments.AddRange(["--out", output!]);
         }
         if (!OptionalBoolean(input, "clipboard", out bool clipboard)) return "Clipboard must be true or false";
-        if (arguments[0] == "capture") arguments.Add(clipboard ? "--clipboard" : "--no-clipboard");
+        if (arguments[0] == "capture" || refuseClipboard) arguments.Add(clipboard ? "--clipboard" : "--no-clipboard");
         else if (clipboard) arguments.Add("--clipboard");
         if (input.TryGetProperty("cursor", out _))
         {

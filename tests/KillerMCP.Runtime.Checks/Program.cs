@@ -254,6 +254,7 @@ if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1" || Environm
         if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT") == "1")
         {
             Console.WriteLine("KillerShot command line\n  capture [options]\n  record --seconds <n> [options]\n  recent [options]\n  open <image>\n  monitors\n  windows [--limit <n>]\n  settings");
+            if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_RECORD_CLIPBOARD") == "1") Console.WriteLine("  --clipboard, --no-clipboard     Copy the finished file to the clipboard.");
             if (Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_ENHANCED") == "1") Console.WriteLine("  text <image|region> [--copy]\n  text --languages\n  qr <image|region> [--json]\n  recording pause|resume|stop|cancel\n  edit <image> [options]\n  --search <words>  Filter recent captures");
         }
         return;

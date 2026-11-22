@@ -31,6 +31,27 @@ public static class KillerShotReviewChecks
                 Require(!(await Call("killershot_capture_monitor", new { monitor })).IsError, "Advertised monitor number must reach KillerShot: " + monitor);
                 Require(!(await Call("killershot_record", new { mode = "monitor", monitor, seconds = 1 })).IsError, "Recording must accept the same monitor numbers: " + monitor);
             }
+            string[] Args(AppCallResult call) => JsonDocument.Parse(call.Text).RootElement.GetProperty("args").EnumerateArray().Select(item => item.GetString()!).ToArray();
+            // An older KillerShot never copied a recording unasked and refuses --no-clipboard.
+            Require(!Args(await Call("killershot_record", new { mode = "all", seconds = 1 })).Contains("--no-clipboard"), "An older KillerShot must not be sent --no-clipboard for a recording");
+            var previousRecordClipboard = Environment.GetEnvironmentVariable("KILLERMCP_FAKE_SHOT_RECORD_CLIPBOARD");
+            try
+            {
+                // A KillerShot whose record follows Copy file to clipboard gets --no-clipboard, so
+                // a recording leaves the clipboard alone unless the call asks for the copy.
+                Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_RECORD_CLIPBOARD", "1");
+                var following = (await KillerShotAdapter.CreateAsync(executable)).ToDictionary(item => item.Tool.Name);
+                async Task<string[]> Record(object input)
+                {
+                    using var json = JsonDocument.Parse(JsonSerializer.Serialize(input));
+                    return Args(await following["killershot_record"].CallAsync(json.RootElement, CancellationToken.None));
+                }
+                var plain = await Record(new { mode = "all", seconds = 1 });
+                Require(plain.Contains("--no-clipboard") && !plain.Contains("--clipboard"), "A recording must refuse the clipboard unless asked: " + string.Join(' ', plain));
+                var copied = await Record(new { mode = "all", seconds = 1, clipboard = true });
+                Require(copied.Contains("--clipboard") && !copied.Contains("--no-clipboard"), "A recording asked to copy must send --clipboard: " + string.Join(' ', copied));
+            }
+            finally { Environment.SetEnvironmentVariable("KILLERMCP_FAKE_SHOT_RECORD_CLIPBOARD", previousRecordClipboard); }
             Require((await Call("killershot_capture_monitor", new { monitor = "100" })).IsError, "Monitor above the advertised range must fail");
             Require((await Call("killershot_capture_monitor", new { monitor = "0" })).IsError, "Monitor zero must fail");
             var unsupported = Path.Combine(root, "shot-review.txt");
